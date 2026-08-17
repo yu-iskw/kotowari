@@ -69,7 +69,11 @@ export type KotowariPorts = {
 export type KotowariApp = {
   ingestDocuments: (documents: readonly IngestDocument[]) => Promise<IngestResult>;
   ingestPath?: (target: string) => Promise<IngestResult>;
-  searchKnowledge: (input: { query: string; purpose?: string; asOf?: string }) => Promise<RetrievalResult>;
+  searchKnowledge: (input: {
+    query: string;
+    purpose?: string;
+    asOf?: string;
+  }) => Promise<RetrievalResult>;
   buildContext: (input: { purpose: string; query?: string }) => Promise<ContextSnapshot>;
   recordDecision: (input: {
     purpose: string;
@@ -85,10 +89,16 @@ export type KotowariApp = {
   listDecisions: () => Promise<readonly Decision[]>;
   recordMemory: (input: { body: string; kind?: MemoryRecord['kind'] }) => Promise<MemoryRecord>;
   searchMemory: (input: { query: string }) => Promise<readonly MemoryRecord[]>;
-  putPolicy: (input: { name: string; version: number; rules: PolicyRecord['rules'] }) => Promise<PolicyRecord>;
+  putPolicy: (input: {
+    name: string;
+    version: number;
+    rules: PolicyRecord['rules'];
+  }) => Promise<PolicyRecord>;
   whatIfPolicy: (
     policy: PolicyRecord,
-  ) => Promise<readonly { decisionId: string; wouldFail: boolean; violations: readonly string[] }[]>;
+  ) => Promise<
+    readonly { decisionId: string; wouldFail: boolean; violations: readonly string[] }[]
+  >;
   resolveConflict: (input: {
     claimIds: readonly [string, string, ...string[]];
     preferredClaimId: string;
@@ -125,7 +135,9 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
   return {
     async ingestDocuments(documents) {
       const actor = await current();
-      assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), { tenantId: actor.tenantId });
+      assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
+        tenantId: actor.tenantId,
+      });
       return ingestDocuments(
         {
           store: ports.store,
@@ -144,7 +156,10 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
 
     async buildContext(input) {
       const actor = await current();
-      const retrieval = await runRetrieve(actor, { query: input.query ?? input.purpose, purpose: input.purpose });
+      const retrieval = await runRetrieve(actor, {
+        query: input.query ?? input.purpose,
+        purpose: input.purpose,
+      });
       return assembleContext({
         store: ports.store,
         principal: actor,
@@ -160,7 +175,9 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     async recordDecision(input) {
       assertNoChainOfThought(input);
       const actor = await current();
-      assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), { tenantId: actor.tenantId });
+      assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), {
+        tenantId: actor.tenantId,
+      });
       const snapshot = await this.buildContext({ purpose: input.purpose, query: input.query });
       const { decision, event } = buildDecisionRecorded({
         metadata: {
@@ -181,7 +198,11 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
         rationale: input.rationale,
         resultingActionIds: [],
         policyEvaluations: [],
-        provenance: compactProvenance({ source: 'decision', actor: actor.id, process: 'decision.record' }),
+        provenance: compactProvenance({
+          source: 'decision',
+          actor: actor.id,
+          process: 'decision.record',
+        }),
       });
       await ports.store.withTransaction(async (tx) => {
         await tx.putDecision(decision);
@@ -205,7 +226,9 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
 
     async recordMemory(input) {
       const actor = await current();
-      assertAllowed(actor, 'memory.write', scopeResource(actor, 'memory'), { tenantId: actor.tenantId });
+      assertAllowed(actor, 'memory.write', scopeResource(actor, 'memory'), {
+        tenantId: actor.tenantId,
+      });
       return recordMemory({ store: ports.store, principal: actor, ...input });
     },
 

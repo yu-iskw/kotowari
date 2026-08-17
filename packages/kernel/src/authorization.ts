@@ -103,7 +103,10 @@ function denyIfCrossTenant(
   return undefined;
 }
 
-function denyIfClassificationInsufficient(principal: Principal, resource: Resource): AuthDecision | undefined {
+function denyIfClassificationInsufficient(
+  principal: Principal,
+  resource: Resource,
+): AuthDecision | undefined {
   if (principalClearanceRank(principal) < classificationRank(resource.metadata.classification)) {
     return { effect: 'deny', reason: 'CLASSIFICATION_DENIED' };
   }
@@ -125,16 +128,25 @@ function denyIfAgentDelegationInvalid(
     ) {
       return { effect: 'deny', reason: 'DELEGATION_DENIED' };
     }
-    if (context.purpose !== undefined && delegation.purpose !== undefined && context.purpose !== delegation.purpose) {
+    if (
+      context.purpose !== undefined &&
+      delegation.purpose !== undefined &&
+      context.purpose !== delegation.purpose
+    ) {
       return { effect: 'deny', reason: 'DELEGATION_DENIED' };
     }
   }
   return undefined;
 }
 
-function denyIfPrivateVisibility(principal: Principal, resource: Resource): AuthDecision | undefined {
+function denyIfPrivateVisibility(
+  principal: Principal,
+  resource: Resource,
+): AuthDecision | undefined {
   const actingAs =
-    principal.kind === 'agent' && principal.actingFor !== undefined ? principal.actingFor : principal.id;
+    principal.kind === 'agent' && principal.actingFor !== undefined
+      ? principal.actingFor
+      : principal.id;
 
   if (
     resource.metadata.visibility === 'private' &&
@@ -147,7 +159,11 @@ function denyIfPrivateVisibility(principal: Principal, resource: Resource): Auth
 }
 
 function denyIfViewerCannotWrite(principal: Principal, action: Action): AuthDecision | undefined {
-  if (WRITE_ACTIONS.has(action) && principal.roles.includes('viewer') && !principal.roles.includes('admin')) {
+  if (
+    WRITE_ACTIONS.has(action) &&
+    principal.roles.includes('viewer') &&
+    !principal.roles.includes('admin')
+  ) {
     return { effect: 'deny', reason: 'ACTION_DENIED' };
   }
   return undefined;

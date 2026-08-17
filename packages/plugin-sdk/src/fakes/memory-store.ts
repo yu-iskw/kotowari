@@ -108,7 +108,8 @@ class MemoryCanonicalStore implements CanonicalStore {
     namespaceId?: NamespaceId;
   }): Promise<readonly Decision[]> {
     return [...this.decisions.values()].filter(
-      (decision) => matchesTenant(decision, filter.tenantId) && matchesNamespace(decision, filter.namespaceId),
+      (decision) =>
+        matchesTenant(decision, filter.tenantId) && matchesNamespace(decision, filter.namespaceId),
     );
   }
 
@@ -129,7 +130,8 @@ class MemoryCanonicalStore implements CanonicalStore {
     namespaceId?: NamespaceId;
   }): Promise<readonly MemoryRecord[]> {
     return [...this.memory.values()].filter(
-      (record) => matchesTenant(record, filter.tenantId) && matchesNamespace(record, filter.namespaceId),
+      (record) =>
+        matchesTenant(record, filter.tenantId) && matchesNamespace(record, filter.namespaceId),
     );
   }
 
@@ -154,11 +156,15 @@ class MemoryCanonicalStore implements CanonicalStore {
   }
 
   async listConflicts(filter: { tenantId: TenantId }): Promise<readonly Conflict[]> {
-    return [...this.conflicts.values()].filter((conflict) => matchesTenant(conflict, filter.tenantId));
+    return [...this.conflicts.values()].filter((conflict) =>
+      matchesTenant(conflict, filter.tenantId),
+    );
   }
 
   async listResolutions(filter: { tenantId: TenantId }): Promise<readonly ConflictResolution[]> {
-    return [...this.resolutions.values()].filter((resolution) => matchesTenant(resolution, filter.tenantId));
+    return [...this.resolutions.values()].filter((resolution) =>
+      matchesTenant(resolution, filter.tenantId),
+    );
   }
 
   async appendEvent(event: DomainEvent): Promise<void> {

@@ -1,6 +1,12 @@
 import { allow, claimText } from '@kotowari/kernel';
 
-import type { AuthContext, Claim, ConflictResolution, EvidenceId, Principal } from '@kotowari/kernel';
+import type {
+  AuthContext,
+  Claim,
+  ConflictResolution,
+  EvidenceId,
+  Principal,
+} from '@kotowari/kernel';
 import type { CanonicalStore, EmbeddingProvider, RerankerProvider } from '@kotowari/plugin-sdk';
 
 export type RetrievalPlan = {
@@ -87,7 +93,9 @@ function explainHit(components: RetrievalHit['scoreComponents']): string {
   return parts.length > 0 ? parts.join('; ') : 'metadata match';
 }
 
-function isGraphCandidate(candidate: RetrievalPlan['candidates'][number]): candidate is GraphCandidate {
+function isGraphCandidate(
+  candidate: RetrievalPlan['candidates'][number],
+): candidate is GraphCandidate {
   return candidate.strategy === 'graph';
 }
 
@@ -122,7 +130,10 @@ function scoreClaims(
   return scored;
 }
 
-function expandGraphNeighborhood(claims: readonly Claim[], scored: Map<string, RetrievalHit>): void {
+function expandGraphNeighborhood(
+  claims: readonly Claim[],
+  scored: Map<string, RetrievalHit>,
+): void {
   const entityIds = new Set([...scored.values()].map((hit) => hit.claim.subject));
   for (const claim of claims) {
     if (entityIds.has(claim.subject) && !scored.has(claim.id)) {
@@ -246,11 +257,13 @@ export async function retrieve(input: {
   });
 
   const hits = ordered.slice(0, plan.budget);
-  const omitted: RetrievalOmission[] = [...omittedByClass.entries()].map(([classification, count]) => ({
-    reason: 'policy_filter',
-    classification,
-    count,
-  }));
+  const omitted: RetrievalOmission[] = [...omittedByClass.entries()].map(
+    ([classification, count]) => ({
+      reason: 'policy_filter',
+      classification,
+      count,
+    }),
+  );
 
   return { hits, omitted, plan };
 }

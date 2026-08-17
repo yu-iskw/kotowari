@@ -40,7 +40,10 @@ function assertBitemporal(validFrom: string, validTo: string | undefined): void 
 
 function requireContextSnapshot(snapshot: ContextSnapshot | undefined): ContextSnapshot {
   if (snapshot === undefined) {
-    throw new KernelError('MISSING_CONTEXT_SNAPSHOT', 'ADR-0008 requires a context snapshot on a decision');
+    throw new KernelError(
+      'MISSING_CONTEXT_SNAPSHOT',
+      'ADR-0008 requires a context snapshot on a decision',
+    );
   }
   return snapshot;
 }
@@ -98,7 +101,9 @@ export function buildClaimAsserted(input: AssertClaimInput): { claim: Claim; eve
     provenance: input.provenance,
     ...(input.extractor === undefined ? {} : { extractor: input.extractor }),
     ...(input.model === undefined ? {} : { model: input.model }),
-    ...(input.extractionVersion === undefined ? {} : { extractionVersion: input.extractionVersion }),
+    ...(input.extractionVersion === undefined
+      ? {}
+      : { extractionVersion: input.extractionVersion }),
   };
   return {
     claim,
@@ -235,7 +240,10 @@ export function buildPolicyEvaluated(input: EvaluatePolicyInput): {
 } {
   assertProvenance(input.provenance);
   const violations: string[] = [];
-  if (input.rules.minConfidence !== undefined && (input.confidence ?? 1) < input.rules.minConfidence) {
+  if (
+    input.rules.minConfidence !== undefined &&
+    (input.confidence ?? 1) < input.rules.minConfidence
+  ) {
     violations.push(`confidence below ${String(input.rules.minConfidence)}`);
   }
   if (

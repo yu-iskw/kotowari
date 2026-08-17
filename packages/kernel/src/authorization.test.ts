@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ACTIONS } from './authorization.js';
 import {
   allow,
+  asIsoTimestamp,
   asNamespaceId,
   asPrincipalId,
   asTenantId,
@@ -55,9 +56,14 @@ describe('ADR-0010 allow()', () => {
   });
 
   it('omits classified evidence when clearance is too low (S10)', () => {
-    const decision = allow(human({ clearance: 'public' }), 'knowledge.read', resource({ classification: 'tlp:red' }), {
-      tenantId: tenantA,
-    });
+    const decision = allow(
+      human({ clearance: 'public' }),
+      'knowledge.read',
+      resource({ classification: 'tlp:red' }),
+      {
+        tenantId: tenantA,
+      },
+    );
     expect(decision.effect).toBe('deny');
     expect(decision.reason).toBe('CLASSIFICATION_DENIED');
   });
@@ -112,7 +118,7 @@ describe('ADR-0010 allow()', () => {
     };
     const ctx: AuthContext = {
       tenantId: tenantA,
-      now: '2024-06-01T00:00:00.000Z',
+      now: asIsoTimestamp('2024-06-01T00:00:00.000Z'),
     };
     expect(allow(agent, 'knowledge.read', resource(), ctx).reason).toBe('DELEGATION_DENIED');
     const withDelegation: AuthContext = {
@@ -120,11 +126,13 @@ describe('ADR-0010 allow()', () => {
       delegation: {
         delegatorId: asPrincipalId('user-a'),
         scope: ['knowledge.read'],
-        expiresAt: '2024-12-01T00:00:00.000Z',
+        expiresAt: asIsoTimestamp('2024-12-01T00:00:00.000Z'),
       },
     };
     expect(allow(agent, 'knowledge.read', resource(), withDelegation).effect).toBe('allow');
-    expect(allow(agent, 'knowledge.write', resource(), withDelegation).reason).toBe('DELEGATION_DENIED');
+    expect(allow(agent, 'knowledge.write', resource(), withDelegation).reason).toBe(
+      'DELEGATION_DENIED',
+    );
   });
 
   it('ADR-0010 property: cross-tenant never allows', () => {
@@ -146,9 +154,14 @@ describe('ADR-0010 allow()', () => {
   it('ADR-0010 property: insufficient clearance never allows', () => {
     fc.assert(
       fc.property(fc.constantFrom(...ACTIONS), (action: Action) => {
-        const decision = allow(human({ clearance: 'public' }), action, resource({ classification: 'tlp:red' }), {
-          tenantId: tenantA,
-        });
+        const decision = allow(
+          human({ clearance: 'public' }),
+          action,
+          resource({ classification: 'tlp:red' }),
+          {
+            tenantId: tenantA,
+          },
+        );
         expect(decision.effect).toBe('deny');
         expect(decision.reason).toBe('CLASSIFICATION_DENIED');
         expect(classificationRank('public')).toBeLessThan(classificationRank('tlp:red'));

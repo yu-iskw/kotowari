@@ -3,7 +3,7 @@ import { buildContextSnapshot, localStandaloneMetadata } from '@kotowari/kernel'
 import type { ClaimId, EvidenceId, Principal } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
-export type ContextItem = {
+type ContextItem = {
   claimId: ClaimId;
   evidenceIds: readonly EvidenceId[];
 };

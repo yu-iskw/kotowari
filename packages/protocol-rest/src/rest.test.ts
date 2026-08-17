@@ -10,7 +10,9 @@ function capturingApp(): {
 } {
   const ingested: { relativePath: string; bytes: Uint8Array; mimeType: string }[] = [];
   const app = {
-    ingestDocuments: async (documents: readonly { relativePath: string; bytes: Uint8Array; mimeType: string }[]) => {
+    ingestDocuments: async (
+      documents: readonly { relativePath: string; bytes: Uint8Array; mimeType: string }[],
+    ) => {
       ingested.push(...documents);
       return { evidenceIds: ['e1'], claimIds: ['c1'], entityIds: [] };
     },
@@ -32,8 +34,8 @@ function capturingApp(): {
     searchMemory: async () => [],
     putPolicy: async () => ({}) as never,
     whatIfPolicy: async () => [],
-    resolveConflict: async () => ({}),
-    exportProvO: async () => ({}),
+    resolveConflict: async () => ({}) as never,
+    exportProvO: async () => ({}) as never,
     listPredicates: async () => [],
     listPolicies: async () => [],
     health: () => ({ ok: true as const, profile: 'standalone' as const }),
@@ -48,7 +50,11 @@ describe('S2 REST ingest', () => {
     const result = await handleRest(app, {
       method: 'POST',
       pathname: '/v1/ingest',
-      body: { relativePath: 'decision-note.md', text: 'Alice Chen is CEO.', mimeType: 'text/markdown' },
+      body: {
+        relativePath: 'decision-note.md',
+        text: 'Alice Chen is CEO.',
+        mimeType: 'text/markdown',
+      },
     });
     expect(result.status).toBe(202);
     expect(ingested).toHaveLength(1);

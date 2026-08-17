@@ -41,14 +41,19 @@ export type IngestDeps = {
 };
 
 function isTextMime(mimeType: string): boolean {
-  return mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType.endsWith('+json');
+  return (
+    mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType.endsWith('+json')
+  );
 }
 
 function ingestProvenance(principal: Principal, process: string) {
   return compactProvenance({ source: 'ingestion', actor: principal.id, process });
 }
 
-export async function ingestDocuments(deps: IngestDeps, documents: readonly IngestDocument[]): Promise<IngestResult> {
+export async function ingestDocuments(
+  deps: IngestDeps,
+  documents: readonly IngestDocument[],
+): Promise<IngestResult> {
   const metadata = {
     ...localStandaloneMetadata(deps.principal.id),
     tenantId: deps.principal.tenantId,
@@ -79,7 +84,9 @@ export async function ingestDocuments(deps: IngestDeps, documents: readonly Inge
     });
     evidenceIds.push(evidence.id);
 
-    const text = isTextMime(document.mimeType) ? new TextDecoder().decode(document.bytes) : document.relativePath;
+    const text = isTextMime(document.mimeType)
+      ? new TextDecoder().decode(document.bytes)
+      : document.relativePath;
     const { drafts } = await deps.extraction.extract({ text, evidenceId: evidence.id });
     const existing = await deps.store.listClaims({
       tenantId: metadata.tenantId,
@@ -116,7 +123,9 @@ export async function ingestDocuments(deps: IngestDeps, documents: readonly Inge
       continue;
     }
 
-    const { vectors } = await deps.embeddings.embed({ texts: pending.map((item) => claimText(item.toStore)) });
+    const { vectors } = await deps.embeddings.embed({
+      texts: pending.map((item) => claimText(item.toStore)),
+    });
     for (const [index, item] of pending.entries()) {
       const vector = vectors[index] ?? [];
       await deps.store.withTransaction(async (tx) => {

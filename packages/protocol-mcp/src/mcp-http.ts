@@ -65,7 +65,11 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 function asClaimIds(value: unknown): [string, string, ...string[]] {
-  if (Array.isArray(value) && value.length >= 2 && value.every((item) => typeof item === 'string')) {
+  if (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    value.every((item) => typeof item === 'string')
+  ) {
     return value as [string, string, ...string[]];
   }
   return ['', ''];
@@ -79,7 +83,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-async function ingestFromToolArgs(app: KotowariApp, args: Record<string, unknown>): Promise<unknown> {
+async function ingestFromToolArgs(
+  app: KotowariApp,
+  args: Record<string, unknown>,
+): Promise<unknown> {
   const dispatched = await dispatchIngest(app, args);
   if (!dispatched.ok) {
     return { error: dispatched.error };
@@ -160,7 +167,10 @@ export async function handleMcpHttp(input: McpHttpInput): Promise<McpHttpOutput>
       json: {
         jsonrpc: '2.0',
         id: body.id ?? null,
-        error: { code: MCP_ERROR_HEADER_MISMATCH, message: 'Header/body MCP method or name mismatch' },
+        error: {
+          code: MCP_ERROR_HEADER_MISMATCH,
+          message: 'Header/body MCP method or name mismatch',
+        },
       },
     };
   }

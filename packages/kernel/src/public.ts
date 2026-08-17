@@ -1,5 +1,18 @@
-export { allow, assertAllowed, localStandaloneMetadata, localStandalonePrincipal } from './authorization.js';
-export type { Action, AuthContext, AuthDecision, Delegation, Principal, Resource, ResourceKind } from './authorization.js';
+export {
+  allow,
+  assertAllowed,
+  localStandaloneMetadata,
+  localStandalonePrincipal,
+} from './authorization.js';
+export type {
+  Action,
+  AuthContext,
+  AuthDecision,
+  Delegation,
+  Principal,
+  Resource,
+  ResourceKind,
+} from './authorization.js';
 export { ACTIONS } from './authorization.js';
 export {
   asClaimId,
@@ -34,11 +47,24 @@ export type {
   ProvenanceId,
   TenantId,
 } from './branded-ids.js';
-export { CLAIM_STATUSES, claimObjectsEqual, claimText, claimValidAt, detectClaimOverlap, validityOverlaps } from './claim.js';
+export {
+  CLAIM_STATUSES,
+  claimObjectsEqual,
+  claimText,
+  claimValidAt,
+  detectClaimOverlap,
+  validityOverlaps,
+} from './claim.js';
 export type { Bitemporal, Claim, ClaimObject, ClaimStatus } from './claim.js';
 export { CONFLICT_KINDS, RESOLUTION_STRATEGIES } from './conflict.js';
 export type { Conflict, ConflictKind, ConflictResolution, ResolutionStrategy } from './conflict.js';
-export type { ContextSliceItem, ContextSnapshot, PolicyEvaluation, PolicyRecord, PolicyRules } from './context.js';
+export type {
+  ContextSliceItem,
+  ContextSnapshot,
+  PolicyEvaluation,
+  PolicyRecord,
+  PolicyRules,
+} from './context.js';
 export type {
   AssertClaimInput,
   EvaluatePolicyInput,
@@ -70,7 +96,17 @@ export {
   requireProvenance,
 } from './invariants.js';
 export type { MemoryRecord } from './memory.js';
-export { assertNoChainOfThought, assertProvenance, compactProvenance, nowIso } from './provenance.js';
+export {
+  assertNoChainOfThought,
+  assertProvenance,
+  compactProvenance,
+  nowIso,
+} from './provenance.js';
 export type { Provenance } from './provenance.js';
-export { CLASSIFICATIONS, classificationRank, isClassification, VISIBILITIES } from './scoped-metadata.js';
+export {
+  CLASSIFICATIONS,
+  classificationRank,
+  isClassification,
+  VISIBILITIES,
+} from './scoped-metadata.js';
 export type { Classification, ScopedMetadata, Visibility } from './scoped-metadata.js';

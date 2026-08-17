@@ -48,7 +48,10 @@ function asStringArray(value: unknown): readonly string[] {
   return value.filter((item) => typeof item === 'string');
 }
 
-async function handleIngest(app: KotowariApp, body: Record<string, unknown>): Promise<RestResponse> {
+async function handleIngest(
+  app: KotowariApp,
+  body: Record<string, unknown>,
+): Promise<RestResponse> {
   const dispatched = await dispatchIngest(app, body);
   if (!dispatched.ok) {
     return { status: 400, json: { error: dispatched.error } };
@@ -56,7 +59,10 @@ async function handleIngest(app: KotowariApp, body: Record<string, unknown>): Pr
   return { status: 202, json: dispatched.result };
 }
 
-type RouteHandler = (app: KotowariApp, body: Record<string, unknown>) => RestResponse | Promise<RestResponse>;
+type RouteHandler = (
+  app: KotowariApp,
+  body: Record<string, unknown>,
+) => RestResponse | Promise<RestResponse>;
 
 const ROUTES: Record<string, RouteHandler> = {
   'GET /v1/health': (app) => ({ status: 200, json: app.health() }),
@@ -108,7 +114,9 @@ export async function handleRest(app: KotowariApp, request: RestRequest): Promis
   if (request.method === 'GET' && request.pathname.startsWith('/v1/decisions/')) {
     const id = request.pathname.slice('/v1/decisions/'.length);
     const decision = await app.getDecision(id);
-    return decision === undefined ? { status: 404, json: { error: 'not found' } } : { status: 200, json: decision };
+    return decision === undefined
+      ? { status: 404, json: { error: 'not found' } }
+      : { status: 200, json: decision };
   }
   return { status: 404, json: { error: `No route for ${request.method} ${request.pathname}` } };
 }

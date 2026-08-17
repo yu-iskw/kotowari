@@ -5,12 +5,10 @@ import {
   parseIngestJson,
 } from '@kotowari/capability-ingestion';
 
-import type { IngestResult } from '@kotowari/capability-ingestion';
 import type { KotowariApp } from './create-app.js';
+import type { IngestResult } from '@kotowari/capability-ingestion';
 
-export type IngestDispatch =
-  | { ok: true; result: IngestResult }
-  | { ok: false; error: string };
+export type IngestDispatch = { ok: true; result: IngestResult } | { ok: false; error: string };
 
 export async function dispatchIngest(app: KotowariApp, body: unknown): Promise<IngestDispatch> {
   const record = asIngestBody(body);

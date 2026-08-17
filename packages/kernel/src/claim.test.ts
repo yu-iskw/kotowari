@@ -28,12 +28,15 @@ function claim(overrides: Partial<Claim> & Pick<Claim, 'id' | 'object' | 'bitemp
 
 describe('claim text and validity', () => {
   it('renders literal and entity objects', () => {
-    expect(claimText({ predicate: 'is_ceo_of', object: { kind: 'literal', value: 'Vendor X' } })).toBe(
-      'is_ceo_of Vendor X',
-    );
-    expect(claimText({ predicate: 'works_at', object: { kind: 'entity', entityId: 'e1' as Claim['subject'] } })).toBe(
-      'works_at e1',
-    );
+    expect(
+      claimText({ predicate: 'is_ceo_of', object: { kind: 'literal', value: 'Vendor X' } }),
+    ).toBe('is_ceo_of Vendor X');
+    expect(
+      claimText({
+        predicate: 'works_at',
+        object: { kind: 'entity', entityId: 'e1' as Claim['subject'] },
+      }),
+    ).toBe('works_at e1');
   });
 
   it('treats missing asOf as always valid and excludes validTo', () => {

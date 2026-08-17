@@ -3,7 +3,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { basename, dirname, join, relative, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createEmbeddedQueue, createFileBlobStore, createLocalIdentityProvider } from '@kotowari/adapter-fs';
+import {
+  createEmbeddedQueue,
+  createFileBlobStore,
+  createLocalIdentityProvider,
+} from '@kotowari/adapter-fs';
 import { createSqliteCanonicalStore } from '@kotowari/adapter-sqlite';
 import { createKotowariApp } from '@kotowari/application';
 import { documentMimeType } from '@kotowari/capability-ingestion';
@@ -53,7 +57,10 @@ function collectFiles(root: string): string[] {
   return files;
 }
 
-export async function ingestFilesystemPath(app: KotowariApp, target: string): Promise<IngestResult> {
+export async function ingestFilesystemPath(
+  app: KotowariApp,
+  target: string,
+): Promise<IngestResult> {
   const resolved = resolvePath(target);
   const stats = statSync(resolved);
   const files = stats.isDirectory() ? collectFiles(resolved) : [resolved];
@@ -109,7 +116,11 @@ function mcpProfileFromPath(pathname: string): McpProfile | undefined {
 
 function loadIndexHtml(webRoot: string | undefined): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  const roots = [webRoot, join(here, '..', '..', 'web', 'public'), join(process.cwd(), 'apps', 'web', 'public')];
+  const roots = [
+    webRoot,
+    join(here, '..', '..', 'web', 'public'),
+    join(process.cwd(), 'apps', 'web', 'public'),
+  ];
   for (const root of roots) {
     if (root === undefined) {
       continue;
@@ -141,7 +152,9 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
           response.end(indexHtml);
           return;
         }
-        const profile = url.pathname.startsWith('/mcp/') ? mcpProfileFromPath(url.pathname) : undefined;
+        const profile = url.pathname.startsWith('/mcp/')
+          ? mcpProfileFromPath(url.pathname)
+          : undefined;
         if (profile !== undefined && request.method === 'POST') {
           const body = await readBody(request);
           const result = await handleMcpHttp({
@@ -155,7 +168,9 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
           return;
         }
         const body =
-          request.method === 'POST' ? await readBody(request) : Object.fromEntries(url.searchParams.entries());
+          request.method === 'POST'
+            ? await readBody(request)
+            : Object.fromEntries(url.searchParams.entries());
         const result = await handleRest(app, {
           method: request.method ?? 'GET',
           pathname: url.pathname,
@@ -165,7 +180,9 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
         response.end(JSON.stringify(result.json));
       } catch (error) {
         response.writeHead(500, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'internal error' }));
+        response.end(
+          JSON.stringify({ error: error instanceof Error ? error.message : 'internal error' }),
+        );
       }
     })();
   });

@@ -76,16 +76,6 @@ class SqliteCanonicalStore implements CanonicalStore {
     this.db.exec(SCHEMA);
   }
 
-  private stmt(sql: string): PreparedStatement {
-    const cached = this.statements.get(sql);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const prepared = this.db.prepare(sql);
-    this.statements.set(sql, prepared);
-    return prepared;
-  }
-
   async withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T> {
     if (this.transactionDepth > 0) {
       return fn(this);
@@ -206,7 +196,10 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   async appendEvent(event: DomainEvent): Promise<void> {
-    this.stmt('INSERT INTO events (event_id, payload) VALUES (?, ?)').run(event.eventId, JSON.stringify(event));
+    this.stmt('INSERT INTO events (event_id, payload) VALUES (?, ?)').run(
+      event.eventId,
+      JSON.stringify(event),
+    );
   }
 
   async listEvents(): Promise<readonly DomainEvent[]> {
@@ -215,7 +208,10 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   async appendOutbox(event: DomainEvent): Promise<void> {
-    this.stmt('INSERT INTO outbox (event_id, payload) VALUES (?, ?)').run(event.eventId, JSON.stringify(event));
+    this.stmt('INSERT INTO outbox (event_id, payload) VALUES (?, ?)').run(
+      event.eventId,
+      JSON.stringify(event),
+    );
   }
 
   async listOutbox(): Promise<readonly DomainEvent[]> {
@@ -249,6 +245,16 @@ class SqliteCanonicalStore implements CanonicalStore {
     this.db.exec('DELETE FROM embeddings');
   }
 
+  private stmt(sql: string): PreparedStatement {
+    const cached = this.statements.get(sql);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
+    return prepared;
+  }
+
   private putRecord(collection: string, record: ScopedRecord): void {
     this.stmt(
       'INSERT OR REPLACE INTO records (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
@@ -256,9 +262,10 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   private getRecord<T>(collection: string, id: string): T | undefined {
-    const row = this.stmt('SELECT payload FROM records WHERE collection = ? AND id = ?').get(collection, id) as
-      | { payload: string }
-      | undefined;
+    const row = this.stmt('SELECT payload FROM records WHERE collection = ? AND id = ?').get(
+      collection,
+      id,
+    ) as { payload: string } | undefined;
     if (row === undefined) {
       return undefined;
     }

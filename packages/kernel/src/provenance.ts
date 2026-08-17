@@ -34,9 +34,14 @@ export function compactProvenance(input: {
   };
 }
 
-export function assertProvenance(provenance: Provenance | undefined): asserts provenance is Provenance {
+export function assertProvenance(
+  provenance: Provenance | undefined,
+): asserts provenance is Provenance {
   if (provenance === undefined) {
-    throw new KernelError('PROVENANCE_REQUIRED', 'ADR-0007 rejects a semantic write without provenance');
+    throw new KernelError(
+      'PROVENANCE_REQUIRED',
+      'ADR-0007 rejects a semantic write without provenance',
+    );
   }
   const required = [provenance.source, provenance.actor, provenance.process, provenance.timestamp];
   if (required.some((field) => String(field).trim().length === 0)) {
@@ -47,7 +52,12 @@ export function assertProvenance(provenance: Provenance | undefined): asserts pr
   }
 }
 
-const FORBIDDEN_COT_KEYS = ['chainOfThought', 'hiddenCoT', 'privateReasoning', 'hiddenChainOfThought'];
+const FORBIDDEN_COT_KEYS = [
+  'chainOfThought',
+  'hiddenCoT',
+  'privateReasoning',
+  'hiddenChainOfThought',
+];
 
 export function assertNoChainOfThought(payload: Record<string, unknown>): void {
   for (const key of FORBIDDEN_COT_KEYS) {

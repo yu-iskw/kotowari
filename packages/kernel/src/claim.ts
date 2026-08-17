@@ -6,8 +6,7 @@ export const CLAIM_STATUSES = ['asserted', 'retracted', 'superseded', 'conflicte
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 export type ClaimObject =
-  | { kind: 'entity'; entityId: EntityId }
-  | { kind: 'literal'; value: string; datatype?: string };
+  { kind: 'entity'; entityId: EntityId } | { kind: 'literal'; value: string; datatype?: string };
 
 export type Bitemporal = {
   validFrom: IsoTimestamp;
@@ -78,4 +77,3 @@ export function detectClaimOverlap(left: Claim, right: Claim): boolean {
   }
   return validityOverlaps(left.bitemporal, right.bitemporal);
 }
-

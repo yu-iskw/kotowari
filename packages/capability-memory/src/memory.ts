@@ -25,7 +25,11 @@ export async function recordMemory(input: {
     body: input.body,
     actor: input.principal.id,
     recordedAt: nowIso(),
-    provenance: compactProvenance({ source: 'memory', actor: input.principal.id, process: 'memory.record' }),
+    provenance: compactProvenance({
+      source: 'memory',
+      actor: input.principal.id,
+      process: 'memory.record',
+    }),
   };
   await input.store.putMemory(record);
   return record;

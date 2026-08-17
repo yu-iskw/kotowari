@@ -12,9 +12,21 @@ import type { KotowariApp } from '@kotowari/application';
 
 function fakeApp(): KotowariApp {
   return {
-    ingestDocuments: async () => ({ evidenceIds: ['e-inline'], claimIds: ['c-inline'], entityIds: [] }),
-    ingestPath: async (target: string) => ({ evidenceIds: [`path:${target}`], claimIds: [], entityIds: [] }),
-    searchKnowledge: async () => ({ hits: [], omitted: [], plan: { candidates: [], rerank: 'none', budget: 20, explain: true } }),
+    ingestDocuments: async () => ({
+      evidenceIds: ['e-inline'],
+      claimIds: ['c-inline'],
+      entityIds: [],
+    }),
+    ingestPath: async (target: string) => ({
+      evidenceIds: [`path:${target}`],
+      claimIds: [],
+      entityIds: [],
+    }),
+    searchKnowledge: async () => ({
+      hits: [],
+      omitted: [],
+      plan: { candidates: [], rerank: 'none', budget: 20, explain: true },
+    }),
     buildContext: async () => ({}) as never,
     recordDecision: async () => ({ id: 'd1' }) as never,
     getDecision: async () => undefined,
@@ -23,8 +35,8 @@ function fakeApp(): KotowariApp {
     searchMemory: async () => [],
     putPolicy: async () => ({}) as never,
     whatIfPolicy: async () => [],
-    resolveConflict: async () => ({}),
-    exportProvO: async () => ({}),
+    resolveConflict: async () => ({}) as never,
+    exportProvO: async () => ({}) as never,
     listPredicates: async () => [],
     listPolicies: async () => [{ id: 'p1', name: 'default' }] as never,
     health: () => ({ ok: true, profile: 'standalone' }),

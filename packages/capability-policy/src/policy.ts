@@ -51,7 +51,11 @@ export function evaluateDecisionAgainstPolicy(
     candidateOutcome: decision.selectedOutcome,
     confidence: decision.confidence,
     classification: decision.classification,
-    provenance: compactProvenance({ source: 'policy', actor: principal.id, process: 'policy.evaluate' }),
+    provenance: compactProvenance({
+      source: 'policy',
+      actor: principal.id,
+      process: 'policy.evaluate',
+    }),
   });
 }
 
