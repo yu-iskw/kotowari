@@ -41,6 +41,12 @@ function fakeApp(): KotowariApp {
     listPolicies: async () => [{ id: 'p1', name: 'default' }] as never,
     health: () => ({ ok: true, profile: 'standalone' }),
     currentPrincipal: async () => ({}) as never,
+    getEvidence: async () => undefined,
+    getEvidenceContent: async () => undefined,
+    reextractFromEvidence: async () => ({ evidenceIds: [], claimIds: [], entityIds: [] }),
+    processQueuedJobs: async () => 0,
+    runAsRequest: async <T>(_headers: Record<string, string | undefined>, fn: () => Promise<T>) =>
+      fn(),
   };
 }
 

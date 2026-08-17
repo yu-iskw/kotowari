@@ -1,4 +1,5 @@
 import { claimValidAt } from '../contracts.js';
+import { rankClaimsLexically } from '../lexical-search.js';
 
 import type {
   Claim,
@@ -200,6 +201,27 @@ class MemoryCanonicalStore implements CanonicalStore {
 
   async clearEmbeddings(): Promise<void> {
     this.embeddings.clear();
+  }
+
+  async searchLexical(input: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+    query: string;
+    limit: number;
+    asOf?: string;
+  }): Promise<readonly Claim[]> {
+    return rankClaimsLexically({
+      claims: [...this.claims.values()],
+      query: input.query,
+      tenantId: input.tenantId,
+      namespaceId: input.namespaceId,
+      asOf: input.asOf,
+      limit: input.limit,
+    });
+  }
+
+  async rebuildLexicalProjection(): Promise<void> {
+    return;
   }
 }
 

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import { claimValidAt } from '@kotowari/plugin-sdk';
+import { claimText, claimValidAt, ftsMatchQuery, lexicalTokens } from '@kotowari/plugin-sdk';
 
 import type {
   CanonicalStore,
@@ -60,6 +60,20 @@ CREATE TABLE IF NOT EXISTS embeddings (
 );
 `;
 
+const FTS5_SCHEMA = `CREATE VIRTUAL TABLE IF NOT EXISTS claim_fts USING fts5(
+  claim_id UNINDEXED,
+  tenant_id UNINDEXED,
+  namespace_id UNINDEXED,
+  body
+);`;
+
+const TABLE_FTS_SCHEMA = `CREATE TABLE IF NOT EXISTS claim_fts (
+  claim_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  namespace_id TEXT,
+  body TEXT NOT NULL
+);`;
+
 type ScopedRecord = {
   id: string;
   tenantId: TenantId;
@@ -68,12 +82,24 @@ type ScopedRecord = {
 
 type PreparedStatement = ReturnType<DatabaseSync['prepare']>;
 
+function openLexicalProjection(db: DatabaseSync): 'fts5' | 'table' {
+  try {
+    db.exec(FTS5_SCHEMA);
+    return 'fts5';
+  } catch {
+    db.exec(TABLE_FTS_SCHEMA);
+    return 'table';
+  }
+}
+
 class SqliteCanonicalStore implements CanonicalStore {
   private transactionDepth = 0;
   private readonly statements = new Map<string, PreparedStatement>();
+  private readonly lexicalMode: 'fts5' | 'table';
 
   constructor(private readonly db: DatabaseSync) {
     this.db.exec(SCHEMA);
+    this.lexicalMode = openLexicalProjection(db);
   }
 
   async withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T> {
@@ -113,6 +139,7 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async assertClaim(claim: Claim): Promise<void> {
     this.putRecord(COLLECTIONS.claims, claim);
+    this.upsertFts(claim);
   }
 
   async getClaim(id: ClaimId): Promise<Claim | undefined> {
@@ -131,6 +158,7 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async retractClaim(claim: Claim): Promise<void> {
     this.putRecord(COLLECTIONS.claims, claim);
+    this.upsertFts(claim);
   }
 
   async putDecision(decision: Decision): Promise<void> {
@@ -243,6 +271,71 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async clearEmbeddings(): Promise<void> {
     this.db.exec('DELETE FROM embeddings');
+  }
+
+  async searchLexical(input: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+    query: string;
+    limit: number;
+    asOf?: string;
+  }): Promise<readonly Claim[]> {
+    const match = ftsMatchQuery(input.query);
+    if (match.length === 0) {
+      const claims = await this.listClaims(input);
+      return claims.slice(0, input.limit);
+    }
+    const rows =
+      this.lexicalMode === 'fts5'
+        ? (this.stmt(
+            'SELECT claim_id FROM claim_fts WHERE claim_fts MATCH ? AND tenant_id = ? LIMIT ?',
+          ).all(match, input.tenantId, input.limit) as { claim_id: string }[])
+        : this.searchLexicalTable(input);
+    const claims: Claim[] = [];
+    for (const row of rows) {
+      const claim = await this.getClaim(row.claim_id as ClaimId);
+      if (
+        claim !== undefined &&
+        (input.namespaceId === undefined || claim.namespaceId === input.namespaceId) &&
+        claimValidAt(claim, input.asOf)
+      ) {
+        claims.push(claim);
+      }
+    }
+    return claims;
+  }
+
+  async rebuildLexicalProjection(): Promise<void> {
+    this.db.exec('DELETE FROM claim_fts');
+    const rows = this.stmt("SELECT payload FROM records WHERE collection = 'claims'").all() as {
+      payload: string;
+    }[];
+    for (const row of rows) {
+      this.upsertFts(JSON.parse(row.payload) as Claim);
+    }
+  }
+
+  private searchLexicalTable(input: {
+    tenantId: TenantId;
+    query: string;
+    limit: number;
+  }): { claim_id: string }[] {
+    const tokens = lexicalTokens(input.query);
+    if (tokens.length === 0) {
+      return [];
+    }
+    const likes = tokens.map(() => 'body LIKE ?').join(' OR ');
+    const params = [input.tenantId, ...tokens.map((token) => `%${token}%`), input.limit];
+    return this.stmt(
+      `SELECT claim_id FROM claim_fts WHERE tenant_id = ? AND (${likes}) LIMIT ?`,
+    ).all(...params) as { claim_id: string }[];
+  }
+
+  private upsertFts(claim: Claim): void {
+    this.stmt('DELETE FROM claim_fts WHERE claim_id = ?').run(claim.id);
+    this.stmt(
+      'INSERT INTO claim_fts (claim_id, tenant_id, namespace_id, body) VALUES (?, ?, ?, ?)',
+    ).run(claim.id, claim.tenantId, claim.namespaceId, claimText(claim));
   }
 
   private stmt(sql: string): PreparedStatement {

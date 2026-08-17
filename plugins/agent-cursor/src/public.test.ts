@@ -42,6 +42,8 @@ describe('retrieve profile tool list snapshot', () => {
 
     expect(retrieveToolNames).toEqual(jsonNames);
     expect(retrieveToolNames).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
+    const decision = retrieveToolsDocument.tools.find((tool) => tool.name === 'record_decision');
+    expect(decision?.inputSchema).toMatchObject({ required: ['selectedOutcome'] });
 
     for (const name of retrieveToolNames) {
       expect(name).not.toContain('admin');

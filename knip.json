@@ -4,7 +4,12 @@
   "ignore": [".trunk/**"],
   "workspaces": {
     ".": {
-      "entry": ["stylelint.config.mjs", "dev/vitest-aliases.ts"],
+      "entry": [
+        "stylelint.config.mjs",
+        "dev/vitest-aliases.ts",
+        "dev/generate-agent-cursor-pack.ts",
+        "dev/profile-parity.ts"
+      ],
       "project": [
         "**/*.{js,cjs,mjs,ts,cts,mts}",
         "!packages/**",
@@ -28,6 +33,10 @@
     },
     "apps/web": {
       "entry": ["src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/worker": {
+      "entry": ["src/worker.ts", "src/public.ts"],
       "project": ["src/**/*.ts"]
     },
     "plugins/*": {

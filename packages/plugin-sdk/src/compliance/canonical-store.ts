@@ -206,5 +206,43 @@ export function canonicalStoreComplianceTests(
         { claimId: claim.id, vector: [0.4, 0.5, 0.6] },
       ]);
     });
+
+    it('ADR-0002: rebuilding lexical projection does not change claim ids', async () => {
+      const store = await factory();
+      const metadata = localStandaloneMetadata();
+      const entity = buildEntity({ metadata, labels: ['Lex'], provenance: provenance() });
+      const { evidence } = buildEvidenceInserted({
+        metadata,
+        uri: 'file://lex.txt',
+        contentHash: 'sha256:lex',
+        mimeType: COMPLIANCE_MIME,
+        provenance: provenance(),
+      });
+      const { claim } = buildClaimAsserted({
+        metadata,
+        subject: entity.id,
+        predicate: 'topic',
+        object: { kind: 'literal', value: 'vendor payment processor' },
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+        confidence: 0.8,
+        evidenceIds: [evidence.id],
+        provenance: provenance(),
+      });
+
+      await store.putEntity(entity);
+      await store.putEvidence(evidence);
+      await store.assertClaim(claim);
+      const before = await store.getClaim(claim.id);
+      await store.rebuildLexicalProjection();
+      const hits = await store.searchLexical({
+        tenantId: metadata.tenantId,
+        query: 'vendor processor',
+        limit: 10,
+      });
+      expect(before?.id).toBe(claim.id);
+      expect((await store.getClaim(claim.id))?.id).toBe(claim.id);
+      expect(hits.some((hit) => hit.id === claim.id)).toBe(true);
+    });
   });
 }

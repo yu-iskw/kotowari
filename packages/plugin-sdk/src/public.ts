@@ -27,4 +27,11 @@ export {
   type PackageBoundary,
 } from './architecture/boundary.js';
 
+export {
+  ftsMatchQuery,
+  lexicalScore,
+  lexicalTokens,
+  postgresFtsQuery,
+  rankClaimsLexically,
+} from './lexical-search.js';
 export { createMemoryBlobStore, createMemoryCanonicalStore } from './fakes/memory-store.js';

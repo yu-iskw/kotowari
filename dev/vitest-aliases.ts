@@ -20,6 +20,8 @@ export const kotowariAliases: Record<string, string> = {
   ),
   '@kotowari/adapter-sqlite': path.join(root, 'packages/adapter-sqlite/src/public.ts'),
   '@kotowari/adapter-fs': path.join(root, 'packages/adapter-fs/src/public.ts'),
+  '@kotowari/adapter-s3': path.join(root, 'packages/adapter-s3/src/public.ts'),
+  '@kotowari/adapter-postgres': path.join(root, 'packages/adapter-postgres/src/public.ts'),
   '@kotowari/protocol-rest': path.join(root, 'packages/protocol-rest/src/public.ts'),
   '@kotowari/protocol-mcp': path.join(root, 'packages/protocol-mcp/src/public.ts'),
   '@kotowari/sdk': path.join(root, 'packages/sdk/src/public.ts'),

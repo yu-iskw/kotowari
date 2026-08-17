@@ -10,12 +10,9 @@
             "type": "string",
             "description": "Natural language question or keywords to search knowledge."
           },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50,
-            "default": 10,
-            "description": "Maximum number of hits to return."
+          "purpose": {
+            "type": "string",
+            "description": "Retrieval purpose used for policy filtering and context assembly."
           }
         },
         "required": ["query"],
@@ -31,13 +28,6 @@
           "query": {
             "type": "string",
             "description": "Natural language query for memory recall."
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50,
-            "default": 10,
-            "description": "Maximum number of memory records to return."
           }
         },
         "required": ["query"],
@@ -50,22 +40,21 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "outcome": {
+          "purpose": {
+            "type": "string",
+            "description": "Why this decision is being recorded."
+          },
+          "query": {
+            "type": "string",
+            "description": "Question used to assemble the context snapshot."
+          },
+          "selectedOutcome": {
             "type": "string",
             "description": "The selected decision outcome label."
           },
           "rationale": {
             "type": "string",
             "description": "Brief rationale for the decision (not hidden chain-of-thought)."
-          },
-          "contextSnapshotId": {
-            "type": "string",
-            "description": "Context snapshot id from a prior context.build call."
-          },
-          "consideredEvidenceIds": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Evidence ids considered when making the decision."
           },
           "alternatives": {
             "type": "array",
@@ -79,7 +68,7 @@
             "description": "Confidence in the selected outcome."
           }
         },
-        "required": ["outcome"],
+        "required": ["selectedOutcome"],
         "additionalProperties": false
       }
     }

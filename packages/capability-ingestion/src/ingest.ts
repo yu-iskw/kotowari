@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
+  asEvidenceId,
   asIsoTimestamp,
   buildClaimAsserted,
   buildEntity,
@@ -87,58 +88,120 @@ export async function ingestDocuments(
     const text = isTextMime(document.mimeType)
       ? new TextDecoder().decode(document.bytes)
       : document.relativePath;
-    const { drafts } = await deps.extraction.extract({ text, evidenceId: evidence.id });
-    const existing = await deps.store.listClaims({
-      tenantId: metadata.tenantId,
-      namespaceId: metadata.namespaceId,
-    });
-    const pending: { toStore: Claim; event: DomainEvent }[] = [];
-
-    for (const draft of drafts) {
-      const subject = await entityForLabel(deps, entityByLabel, metadata, draft.subjectLabel);
-      entityIds.push(subject.id);
-      const { claim, event } = buildClaimAsserted({
-        metadata,
-        subject: subject.id,
-        predicate: normalizePredicate(draft.predicate),
-        object: { kind: 'literal', value: draft.objectLiteral },
-        validFrom: asIsoTimestamp('1970-01-01T00:00:00.000Z'),
-        assertedAt: nowIso(),
-        confidence: draft.confidence,
-        evidenceIds: [evidence.id],
-        provenance: ingestProvenance(deps.principal, 'ingest.extract'),
-        extractor: deps.extraction.id,
-        extractionVersion: '1',
-      });
-      const overlapping = [...existing, ...pending.map((item) => item.toStore)].filter((other) =>
-        detectClaimOverlap(other, claim),
-      );
-      pending.push({
-        toStore: overlapping.length > 0 ? { ...claim, status: 'conflicted' as const } : claim,
-        event,
-      });
-    }
-
-    if (pending.length === 0) {
-      continue;
-    }
-
-    const { vectors } = await deps.embeddings.embed({
-      texts: pending.map((item) => claimText(item.toStore)),
-    });
-    for (const [index, item] of pending.entries()) {
-      const vector = vectors[index] ?? [];
-      await deps.store.withTransaction(async (tx) => {
-        await tx.assertClaim(item.toStore);
-        await tx.appendEvent(item.event);
-        await tx.appendOutbox(item.event);
-        await tx.putEmbedding({ claimId: item.toStore.id, vector });
-      });
-      claimIds.push(item.toStore.id);
-    }
+    const extracted = await persistExtractedClaims(
+      deps,
+      metadata,
+      entityByLabel,
+      evidence.id,
+      text,
+    );
+    claimIds.push(...extracted.claimIds);
+    entityIds.push(...extracted.entityIds);
   }
 
   return { evidenceIds, claimIds, entityIds };
+}
+
+export async function reextractFromStoredEvidence(
+  deps: IngestDeps,
+  evidenceIds: readonly string[],
+): Promise<IngestResult> {
+  const metadata = {
+    ...localStandaloneMetadata(deps.principal.id),
+    tenantId: deps.principal.tenantId,
+    namespaceId: deps.principal.namespaceIds[0] ?? localStandaloneMetadata().namespaceId,
+  };
+  const claimIds: string[] = [];
+  const entityIds: string[] = [];
+  const entityByLabel = new Map<string, Entity>();
+  const keptEvidenceIds: string[] = [];
+
+  for (const id of evidenceIds) {
+    const evidence = await deps.store.getEvidence(asEvidenceId(id));
+    if (evidence === undefined) {
+      continue;
+    }
+    const blob = await deps.blobs.get(evidenceBlobKey(evidence));
+    if (blob === undefined) {
+      continue;
+    }
+    keptEvidenceIds.push(evidence.id);
+    const text = isTextMime(blob.contentType)
+      ? new TextDecoder().decode(blob.bytes)
+      : (evidence.title ?? evidence.id);
+    const extracted = await persistExtractedClaims(
+      deps,
+      metadata,
+      entityByLabel,
+      evidence.id,
+      text,
+    );
+    claimIds.push(...extracted.claimIds);
+    entityIds.push(...extracted.entityIds);
+  }
+
+  return { evidenceIds: keptEvidenceIds, claimIds, entityIds };
+}
+
+async function persistExtractedClaims(
+  deps: IngestDeps,
+  metadata: ReturnType<typeof localStandaloneMetadata>,
+  entityByLabel: Map<string, Entity>,
+  evidenceId: string,
+  text: string,
+): Promise<{ claimIds: string[]; entityIds: string[] }> {
+  const { drafts } = await deps.extraction.extract({ text, evidenceId: asEvidenceId(evidenceId) });
+  const existing = await deps.store.listClaims({
+    tenantId: metadata.tenantId,
+    namespaceId: metadata.namespaceId,
+  });
+  const pending: { toStore: Claim; event: DomainEvent }[] = [];
+  const entityIds: string[] = [];
+
+  for (const draft of drafts) {
+    const subject = await entityForLabel(deps, entityByLabel, metadata, draft.subjectLabel);
+    entityIds.push(subject.id);
+    const { claim, event } = buildClaimAsserted({
+      metadata,
+      subject: subject.id,
+      predicate: normalizePredicate(draft.predicate),
+      object: { kind: 'literal', value: draft.objectLiteral },
+      validFrom: asIsoTimestamp('1970-01-01T00:00:00.000Z'),
+      assertedAt: nowIso(),
+      confidence: draft.confidence,
+      evidenceIds: [asEvidenceId(evidenceId)],
+      provenance: ingestProvenance(deps.principal, 'ingest.extract'),
+      extractor: deps.extraction.id,
+      extractionVersion: '1',
+    });
+    const overlapping = [...existing, ...pending.map((item) => item.toStore)].filter((other) =>
+      detectClaimOverlap(other, claim),
+    );
+    pending.push({
+      toStore: overlapping.length > 0 ? { ...claim, status: 'conflicted' as const } : claim,
+      event,
+    });
+  }
+
+  const claimIds: string[] = [];
+  if (pending.length === 0) {
+    return { claimIds, entityIds };
+  }
+
+  const { vectors } = await deps.embeddings.embed({
+    texts: pending.map((item) => claimText(item.toStore)),
+  });
+  for (const [index, item] of pending.entries()) {
+    const vector = vectors[index] ?? [];
+    await deps.store.withTransaction(async (tx) => {
+      await tx.assertClaim(item.toStore);
+      await tx.appendEvent(item.event);
+      await tx.appendOutbox(item.event);
+      await tx.putEmbedding({ claimId: item.toStore.id, vector });
+    });
+    claimIds.push(item.toStore.id);
+  }
+  return { claimIds, entityIds };
 }
 
 function normalizePredicate(predicate: string): string {
@@ -164,6 +227,12 @@ async function entityForLabel(
   await deps.store.putEntity(entity);
   cache.set(key, entity);
   return entity;
+}
+
+export function evidenceBlobKey(evidence: { contentHash: string; title?: string }): string {
+  const digest = evidence.contentHash.replace(/^sha256:/, '');
+  const name = evidence.title ?? 'blob';
+  return `evidence/${digest}/${name}`;
 }
 
 export function documentMimeType(fileName: string): string {

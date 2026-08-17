@@ -12,6 +12,11 @@ export const OPENAPI_SNAPSHOT = {
     '/v1/context/build': { post: {} },
     '/v1/decisions': { get: {}, post: {} },
     '/v1/memory': { get: {}, post: {} },
+    '/v1/evidence/{id}': { get: {} },
+    '/v1/evidence/{id}/content': { get: {} },
+    '/v1/decisions/{id}': { get: {} },
+    '/v1/decisions/{id}/prov': { get: {} },
+    '/v1/decisions/{id}/export': { get: {} },
   },
 } as const;
 
@@ -19,6 +24,7 @@ export type RestRequest = {
   method: string;
   pathname: string;
   body: unknown;
+  headers?: Record<string, string | undefined>;
 };
 
 export type RestResponse = {
@@ -105,18 +111,92 @@ const ROUTES: Record<string, RouteHandler> = {
   'POST /v1/ingest': async (app, body) => handleIngest(app, body),
 };
 
-export async function handleRest(app: KotowariApp, request: RestRequest): Promise<RestResponse> {
+function evidenceIdFromPath(pathname: string): { id: string; content: boolean } | undefined {
+  if (!pathname.startsWith('/v1/evidence/')) {
+    return undefined;
+  }
+  const rest = pathname.slice('/v1/evidence/'.length);
+  if (rest.endsWith('/content')) {
+    return { id: rest.slice(0, -'/content'.length), content: true };
+  }
+  return { id: rest, content: false };
+}
+
+function decisionPath(
+  pathname: string,
+): { id: string; kind: 'get' | 'prov' | 'export' } | undefined {
+  if (!pathname.startsWith('/v1/decisions/')) {
+    return undefined;
+  }
+  const rest = pathname.slice('/v1/decisions/'.length);
+  if (rest.endsWith('/prov')) {
+    return { id: rest.slice(0, -'/prov'.length), kind: 'prov' };
+  }
+  if (rest.endsWith('/export')) {
+    return { id: rest.slice(0, -'/export'.length), kind: 'export' };
+  }
+  return { id: rest, kind: 'get' };
+}
+
+async function handleDynamicGet(
+  app: KotowariApp,
+  pathname: string,
+): Promise<RestResponse | undefined> {
+  const evidence = evidenceIdFromPath(pathname);
+  if (evidence !== undefined) {
+    if (evidence.content) {
+      const content = await app.getEvidenceContent(evidence.id);
+      return content === undefined
+        ? { status: 404, json: { error: 'not found' } }
+        : {
+            status: 200,
+            json: {
+              id: content.evidence.id,
+              uri: content.evidence.uri,
+              mimeType: content.contentType,
+              title: content.evidence.title,
+              byteLength: content.bytes.byteLength,
+              text: content.text,
+            },
+          };
+    }
+    const item = await app.getEvidence(evidence.id);
+    return item === undefined
+      ? { status: 404, json: { error: 'not found' } }
+      : { status: 200, json: item };
+  }
+  const decision = decisionPath(pathname);
+  if (decision !== undefined) {
+    if (decision.kind === 'prov') {
+      const prov = await app.exportProvO(decision.id);
+      return prov === undefined
+        ? { status: 404, json: { error: 'not found' } }
+        : { status: 200, json: prov };
+    }
+    const record = await app.getDecision(decision.id);
+    if (record === undefined) {
+      return { status: 404, json: { error: 'not found' } };
+    }
+    return { status: 200, json: record };
+  }
+  return undefined;
+}
+
+async function dispatch(app: KotowariApp, request: RestRequest): Promise<RestResponse> {
   const key = `${request.method} ${request.pathname}`;
   const exact = ROUTES[key];
   if (exact !== undefined) {
     return exact(app, asRecord(request.body));
   }
-  if (request.method === 'GET' && request.pathname.startsWith('/v1/decisions/')) {
-    const id = request.pathname.slice('/v1/decisions/'.length);
-    const decision = await app.getDecision(id);
-    return decision === undefined
-      ? { status: 404, json: { error: 'not found' } }
-      : { status: 200, json: decision };
+  if (request.method === 'GET') {
+    const dynamic = await handleDynamicGet(app, request.pathname);
+    if (dynamic !== undefined) {
+      return dynamic;
+    }
   }
   return { status: 404, json: { error: `No route for ${request.method} ${request.pathname}` } };
+}
+
+export function handleRest(app: KotowariApp, request: RestRequest): Promise<RestResponse> {
+  return app.runAsRequest(request.headers ?? {}, () => dispatch(app, request));
 }

@@ -3,9 +3,12 @@ allowedDependencies:
   - '@kotowari/application'
   - '@kotowari/adapter-sqlite'
   - '@kotowari/adapter-fs'
+  - '@kotowari/adapter-postgres'
+  - '@kotowari/adapter-s3'
   - '@kotowari/protocol-rest'
   - '@kotowari/protocol-mcp'
   - '@kotowari/model-fake'
   - '@kotowari/capability-ingestion'
+  - '@kotowari/plugin-sdk'
 forbiddenDependencies:
   - '@google-cloud/*'

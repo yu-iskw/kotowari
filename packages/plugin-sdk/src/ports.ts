@@ -89,6 +89,14 @@ export interface CanonicalStore {
   putEmbedding(input: { claimId: ClaimId; vector: readonly number[] }): Promise<void>;
   listEmbeddings(): Promise<readonly { claimId: ClaimId; vector: readonly number[] }[]>;
   clearEmbeddings(): Promise<void>;
+  searchLexical(input: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+    query: string;
+    limit: number;
+    asOf?: string;
+  }): Promise<readonly Claim[]>;
+  rebuildLexicalProjection(): Promise<void>;
 }
 
 export interface BlobStore {
@@ -103,6 +111,7 @@ export interface Queue {
 
 export interface IdentityProvider {
   currentPrincipal(): Promise<Principal>;
+  authenticate?(headers: Record<string, string | undefined>): Promise<Principal>;
 }
 
 export interface ModelProvider {

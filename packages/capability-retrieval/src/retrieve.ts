@@ -55,6 +55,8 @@ export type RetrievalResult = {
 };
 
 type GraphCandidate = Extract<RetrievalPlan['candidates'][number], { strategy: 'graph' }>;
+type LexicalCandidate = Extract<RetrievalPlan['candidates'][number], { strategy: 'lexical' }>;
+type VectorCandidate = Extract<RetrievalPlan['candidates'][number], { strategy: 'vector' }>;
 
 function tokenize(value: string): string[] {
   return value
@@ -99,56 +101,74 @@ function isGraphCandidate(
   return candidate.strategy === 'graph';
 }
 
-function scoreClaims(
-  claims: readonly Claim[],
-  queryTokens: string[],
-  queryVector: readonly number[],
-  embeddingByClaim: ReadonlyMap<string, readonly number[]>,
-): Map<string, RetrievalHit> {
-  const scored = new Map<string, RetrievalHit>();
-  for (const claim of claims) {
-    const blob = claimText(claim).toLowerCase();
-    const lexical = queryTokens.filter((token) => blob.includes(token)).length;
-    const vector = cosine(queryVector, embeddingByClaim.get(claim.id) ?? []);
-    if (lexical === 0 && vector < 0.15 && queryTokens.length > 0) {
-      continue;
-    }
-    const scoreComponents = {
-      ...(lexical > 0 ? { lexical } : {}),
-      ...(vector > 0 ? { vector } : {}),
-    };
-    scored.set(claim.id, {
-      claimId: claim.id,
-      score: lexical + vector,
-      scoreComponents,
-      evidenceIds: claim.evidenceIds,
-      policy: { passed: true },
-      whySelected: explainHit(scoreComponents),
-      claim,
-    });
+function isLexicalCandidate(
+  candidate: RetrievalPlan['candidates'][number],
+): candidate is LexicalCandidate {
+  return candidate.strategy === 'lexical';
+}
+
+function isVectorCandidate(
+  candidate: RetrievalPlan['candidates'][number],
+): candidate is VectorCandidate {
+  return candidate.strategy === 'vector';
+}
+
+function connectedEntityIds(claim: Claim): readonly string[] {
+  if (claim.object.kind === 'entity') {
+    return [claim.subject, claim.object.entityId];
   }
-  return scored;
+  return [claim.subject];
+}
+
+function hitFromClaim(
+  claim: Claim,
+  score: number,
+  scoreComponents: RetrievalHit['scoreComponents'],
+  graphRoute?: readonly string[],
+): RetrievalHit {
+  return {
+    claimId: claim.id,
+    score,
+    scoreComponents,
+    evidenceIds: claim.evidenceIds,
+    graphRoute,
+    policy: { passed: true },
+    whySelected: explainHit(scoreComponents),
+    claim,
+  };
+}
+
+function mergeHit(scored: Map<string, RetrievalHit>, hit: RetrievalHit): void {
+  const existing = scored.get(hit.claimId);
+  if (existing === undefined || hit.score > existing.score) {
+    scored.set(hit.claimId, hit);
+  }
 }
 
 function expandGraphNeighborhood(
   claims: readonly Claim[],
   scored: Map<string, RetrievalHit>,
+  hops: number,
 ): void {
-  const entityIds = new Set([...scored.values()].map((hit) => hit.claim.subject));
-  for (const claim of claims) {
-    if (entityIds.has(claim.subject) && !scored.has(claim.id)) {
-      const scoreComponents = { graph: 0.3 };
-      scored.set(claim.id, {
-        claimId: claim.id,
-        score: 0.3,
-        scoreComponents,
-        evidenceIds: claim.evidenceIds,
-        graphRoute: [claim.subject],
-        policy: { passed: true },
-        whySelected: explainHit(scoreComponents),
-        claim,
-      });
+  let frontier = new Set([...scored.values()].flatMap((hit) => connectedEntityIds(hit.claim)));
+  for (let hop = 0; hop < hops; hop += 1) {
+    const next = new Set(frontier);
+    for (const claim of claims) {
+      const ids = connectedEntityIds(claim);
+      if (!ids.some((id) => frontier.has(id))) {
+        continue;
+      }
+      for (const id of ids) {
+        next.add(id);
+      }
+      if (!scored.has(claim.id)) {
+        mergeHit(
+          scored,
+          hitFromClaim(claim, 0.3 / (hop + 1), { graph: 0.3 / (hop + 1) }, [claim.subject]),
+        );
+      }
     }
+    frontier = next;
   }
 }
 
@@ -209,6 +229,18 @@ async function maybeRerank(input: {
   return input.allowed;
 }
 
+function lexicalLimit(plan: RetrievalPlan): number {
+  return plan.candidates.find(isLexicalCandidate)?.limit ?? plan.budget;
+}
+
+function vectorLimit(plan: RetrievalPlan): number {
+  return plan.candidates.find(isVectorCandidate)?.limit ?? plan.budget;
+}
+
+function graphHops(plan: RetrievalPlan): number {
+  return plan.candidates.find(isGraphCandidate)?.hops ?? 0;
+}
+
 export async function retrieve(input: {
   store: CanonicalStore;
   embeddings: EmbeddingProvider;
@@ -220,25 +252,53 @@ export async function retrieve(input: {
   plan?: RetrievalPlan;
 }): Promise<RetrievalResult> {
   const plan = input.plan ?? DEFAULT_RETRIEVAL_PLAN;
-  const [claims, embeddings, queryEmbedding, resolutions] = await Promise.all([
-    input.store.listClaims({
-      tenantId: input.principal.tenantId,
-      namespaceId: input.principal.namespaceIds[0],
-      asOf: input.asOf,
-    }),
+  const filter = {
+    tenantId: input.principal.tenantId,
+    namespaceId: input.principal.namespaceIds[0],
+    asOf: input.asOf,
+  };
+  const [claims, embeddings, queryEmbedding, resolutions, lexicalClaims] = await Promise.all([
+    input.store.listClaims(filter),
     input.store.listEmbeddings(),
     input.embeddings.embed({ texts: [input.query] }),
     input.store.listResolutions({ tenantId: input.principal.tenantId }),
+    input.store.searchLexical({ ...filter, query: input.query, limit: lexicalLimit(plan) }),
   ]);
   const embeddingByClaim = new Map(embeddings.map((row) => [row.claimId, row.vector]));
   const queryTokens = tokenize(input.query);
   const queryVector = queryEmbedding.vectors[0] ?? [];
-  const graphHops = plan.candidates.find(isGraphCandidate);
+  const scored = new Map<string, RetrievalHit>();
 
-  const scored = scoreClaims(claims, queryTokens, queryVector, embeddingByClaim);
+  for (const claim of lexicalClaims) {
+    const lexical = queryTokens.filter((token) =>
+      claimText(claim).toLowerCase().includes(token),
+    ).length;
+    mergeHit(scored, hitFromClaim(claim, lexical, lexical > 0 ? { lexical } : {}));
+  }
 
-  if (graphHops !== undefined) {
-    expandGraphNeighborhood(claims, scored);
+  const vectorRanked = claims
+    .map((claim) => ({
+      claim,
+      vector: cosine(queryVector, embeddingByClaim.get(claim.id) ?? []),
+    }))
+    .filter((row) => row.vector >= 0.15)
+    .sort((left, right) => right.vector - left.vector)
+    .slice(0, vectorLimit(plan));
+  for (const row of vectorRanked) {
+    const existing = scored.get(row.claim.id);
+    const lexical = existing?.scoreComponents.lexical ?? 0;
+    mergeHit(
+      scored,
+      hitFromClaim(row.claim, lexical + row.vector, {
+        ...(lexical > 0 ? { lexical } : {}),
+        vector: row.vector,
+      }),
+    );
+  }
+
+  const hops = graphHops(plan);
+  if (hops > 0) {
+    expandGraphNeighborhood(claims, scored, hops);
   }
 
   const { allowed, omittedByClass } = authorizeHits({

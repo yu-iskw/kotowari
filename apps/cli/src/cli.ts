@@ -2,7 +2,12 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { ingestFilesystemPath, startKotowariServer, writeWorkspaceConfig } from '@kotowari/server';
+import {
+  ingestFilesystemPath,
+  runKotowariMcpStdio,
+  startKotowariServer,
+  writeWorkspaceConfig,
+} from '@kotowari/server';
 
 const WORKSPACE_DIR = '.kotowari';
 const CONFIG_FILE = 'kotowari.json';
@@ -15,7 +20,7 @@ Commands:
   start                Serve web, REST, and MCP
   ingest <path>        Ingest files into the workspace
   doctor               Check the local workspace
-  mcp --profile <name> Reserved for stdio MCP (use HTTP /mcp/<profile>)
+  mcp --profile <name> Speak MCP JSON-RPC on stdio (retrieve by default)
 `);
 }
 
@@ -74,7 +79,7 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return ok ? 0 : 1;
     }
     case 'mcp':
-      process.stdout.write('Use Streamable HTTP at /mcp/retrieve on kotowari start\n');
+      await runKotowariMcpStdio({ argv: argv.slice(1), dataDir: dataDirFromCwd() });
       return 0;
     default:
       printHelp();

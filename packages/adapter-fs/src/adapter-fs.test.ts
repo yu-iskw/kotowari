@@ -9,7 +9,12 @@ import {
 } from '@kotowari/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { createEmbeddedQueue, createFileBlobStore, createLocalIdentityProvider } from './public.js';
+import {
+  createDevOidcIdentityProvider,
+  createEmbeddedQueue,
+  createFileBlobStore,
+  createLocalIdentityProvider,
+} from './public.js';
 
 blobStoreComplianceTests(() => {
   const dir = mkdtempSync(join(tmpdir(), 'kotowari-blob-'));
@@ -42,5 +47,15 @@ describe('createLocalIdentityProvider', () => {
     const custom = { ...localStandalonePrincipal(), id: asPrincipalId('custom-user') };
     const provider = createLocalIdentityProvider(custom);
     expect(await provider.currentPrincipal()).toEqual(custom);
+  });
+});
+
+describe('createDevOidcIdentityProvider', () => {
+  it('maps Bearer dev-guest to public clearance', async () => {
+    const provider = createDevOidcIdentityProvider();
+    const guest = await provider.authenticate?.({ authorization: 'Bearer dev-guest' });
+    expect(guest?.clearance).toBe('public');
+    const local = await provider.authenticate?.({ authorization: 'Bearer dev-local' });
+    expect(local).toEqual(localStandalonePrincipal());
   });
 });

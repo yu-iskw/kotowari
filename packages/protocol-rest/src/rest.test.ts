@@ -38,8 +38,14 @@ function capturingApp(): {
     exportProvO: async () => ({}) as never,
     listPredicates: async () => [],
     listPolicies: async () => [],
+    getEvidence: async () => undefined,
+    getEvidenceContent: async () => undefined,
+    reextractFromEvidence: async () => ({ evidenceIds: [], claimIds: [], entityIds: [] }),
+    processQueuedJobs: async () => 0,
     health: () => ({ ok: true as const, profile: 'standalone' as const }),
     currentPrincipal: async () => ({}) as never,
+    runAsRequest: async <T>(_headers: Record<string, string | undefined>, fn: () => Promise<T>) =>
+      fn(),
   } satisfies KotowariApp;
   return { app, ingested };
 }

@@ -6,13 +6,20 @@ import { createKotowariApp } from './public.js';
 
 function ports() {
   const store = createMemoryCanonicalStore();
+  const jobs: { kind: string; payload: Record<string, unknown> }[] = [];
   return {
     store,
     blobs: createMemoryBlobStore(),
     identity: { currentPrincipal: async () => localStandalonePrincipal() },
     queue: {
-      enqueue: async () => undefined,
-      drain: async () => [],
+      enqueue: async (job: { kind: string; payload: Record<string, unknown> }) => {
+        jobs.push(job);
+      },
+      drain: async () => {
+        const drained = [...jobs];
+        jobs.length = 0;
+        return drained;
+      },
     },
     extraction: {
       id: 'test-extract',
@@ -93,6 +100,7 @@ describe('S3 decision persistence', () => {
     expect(decision.consideredEvidenceIds.length).toBeGreaterThan(0);
     const loaded = await app.getDecision(decision.id);
     expect(loaded?.id).toBe(decision.id);
+    expect(decision.applicablePolicyIds.length).toBeGreaterThan(0);
   });
 
   it('ADR-0008 rejects chainOfThought on recordDecision', async () => {
@@ -132,5 +140,79 @@ describe('S10 classified omission', () => {
     expect(result.hits).toEqual([]);
     expect(result.omitted.length).toBeGreaterThan(0);
     expect(result.omitted[0]?.count).toBeGreaterThan(0);
+  });
+});
+
+describe('S2 evidence locker and S8 audit export', () => {
+  it('S2 returns stored file bytes for ingested evidence', async () => {
+    const app = createKotowariApp(ports());
+    const text = 'Alice Chen is CEO of Vendor X as of 2024.';
+    const ingested = await app.ingestDocuments([
+      {
+        relativePath: 'decision-note.md',
+        bytes: new TextEncoder().encode(text),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const evidenceId = ingested.evidenceIds[0];
+    expect(evidenceId).toBeDefined();
+    const content = await app.getEvidenceContent(evidenceId ?? '');
+    expect(content?.text).toContain('Vendor X');
+    expect(content?.contentType).toBe('text/markdown');
+  });
+
+  it('S8 exports PROV-O JSON for a recorded decision', async () => {
+    const app = createKotowariApp(ports());
+    await app.ingestDocuments([
+      {
+        relativePath: 'note.md',
+        bytes: new TextEncoder().encode('Vendor X is the payment processor.'),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const decision = await app.recordDecision({
+      purpose: 'audit',
+      query: 'Vendor X',
+      selectedOutcome: 'use_vendor_x',
+      confidence: 0.8,
+    });
+    const prov = await app.exportProvO(decision.id);
+    expect(prov?.['@type']).toBeDefined();
+    expect(decision.inputContextSnapshot).toBeDefined();
+    expect(decision.applicablePolicyIds.length).toBeGreaterThan(0);
+  });
+});
+
+describe('S18 re-extract and queued jobs', () => {
+  it('S18 reextracts claims from stored blob ids only', async () => {
+    const app = createKotowariApp(ports());
+    const ingested = await app.ingestDocuments([
+      {
+        relativePath: 'note.md',
+        bytes: new TextEncoder().encode('Alice Chen is CEO of Vendor X as of 2024.'),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const evidenceId = ingested.evidenceIds[0];
+    expect(evidenceId).toBeDefined();
+    const again = await app.reextractFromEvidence([evidenceId ?? '']);
+    expect(again.evidenceIds).toEqual([evidenceId]);
+    expect(again.claimIds.length).toBeGreaterThan(0);
+  });
+
+  it('processQueuedJobs rebuilds the lexical projection without changing claim ids', async () => {
+    const app = createKotowariApp(ports());
+    const ingested = await app.ingestDocuments([
+      {
+        relativePath: 'note.md',
+        bytes: new TextEncoder().encode('Vendor X is the payment processor.'),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const processed = await app.processQueuedJobs();
+    expect(processed).toBeGreaterThan(0);
+    const search = await app.searchKnowledge({ query: 'Vendor X', purpose: 'search' });
+    expect(search.hits.some((hit) => ingested.claimIds.includes(hit.claimId))).toBe(true);
+    expect(await app.processQueuedJobs()).toBe(0);
   });
 });

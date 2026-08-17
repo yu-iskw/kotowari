@@ -10,4 +10,6 @@ forbiddenDependencies:
   - '@kotowari/protocol-mcp'
   - '@kotowari/adapter-sqlite'
   - '@kotowari/adapter-fs'
+  - '@kotowari/adapter-s3'
+  - '@kotowari/adapter-postgres'
   - '@kotowari/application'

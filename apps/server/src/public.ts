@@ -6,6 +6,16 @@ export { PACKAGE_EVENTS } from './events.js';
 export {
   createStandaloneApp,
   ingestFilesystemPath,
+  runKotowariMcpStdio,
   startKotowariServer,
   writeWorkspaceConfig,
 } from './standalone.js';
+export {
+  createComposeApp,
+  createComposeAppFromEnv,
+  createInProcessComposeApp,
+  startComposeServer,
+} from './compose.js';
+export { listenKotowariHttp } from './http-server.js';
+export { collectParitySnapshot, semanticParityEqual } from './parity.js';
+export type { ParitySnapshot } from './parity.js';

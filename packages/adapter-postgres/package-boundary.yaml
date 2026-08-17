@@ -1,0 +1,11 @@
+name: adapter-postgres
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+  - '@electric-sql/pglite'
+  - pg
+  - '@types/pg'
+forbiddenDependencies:
+  - protocol-*
+  - apps-*
+  - '@google-cloud/*'

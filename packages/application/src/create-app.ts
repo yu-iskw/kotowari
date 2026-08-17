@@ -1,13 +1,24 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { assembleContext } from '@kotowari/capability-context';
-import { ingestDocuments } from '@kotowari/capability-ingestion';
+import {
+  evidenceBlobKey,
+  ingestDocuments,
+  reextractFromStoredEvidence,
+} from '@kotowari/capability-ingestion';
 import { resolveClaimConflict } from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
 import { uniquePredicates } from '@kotowari/capability-ontology';
-import { putPolicy, whatIfPolicy } from '@kotowari/capability-policy';
+import {
+  evaluateDecisionAgainstPolicy,
+  putPolicy,
+  whatIfPolicy,
+} from '@kotowari/capability-policy';
 import { decisionToProvO } from '@kotowari/capability-provenance';
 import { DEFAULT_RETRIEVAL_PLAN, retrieve } from '@kotowari/capability-retrieval';
 import {
   asDecisionId,
+  asEvidenceId,
   assertAllowed,
   assertNoChainOfThought,
   buildDecisionRecorded,
@@ -23,6 +34,7 @@ import type {
   Decision,
   Evidence,
   MemoryRecord,
+  PolicyEvaluation,
   PolicyRecord,
   Principal,
   Resource,
@@ -66,6 +78,10 @@ export type KotowariPorts = {
   reranker?: RerankerProvider;
 };
 
+export type KotowariAppOptions = {
+  profile?: string;
+};
+
 export type KotowariApp = {
   ingestDocuments: (documents: readonly IngestDocument[]) => Promise<IngestResult>;
   ingestPath?: (target: string) => Promise<IngestResult>;
@@ -107,13 +123,41 @@ export type KotowariApp = {
   exportProvO: (decisionId: string) => Promise<ProvODocument | undefined>;
   listPredicates: () => Promise<readonly string[]>;
   listPolicies: () => Promise<readonly PolicyRecord[]>;
-  health: () => { ok: true; profile: 'standalone' };
+  getEvidence: (id: string) => Promise<Evidence | undefined>;
+  getEvidenceContent: (id: string) => Promise<
+    | {
+        evidence: Evidence;
+        bytes: Uint8Array;
+        contentType: string;
+        text?: string;
+      }
+    | undefined
+  >;
+  reextractFromEvidence: (evidenceIds: readonly string[]) => Promise<IngestResult>;
+  processQueuedJobs: () => Promise<number>;
+  health: () => { ok: true; profile: string };
   currentPrincipal: () => Promise<Principal>;
+  runAsRequest: <T>(
+    headers: Record<string, string | undefined>,
+    fn: () => Promise<T>,
+  ) => Promise<T>;
 };
 
-export function createKotowariApp(ports: KotowariPorts): KotowariApp {
+function stringArrayFromUnknown(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item) => typeof item === 'string');
+}
+
+export function createKotowariApp(
+  ports: KotowariPorts,
+  options: KotowariAppOptions = {},
+): KotowariApp {
+  const principalSlot = new AsyncLocalStorage<Principal>();
+
   async function current(): Promise<Principal> {
-    return ports.identity.currentPrincipal();
+    return principalSlot.getStore() ?? ports.identity.currentPrincipal();
   }
 
   async function runRetrieve(
@@ -132,7 +176,9 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     });
   }
 
-  return {
+  const profile = options.profile ?? 'standalone';
+
+  const app: KotowariApp = {
     async ingestDocuments(documents) {
       const actor = await current();
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
@@ -147,7 +193,13 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
           principal: actor,
         },
         documents,
-      );
+      ).then(async (result) => {
+        await ports.queue.enqueue({
+          kind: 'ingest.documents',
+          payload: { evidenceIds: [...result.evidenceIds], claimIds: [...result.claimIds] },
+        });
+        return result;
+      });
     },
 
     async searchKnowledge(input) {
@@ -179,6 +231,25 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
         tenantId: actor.tenantId,
       });
       const snapshot = await this.buildContext({ purpose: input.purpose, query: input.query });
+      let policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
+      if (policies.length === 0) {
+        const created = await putPolicy({
+          store: ports.store,
+          principal: actor,
+          name: 'workspace-default',
+          version: 1,
+          rules: {},
+        });
+        policies = [created];
+      }
+      const candidate = {
+        selectedOutcome: input.selectedOutcome,
+        confidence: input.confidence,
+        classification: 'internal' as const,
+      };
+      const evaluations: PolicyEvaluation[] = policies.map(
+        (policy) => evaluateDecisionAgainstPolicy(actor, policy, candidate).evaluation,
+      );
       const { decision, event } = buildDecisionRecorded({
         metadata: {
           tenantId: actor.tenantId,
@@ -190,14 +261,14 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
         },
         inputContextSnapshot: snapshot,
         consideredEvidenceIds: snapshot.evidenceIds,
-        applicablePolicyIds: [],
+        applicablePolicyIds: policies.map((policy) => policy.id),
         selectedOutcome: input.selectedOutcome,
         alternatives: input.alternatives ?? [],
         confidence: input.confidence,
         actor: actor.id,
         rationale: input.rationale,
         resultingActionIds: [],
-        policyEvaluations: [],
+        policyEvaluations: evaluations,
         provenance: compactProvenance({
           source: 'decision',
           actor: actor.id,
@@ -270,12 +341,90 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
       return ports.store.listPolicies({ tenantId: actor.tenantId });
     },
 
+    async getEvidence(id) {
+      const actor = await current();
+      const evidence = await ports.store.getEvidence(asEvidenceId(id));
+      if (evidence === undefined) {
+        return undefined;
+      }
+      assertAllowed(
+        actor,
+        'knowledge.read',
+        { kind: 'evidence', id: evidence.id, metadata: evidence },
+        { tenantId: actor.tenantId },
+      );
+      return evidence;
+    },
+
+    async getEvidenceContent(id) {
+      const evidence = await app.getEvidence(id);
+      if (evidence === undefined) {
+        return undefined;
+      }
+      const loaded = await ports.blobs.get(evidenceBlobKey(evidence));
+      if (loaded === undefined) {
+        return undefined;
+      }
+      const text = loaded.contentType.startsWith('text/')
+        ? new TextDecoder().decode(loaded.bytes)
+        : undefined;
+      return {
+        evidence,
+        bytes: loaded.bytes,
+        contentType: loaded.contentType,
+        text,
+      };
+    },
+
+    async reextractFromEvidence(evidenceIds) {
+      const actor = await current();
+      assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
+        tenantId: actor.tenantId,
+      });
+      return reextractFromStoredEvidence(
+        {
+          store: ports.store,
+          blobs: ports.blobs,
+          extraction: ports.extraction,
+          embeddings: ports.embeddings,
+          principal: actor,
+        },
+        evidenceIds,
+      );
+    },
+
+    async processQueuedJobs() {
+      const jobs = await ports.queue.drain();
+      for (const job of jobs) {
+        if (job.kind === 'ingest.extract') {
+          await app.reextractFromEvidence(stringArrayFromUnknown(job.payload['evidenceIds']));
+        } else if (job.kind === 'ingest.path' && typeof job.payload['path'] === 'string') {
+          const ingestPath = app.ingestPath;
+          if (ingestPath !== undefined) {
+            await ingestPath(job.payload['path']);
+          }
+        } else if (job.kind === 'ingest.documents') {
+          await ports.store.rebuildLexicalProjection();
+        }
+      }
+      return jobs.length;
+    },
+
     health() {
-      return { ok: true as const, profile: 'standalone' as const };
+      return { ok: true as const, profile };
     },
 
     currentPrincipal() {
       return current();
     },
+
+    async runAsRequest(headers, fn) {
+      const principal =
+        ports.identity.authenticate === undefined
+          ? await ports.identity.currentPrincipal()
+          : await ports.identity.authenticate(headers);
+      return principalSlot.run(principal, fn);
+    },
   };
+  return app;
 }
