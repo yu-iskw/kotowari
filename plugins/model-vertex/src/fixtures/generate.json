@@ -1,0 +1,5 @@
+{
+  "fixtureId": "recorded-vertex-hello",
+  "prompt": "Say hello.",
+  "text": "Hello from recorded Vertex Gemini."
+}
