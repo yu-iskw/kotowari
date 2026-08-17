@@ -1,0 +1,40 @@
+# Kotowari local/enterprise compose stub (Phase 2+).
+# App and worker services are documented here but not wired in Phase 0-1.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kotowari
+      POSTGRES_PASSWORD: kotowari
+      POSTGRES_DB: kotowari
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: kotowari
+      MINIO_ROOT_PASSWORD: kotowari-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+
+  # app:
+  #   build: ../../
+  #   depends_on: [postgres, minio]
+  #   ports: ['8080:8080']
+
+  # worker:
+  #   build: ../../
+  #   depends_on: [postgres, minio]
+  #   command: ['node', 'dist/worker.js']
+
+volumes:
+  postgres-data:
+  minio-data:
