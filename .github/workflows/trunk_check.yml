@@ -64,3 +64,48 @@ jobs:
         uses: trunk-io/trunk-action@04ba50e7658c81db7356da96657e6e77f220bfa3 # v1.3.1
         with:
           setup-deps: true
+
+      # trunk-action leaves this check in_progress when GitHub 503s annotation upload.
+      - name: Conclude waiting Trunk Check
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CONCLUSION: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          ids="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | select(.name=="Trunk Check" and .status=="in_progress") | .id')"
+          if [ -z "${ids}" ]; then
+            echo "No in-progress Trunk Check to conclude"
+            exit 0
+          fi
+          case "${CONCLUSION}" in
+            success) conclusion=success ;;
+            cancelled) conclusion=cancelled ;;
+            *) conclusion=failure ;;
+          esac
+          attempt=1
+          while [ "${attempt}" -le 5 ]; do
+            failed=0
+            for id in ${ids}; do
+              if gh api --method PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${id}" \
+                -f status=completed \
+                -f conclusion="${conclusion}" \
+                -f "output[title]=Trunk Check" \
+                -f "output[summary]=Concluded from Trunk Check Runner after annotation upload."; then
+                echo "Concluded check-run ${id} as ${conclusion}"
+              else
+                failed=1
+              fi
+            done
+            if [ "${failed}" -eq 0 ]; then
+              exit 0
+            fi
+            echo "GitHub API failed on attempt ${attempt}; retrying"
+            attempt=$((attempt + 1))
+            sleep 20
+          done
+          echo "Could not conclude waiting Trunk Check after retries"
+          exit 1
