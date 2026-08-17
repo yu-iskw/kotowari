@@ -14,7 +14,10 @@ export const kotowariAliases: Record<string, string> = {
   '@kotowari/capability-retrieval': path.join(root, 'packages/capability-retrieval/src/public.ts'),
   '@kotowari/capability-ontology': path.join(root, 'packages/capability-ontology/src/public.ts'),
   '@kotowari/capability-policy': path.join(root, 'packages/capability-policy/src/public.ts'),
-  '@kotowari/capability-provenance': path.join(root, 'packages/capability-provenance/src/public.ts'),
+  '@kotowari/capability-provenance': path.join(
+    root,
+    'packages/capability-provenance/src/public.ts',
+  ),
   '@kotowari/adapter-sqlite': path.join(root, 'packages/adapter-sqlite/src/public.ts'),
   '@kotowari/adapter-fs': path.join(root, 'packages/adapter-fs/src/public.ts'),
   '@kotowari/protocol-rest': path.join(root, 'packages/protocol-rest/src/public.ts'),

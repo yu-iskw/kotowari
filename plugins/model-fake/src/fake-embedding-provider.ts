@@ -2,7 +2,6 @@ import { hashEmbedding } from './hash-embedding.js';
 
 import type { EmbeddingProvider } from '@kotowari/plugin-sdk';
 
-
 export function createFakeEmbeddingProvider(dimensions = 8): EmbeddingProvider {
   return {
     id: 'fake-embedding',

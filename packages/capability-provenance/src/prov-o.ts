@@ -18,6 +18,10 @@ export function decisionToProvO(decision: Decision, evidence: readonly Evidence[
     'prov:wasAssociatedWith': decision.actor,
     'prov:used': decision.consideredEvidenceIds,
     'prov:wasInformedBy': decision.provenance,
-    evidence: evidence.map((item) => ({ id: item.id, uri: item.uri, contentHash: item.contentHash })),
+    evidence: evidence.map((item) => ({
+      id: item.id,
+      uri: item.uri,
+      contentHash: item.contentHash,
+    })),
   };
 }

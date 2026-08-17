@@ -1,4 +1,11 @@
-import type { ClaimId, ContextId, EvidenceId, IsoTimestamp, NamespaceId, PolicyId } from './branded-ids.js';
+import type {
+  ClaimId,
+  ContextId,
+  EvidenceId,
+  IsoTimestamp,
+  NamespaceId,
+  PolicyId,
+} from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { Classification, ScopedMetadata } from './scoped-metadata.js';
 

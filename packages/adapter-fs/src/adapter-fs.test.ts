@@ -2,7 +2,11 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { asPrincipalId, blobStoreComplianceTests, localStandalonePrincipal } from '@kotowari/plugin-sdk';
+import {
+  asPrincipalId,
+  blobStoreComplianceTests,
+  localStandalonePrincipal,
+} from '@kotowari/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { createEmbeddedQueue, createFileBlobStore, createLocalIdentityProvider } from './public.js';

@@ -83,9 +83,10 @@ describe('fake embedding provider', () => {
 
 describe('ADR-0003 model-fake package has no vendor ML deps', () => {
   it('package.json must NOT include python/torch/openai/vertex deps', () => {
-    const packageJson = JSON.parse(
-      readFileSync(join(packageDir, '../package.json'), 'utf8'),
-    ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    const packageJson = JSON.parse(readFileSync(join(packageDir, '../package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
     const allDeps = {
       ...packageJson.dependencies,
       ...packageJson.devDependencies,

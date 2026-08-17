@@ -14,11 +14,11 @@ Cloud Run currently distinguishes **services**, **jobs**, and **worker pools**, 
 
 Three **deployment profiles**, one application:
 
-| Profile | Bindings |
-| --- | --- |
-| Standalone | one Node process, SQLite, filesystem blobs, embedded queue, local principal |
-| Enterprise local | Docker Compose: app, worker, PostgreSQL, MinIO, optional Redis/NATS, **dev OIDC** |
-| Enterprise GCP | Cloud Run service/jobs/worker pools, AlloyDB or Cloud SQL, GCS, Pub/Sub, Cloud Tasks, Secret Manager, KMS, OIDC/IAM |
+| Profile          | Bindings                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Standalone       | one Node process, SQLite, filesystem blobs, embedded queue, local principal                                         |
+| Enterprise local | Docker Compose: app, worker, PostgreSQL, MinIO, optional Redis/NATS, **dev OIDC**                                   |
+| Enterprise GCP   | Cloud Run service/jobs/worker pools, AlloyDB or Cloud SQL, GCS, Pub/Sub, Cloud Tasks, Secret Manager, KMS, OIDC/IAM |
 
 - Compose reproduces **ports/contracts** (`BlobStore`, `CanonicalStore`, `IdentityProvider`, `Queue`), not GCP APIs.
 - **Terraform modules** (not a single root soup): `network`, `identity`, `data`, `runtime`, `secrets`, `observability`. Environments compose modules.

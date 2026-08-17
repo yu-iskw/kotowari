@@ -3,4 +3,4 @@ allowedDependencies:
   - '@kotowari/server'
 forbiddenDependencies:
   - '@kotowari/kernel'
-  - @google-cloud/*
+  - '@google-cloud/*'

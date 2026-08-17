@@ -11,7 +11,9 @@ describe('S1 kotowari init', () => {
     const directory = mkdtempSync(join(tmpdir(), 'kotowari-init-'));
     const code = await runCli(['init', directory]);
     expect(code).toBe(0);
-    const config = JSON.parse(readFileSync(join(directory, '.kotowari', 'kotowari.json'), 'utf8')) as {
+    const config = JSON.parse(
+      readFileSync(join(directory, '.kotowari', 'kotowari.json'), 'utf8'),
+    ) as {
       profile: string;
     };
     expect(config.profile).toBe('standalone');

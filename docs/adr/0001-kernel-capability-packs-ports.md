@@ -8,7 +8,7 @@
 
 Kotowari must stay pleasant for one developer on a laptop and correct for enterprise tenancy, provenance, and policy. Semantica-style “every concept is an equally independent module” explodes the public API and invites coding agents to bypass boundaries. Microservices from day one turn schema evolution, authz propagation, and the claim→evidence→provenance→outbox invariant into distributed-systems work before the product is understood. A naive modular monolith is simple to deploy but lets modules import each other’s internals and runs untrusted plugins in-process.
 
-We also need heavy ingestion, embedding, and projection work to scale independently *later* without rewriting domain contracts.
+We also need heavy ingestion, embedding, and projection work to scale independently _later_ without rewriting domain contracts.
 
 ## Decision
 

@@ -8,7 +8,9 @@ describe('public', () => {
   });
 
   it('keeps a stable OpenAPI path snapshot', () => {
-    expect(Object.keys(OPENAPI_SNAPSHOT.paths).sort((left, right) => left.localeCompare(right))).toEqual(
+    expect(
+      Object.keys(OPENAPI_SNAPSHOT.paths).sort((left, right) => left.localeCompare(right)),
+    ).toEqual(
       [
         '/v1/context/build',
         '/v1/decisions',

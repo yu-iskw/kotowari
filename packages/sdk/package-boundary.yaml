@@ -1,5 +1,4 @@
 name: sdk
-allowedDependencies:
-  []
+allowedDependencies: []
 forbiddenDependencies:
-  - @kotowari/*
+  - '@kotowari/*'

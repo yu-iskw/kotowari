@@ -21,6 +21,7 @@ Policy evaluation in the product sense (credit floors, TLP, clinical contraindic
   ```
 
   where `context` includes tenant, classification, agent identity, purpose, and delegation. **RBAC is an input**, not the model.
+
 - Retrieval and context assembly **must** apply policy filters before data reaches a model.
 - Product policies (decision compliance, exceptions, version impact) live in `capability-policy` and are versioned graph/SQL records; they reuse the same principal/resource/action vocabulary where applicable.
 - Standalone binds a single local principal and a default workspace so ACL is real but invisible in UX.

@@ -54,7 +54,11 @@ describe('S2 ingest then sourced search', () => {
     const app = createKotowariApp(ports());
     const text = 'Alice Chen is CEO of Vendor X as of 2024. Vendor X is the payment processor.';
     const ingested = await app.ingestDocuments([
-      { relativePath: 'decision-note.md', bytes: new TextEncoder().encode(text), mimeType: 'text/markdown' },
+      {
+        relativePath: 'decision-note.md',
+        bytes: new TextEncoder().encode(text),
+        mimeType: 'text/markdown',
+      },
     ]);
     expect(ingested.claimIds.length).toBeGreaterThan(0);
     expect(ingested.evidenceIds.length).toBeGreaterThan(0);
@@ -72,7 +76,9 @@ describe('S3 decision persistence', () => {
     await app.ingestDocuments([
       {
         relativePath: 'note.md',
-        bytes: new TextEncoder().encode('Vendor X is the payment processor for the HIPAA workload.'),
+        bytes: new TextEncoder().encode(
+          'Vendor X is the payment processor for the HIPAA workload.',
+        ),
         mimeType: 'text/markdown',
       },
     ]);

@@ -4,4 +4,4 @@ forbiddenDependencies:
   - '@kotowari/kernel'
   - protocol-*
   - adapter-*
-  - @google-cloud/*
+  - '@google-cloud/*'

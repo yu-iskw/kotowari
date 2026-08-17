@@ -6,4 +6,4 @@ forbiddenDependencies:
   - protocol-*
   - apps-*
   - plugins-*
-  - @google-cloud/*
+  - '@google-cloud/*'

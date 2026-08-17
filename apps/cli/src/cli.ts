@@ -22,7 +22,10 @@ Commands:
 function dataDirFromCwd(): string {
   const configPath = join(process.cwd(), WORKSPACE_DIR, CONFIG_FILE);
   if (existsSync(configPath)) {
-    const config = JSON.parse(readFileSync(configPath, 'utf8')) as { dataDir?: string; port?: number };
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      dataDir?: string;
+      port?: number;
+    };
     return resolve(process.cwd(), config.dataDir ?? WORKSPACE_DIR);
   }
   return join(process.cwd(), WORKSPACE_DIR);

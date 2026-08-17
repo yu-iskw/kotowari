@@ -7,7 +7,9 @@ export function blobStoreComplianceTests(factory: () => BlobStore | Promise<Blob
     it('round-trips bytes and content type', async () => {
       const store = await factory();
       const key = 'artifacts/doc.txt';
-      const bytes = Uint8Array.from([104, 101, 108, 108, 111, 32, 107, 111, 116, 111, 119, 97, 114, 105]);
+      const bytes = Uint8Array.from([
+        104, 101, 108, 108, 111, 32, 107, 111, 116, 111, 119, 97, 114, 105,
+      ]);
       const contentType = 'text/plain';
 
       const { uri } = await store.put(key, bytes, contentType);

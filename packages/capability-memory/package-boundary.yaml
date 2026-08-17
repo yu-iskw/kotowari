@@ -8,4 +8,4 @@ forbiddenDependencies:
   - adapter-*
   - apps-*
   - plugins-*
-  - @google-cloud/*
+  - '@google-cloud/*'

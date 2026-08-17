@@ -3,7 +3,7 @@
 **Product:** Kotowari
 **Repo:** `kotowari`
 **Audience:** product, compliance, and engineers who will not read architecture first
-**Companion:** [system-design.md](./system-design.md) (how it is built) · [ADRs](./ADRs/README.md) (why irreversible choices were made)
+**Companion:** [system-design.md](./system-design.md) (how it is built) · [ADRs](./adr/README.md) (why irreversible choices were made)
 
 ---
 
@@ -40,7 +40,7 @@ Powerful agents are not automatically trustworthy ones. Production teams hit the
 
 **No provenance.** Outputs cannot be traced to source facts. In healthcare, finance, legal, and government, that is a hard blocker.
 
-**No reasoning transparency at system level.** Black-box answers with no explanation of *what the system did*: which evidence was selected, which policy applied, which decision was recorded. (Kotowari does not claim to explain what happened inside a foundation model.)
+**No reasoning transparency at system level.** Black-box answers with no explanation of _what the system did_: which evidence was selected, which policy applied, which decision was recorded. (Kotowari does not claim to explain what happened inside a foundation model.)
 
 **No conflict detection.** Contradictory facts silently coexist. Outputs become inconsistent as the knowledge base grows.
 
@@ -60,7 +60,7 @@ A single engineer on a laptop. They want sourced answers over their own files, a
 
 ### 3.2 Platform engineer
 
-They must offer the *same* product to the rest of the company: identity, object storage, background work, and a path to Google Cloud. They need Compose for inner loop and Terraform later, without maintaining a second product.
+They must offer the _same_ product to the rest of the company: identity, object storage, background work, and a path to Google Cloud. They need Compose for inner loop and Terraform later, without maintaining a second product.
 
 **Job to be done:** “Turn on enterprise local tonight; promote the same behavior to GCP without rewriting agents.”
 
@@ -92,15 +92,15 @@ A human who resolves conflicts, inspects evidence, and reviews decisions. They u
 
 ## 4. Value
 
-| Value | What the user gets |
-| --- | --- |
-| **Auditability** | Every important write carries provenance. Decisions are records, not log lines. Policy checks and exceptions are part of the same trail. |
-| **Reusable context** | Knowledge, memory, and decisions compound across sessions, agents, and teams instead of dying in a context window. |
-| **Competing truths** | Two sources can disagree without silent overwrite. Conflicts are visible and resolvable. |
-| **Purpose-built context** | Retrieval is for a *purpose* (code review, underwriting, incident) with policy applied *before* the model sees anything. |
-| **Same product, three runtimes** | Laptop, Compose, and cloud share behavior. Agents do not learn a second API. |
-| **Plugin-speed extension** | New models, sources, and IDE packs plug in without changing the product core. AI coding agents can add a connector as a bounded unit of work. |
-| **System-level explainability** | Kotowari explains what the *system* did: evidence, retrieval, policy, decision, outcome. It does not reconstruct model chain-of-thought. |
+| Value                            | What the user gets                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Auditability**                 | Every important write carries provenance. Decisions are records, not log lines. Policy checks and exceptions are part of the same trail.      |
+| **Reusable context**             | Knowledge, memory, and decisions compound across sessions, agents, and teams instead of dying in a context window.                            |
+| **Competing truths**             | Two sources can disagree without silent overwrite. Conflicts are visible and resolvable.                                                      |
+| **Purpose-built context**        | Retrieval is for a _purpose_ (code review, underwriting, incident) with policy applied _before_ the model sees anything.                      |
+| **Same product, three runtimes** | Laptop, Compose, and cloud share behavior. Agents do not learn a second API.                                                                  |
+| **Plugin-speed extension**       | New models, sources, and IDE packs plug in without changing the product core. AI coding agents can add a connector as a bounded unit of work. |
+| **System-level explainability**  | Kotowari explains what the _system_ did: evidence, retrieval, policy, decision, outcome. It does not reconstruct model chain-of-thought.      |
 
 Kotowari complements the existing stack. Keep the LLM, the IDE, and the agent framework. Add the layer that makes their outputs grounded, traceable, and shareable.
 
@@ -163,7 +163,7 @@ What-if: “If we raise the credit-score floor, which past decisions would have 
 
 Lexical, vector, graph-neighborhood, temporal, and metadata filters, then rerank, then policy filter. Each result explains why it was selected: score components, source evidence, graph route, policy filtering, freshness.
 
-“GraphRAG” is a retrieval *plan*, not a separate product. Users debug bad answers by inspecting the plan, not by guessing the prompt.
+“GraphRAG” is a retrieval _plan_, not a separate product. Users debug bad answers by inspecting the plan, not by guessing the prompt.
 
 ### 6.8 Conflict surfacing and resolution
 
@@ -188,7 +188,7 @@ Organization → workspace/team → project, plus user-private knowledge, contex
 
 ### 6.12 Model choice without product fork
 
-Default enterprise path is Gemini on Vertex AI. Individuals can use a local or other hosted model. The product talks about *capabilities* (tools, structured output, embeddings), not vendor names, in the UI.
+Default enterprise path is Gemini on Vertex AI. Individuals can use a local or other hosted model. The product talks about _capabilities_ (tools, structured output, embeddings), not vendor names, in the UI.
 
 ---
 
@@ -330,7 +330,7 @@ Desired first five minutes:
 4. Search in the UI or ask the IDE plugin.
 5. Record a decision from the UI or the agent.
 
-No Redis, Postgres, Neo4j, or Kubernetes. Restarting the process restores knowledge, memory, and decisions from local files. The UI copy talks about *workspace*, *sources*, *answers*, *decisions*—not “vector index” or “Cloud Run.”
+No Redis, Postgres, Neo4j, or Kubernetes. Restarting the process restores knowledge, memory, and decisions from local files. The UI copy talks about _workspace_, _sources_, _answers_, _decisions_—not “vector index” or “Cloud Run.”
 
 Empty states teach the next action: “Ingest a folder,” “Connect Cursor,” “Record your first decision.”
 
@@ -344,7 +344,7 @@ Compose is not a Google Cloud emulator. Users should not need a GCP account to d
 
 Users sign in with company identity. Workspaces map to teams. Classification labels appear on documents and claims. Admins manage policies, connectors, and which MCP profile a client may use. Heavy ingest is “a job” in the UI, not a spinning browser tab.
 
-Coding agents authenticate as the user (delegated), not with a shared service key, so audit shows *who* the agent acted for.
+Coding agents authenticate as the user (delegated), not with a shared service key, so audit shows _who_ the agent acted for.
 
 ### 8.4 UX principles across modes
 
@@ -360,7 +360,7 @@ Coding agents authenticate as the user (delegated), not with a shared service ke
 Installing the Cursor or Claude Code plugin should feel like installing a well-scoped extension:
 
 - Manifest, skills, and MCP config; no kernel access.
-- Skills tell the agent *when* to search vs write vs record a decision.
+- Skills tell the agent _when_ to search vs write vs record a decision.
 - Enterprise: OAuth in the client; tokens audience-bound to the Kotowari resource.
 - Standalone: stdio to the local process; graph path on disk.
 
@@ -410,41 +410,41 @@ The important product primitives are knowledge, context, memory, evidence, decis
 
 ## 11. Success metrics
 
-| Metric | Intent |
-| --- | --- |
-| Time to first sourced answer on a laptop | Standalone UX is real, not a demo that needs Compose. |
-| Share of consequential agent actions with a decision + provenance record | Accountability is used, not optional. |
-| Contract-test parity across standalone, Compose, and cloud | One product, three profiles. |
-| Retrieval debugger usage on “wrong answer” incidents | Explainability is operational, not a slide. |
-| Time for an AI coding agent to add a source or model plugin that passes contract tests | Extensibility matches the “ultra-rapid” goal. |
-| Audit export opened in a real review (credit, clinical, IR) | Compliance value is not theoretical. |
+| Metric                                                                                 | Intent                                                |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Time to first sourced answer on a laptop                                               | Standalone UX is real, not a demo that needs Compose. |
+| Share of consequential agent actions with a decision + provenance record               | Accountability is used, not optional.                 |
+| Contract-test parity across standalone, Compose, and cloud                             | One product, three profiles.                          |
+| Retrieval debugger usage on “wrong answer” incidents                                   | Explainability is operational, not a slide.           |
+| Time for an AI coding agent to add a source or model plugin that passes contract tests | Extensibility matches the “ultra-rapid” goal.         |
+| Audit export opened in a real review (credit, clinical, IR)                            | Compliance value is not theoretical.                  |
 
 ---
 
 ## 12. Glossary (product)
 
-| Term | Meaning |
-| --- | --- |
-| **Knowledge** | Relatively durable claims about the world. |
-| **Context** | Selected knowledge + runtime/task/user state for a purpose. |
-| **Memory** | Experience retained from agent or user activity. |
-| **Evidence** | Immutable source material supporting claims. |
-| **Decision** | Recorded choice with observable justification, not a log line. |
-| **Policy** | Versioned rules governing reads, writes, actions, and reasoning. |
-| **Provenance** | Who/what/when/how a record came to be. |
-| **Claim** | The unit of belief (with time, confidence, and sources). |
-| **Conflict** | Disagreement among claims that must be visible. |
-| **Namespace** | Org / workspace / project / user scope of ownership. |
-| **MCP App** | Interactive inspector rendered inside a compatible AI client. |
-| **Agent plugin** | IDE or SDK pack that talks to Kotowari through MCP or the SDK. |
+| Term             | Meaning                                                          |
+| ---------------- | ---------------------------------------------------------------- |
+| **Knowledge**    | Relatively durable claims about the world.                       |
+| **Context**      | Selected knowledge + runtime/task/user state for a purpose.      |
+| **Memory**       | Experience retained from agent or user activity.                 |
+| **Evidence**     | Immutable source material supporting claims.                     |
+| **Decision**     | Recorded choice with observable justification, not a log line.   |
+| **Policy**       | Versioned rules governing reads, writes, actions, and reasoning. |
+| **Provenance**   | Who/what/when/how a record came to be.                           |
+| **Claim**        | The unit of belief (with time, confidence, and sources).         |
+| **Conflict**     | Disagreement among claims that must be visible.                  |
+| **Namespace**    | Org / workspace / project / user scope of ownership.             |
+| **MCP App**      | Interactive inspector rendered inside a compatible AI client.    |
+| **Agent plugin** | IDE or SDK pack that talks to Kotowari through MCP or the SDK.   |
 
 ---
 
 ## 13. Document map
 
-| If you need | Read |
-| --- | --- |
-| Why the product exists and how it feels | This document |
-| How the system is structured, stored, and deployed | [system-design.md](./system-design.md) |
-| Why we froze a given technical choice | [ADRs](./ADRs/README.md) |
-| How we prove behavior (including Cursor Cloud) | [quality-assurance.md](./quality-assurance.md) |
+| If you need                                        | Read                                           |
+| -------------------------------------------------- | ---------------------------------------------- |
+| Why the product exists and how it feels            | This document                                  |
+| How the system is structured, stored, and deployed | [system-design.md](./system-design.md)         |
+| Why we froze a given technical choice              | [ADRs](./adr/README.md)                        |
+| How we prove behavior (including Cursor Cloud)     | [quality-assurance.md](./quality-assurance.md) |

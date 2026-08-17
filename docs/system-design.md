@@ -3,7 +3,7 @@
 **Product:** Kotowari
 **Repo:** `kotowari`
 **Audience:** implementers and coding agents
-**Companion:** [product-design.md](./product-design.md) (what and why for users) · [ADRs](./ADRs/README.md) (irreversible choices)
+**Companion:** [product-design.md](./product-design.md) (what and why for users) · [ADRs](./adr/README.md) (irreversible choices)
 
 This document is the technical contract for the TypeScript modular monolith: domain model, kernel, capability packs, ports/adapters, MCP 2026-07-28 (“MCP v2”), Google Cloud, Terraform modules, and agent plugins.
 
@@ -28,7 +28,7 @@ This document is the technical contract for the TypeScript modular monolith: dom
 
 - Kubernetes, required Neo4j/Neptune, dedicated vector DB, generic workflow DSL, in-house agent framework, in-house model gateway, AWS Terraform (later module set), lowest-common-denominator multi-cloud runtime.
 
-Why: [ADR-0001](./ADRs/0001-kernel-capability-packs-ports.md), [ADR-0002](./ADRs/0002-sql-canonical-projections.md), [ADR-0005](./ADRs/0005-three-deployment-profiles.md).
+Why: [ADR-0001](./adr/0001-kernel-capability-packs-ports.md), [ADR-0002](./adr/0002-sql-canonical-projections.md), [ADR-0005](./adr/0005-three-deployment-profiles.md).
 
 ---
 
@@ -110,19 +110,19 @@ flowchart TB
   Domain --> Blob
 ```
 
-**Invariant:** MCP tools, REST handlers, SDK methods, and A2A tasks call `CQRS`. They do not contain business logic. Authorization and provenance therefore cannot diverge by transport. See [ADR-0004](./ADRs/0004-mcp-v2-transport.md).
+**Invariant:** MCP tools, REST handlers, SDK methods, and A2A tasks call `CQRS`. They do not contain business logic. Authorization and provenance therefore cannot diverge by transport. See [ADR-0004](./adr/0004-mcp-v2-transport.md).
 
 ---
 
 ## 4. Three deployment profiles
 
-Same semantic API. Different bindings. Compose reproduces **contracts**, not Google Cloud APIs. See [ADR-0005](./ADRs/0005-three-deployment-profiles.md).
+Same semantic API. Different bindings. Compose reproduces **contracts**, not Google Cloud APIs. See [ADR-0005](./adr/0005-three-deployment-profiles.md).
 
-| Mode | Runtime | Canonical DB | Blobs | Async | Identity |
-| --- | --- | --- | --- | --- | --- |
-| Standalone | single Node process | SQLite | filesystem | embedded queue | local principal |
-| Enterprise local | Docker Compose | PostgreSQL | MinIO | Redis/NATS-compatible adapter | dev OIDC |
-| Enterprise GCP | Cloud Run | AlloyDB or Cloud SQL Postgres | GCS | Pub/Sub + Cloud Tasks + jobs | OIDC / IAM |
+| Mode             | Runtime             | Canonical DB                  | Blobs      | Async                         | Identity        |
+| ---------------- | ------------------- | ----------------------------- | ---------- | ----------------------------- | --------------- |
+| Standalone       | single Node process | SQLite                        | filesystem | embedded queue                | local principal |
+| Enterprise local | Docker Compose      | PostgreSQL                    | MinIO      | Redis/NATS-compatible adapter | dev OIDC        |
+| Enterprise GCP   | Cloud Run           | AlloyDB or Cloud SQL Postgres | GCS        | Pub/Sub + Cloud Tasks + jobs  | OIDC / IAM      |
 
 ```mermaid
 flowchart LR
@@ -163,11 +163,11 @@ flowchart LR
 
 **Cloud Run mapping**
 
-| Workload | Cloud Run kind |
-| --- | --- |
-| REST, MCP HTTP, A2A, web/BFF | Service |
-| Bulk ingest, re-embed, ontology migration, re-index, graph projection | Job |
-| Incremental indexing, connector drain, long consumers | Worker pool |
+| Workload                                                              | Cloud Run kind |
+| --------------------------------------------------------------------- | -------------- |
+| REST, MCP HTTP, A2A, web/BFF                                          | Service        |
+| Bulk ingest, re-embed, ontology migration, re-index, graph projection | Job            |
+| Incremental indexing, connector drain, long consumers                 | Worker pool    |
 
 Capabilities keep a `local executor` and a `distributed executor`. The domain contract does not change.
 
@@ -267,17 +267,17 @@ Each package: `README.md`, `ARCHITECTURE.md`, `public.ts`, `contracts.ts`, `erro
 
 ### 5.3 Stability tiers
 
-| Stability | Examples |
-| --- | --- |
-| Very stable | domain model, contracts, plugin SDK, authz semantics, events, schemas, API compatibility |
-| Moderately stable | capability implementations, retrieval engine, ingestion engine, policy engine |
-| Highly replaceable | LLMs, embeddings, agent frameworks, clouds, databases, parsers, MCP client libs, UI |
+| Stability          | Examples                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| Very stable        | domain model, contracts, plugin SDK, authz semantics, events, schemas, API compatibility |
+| Moderately stable  | capability implementations, retrieval engine, ingestion engine, policy engine            |
+| Highly replaceable | LLMs, embeddings, agent frameworks, clouds, databases, parsers, MCP client libs, UI      |
 
 ---
 
 ## 6. Canonical domain model
 
-Claims are the source of truth. A graph edge is a projection. See [ADR-0002](./ADRs/0002-sql-canonical-projections.md).
+Claims are the source of truth. A graph edge is a projection. See [ADR-0002](./adr/0002-sql-canonical-projections.md).
 
 ```mermaid
 flowchart LR
@@ -329,15 +329,15 @@ This enables contradiction handling, bitemporality, provenance, reprocessing, te
 
 **Definitions (aligned with product):**
 
-| Primitive | Meaning |
-| --- | --- |
-| Knowledge | Durable claims about the world |
-| Context | Selected knowledge + runtime/task/user state for a purpose |
-| Memory | Experience retained from agent/user activity |
-| Evidence | Immutable source material |
-| Decision | Recorded choice and observable justification |
-| Policy | Rules on reads, writes, actions, reasoning |
-| Provenance | Compact internal lineage; PROV-O at export |
+| Primitive  | Meaning                                                    |
+| ---------- | ---------------------------------------------------------- |
+| Knowledge  | Durable claims about the world                             |
+| Context    | Selected knowledge + runtime/task/user state for a purpose |
+| Memory     | Experience retained from agent/user activity               |
+| Evidence   | Immutable source material                                  |
+| Decision   | Recorded choice and observable justification               |
+| Policy     | Rules on reads, writes, actions, reasoning                 |
+| Provenance | Compact internal lineage; PROV-O at export                 |
 
 **Namespaces (native from day one):**
 
@@ -352,7 +352,7 @@ organization
         └── private memory
 ```
 
-Every object: `tenant_id`, `namespace_id`, optional `principal_id`, `classification`, `visibility`, `policy_tags[]`. See [ADR-0010](./ADRs/0010-namespaces-policy-authorization.md).
+Every object: `tenant_id`, `namespace_id`, optional `principal_id`, `classification`, `visibility`, `policy_tags[]`. See [ADR-0010](./adr/0010-namespaces-policy-authorization.md).
 
 ### 6.1 Selective events (not full event sourcing)
 
@@ -385,17 +385,17 @@ Do not split that across four microservices in v1.
 
 ## 7. Storage strategy
 
-| Requirement | Standalone | Enterprise |
-| --- | --- | --- |
-| Canonical entities/claims | SQLite | PostgreSQL / AlloyDB |
-| Metadata | SQLite | PostgreSQL |
-| Embeddings | SQLite extension / embedded | pgvector (AlloyDB-compatible) |
-| FTS | SQLite FTS | PostgreSQL FTS |
-| Blobs | filesystem | GCS (Compose: MinIO) |
-| Graph traversal | application + recursive SQL | SQL first |
-| Graph analytics | embedded | worker-generated projection |
-| RDF | generated projection | generated / materialized |
-| Neo4j / Neptune | optional plugin | optional plugin |
+| Requirement               | Standalone                  | Enterprise                    |
+| ------------------------- | --------------------------- | ----------------------------- |
+| Canonical entities/claims | SQLite                      | PostgreSQL / AlloyDB          |
+| Metadata                  | SQLite                      | PostgreSQL                    |
+| Embeddings                | SQLite extension / embedded | pgvector (AlloyDB-compatible) |
+| FTS                       | SQLite FTS                  | PostgreSQL FTS                |
+| Blobs                     | filesystem                  | GCS (Compose: MinIO)          |
+| Graph traversal           | application + recursive SQL | SQL first                     |
+| Graph analytics           | embedded                    | worker-generated projection   |
+| RDF                       | generated projection        | generated / materialized      |
+| Neo4j / Neptune           | optional plugin             | optional plugin               |
 
 Promote a real graph store only after measurement: deep recursion, large-scale algorithms, high-rate traversal, or required Cypher/SPARQL clients.
 
@@ -422,7 +422,7 @@ Losing a projection is recoverable. Losing canonical SQL is not.
 
 ## 8. Plugin architecture
 
-Do not use a generic `initialize()` plugin. Use **typed capabilities**. See [ADR-0001](./ADRs/0001-kernel-capability-packs-ports.md), [ADR-0006](./ADRs/0006-vertex-gemini-model-adapters.md).
+Do not use a generic `initialize()` plugin. Use **typed capabilities**. See [ADR-0001](./adr/0001-kernel-capability-packs-ports.md), [ADR-0006](./adr/0006-vertex-gemini-model-adapters.md).
 
 ```typescript
 export interface ModelProvider {
@@ -486,12 +486,12 @@ spec:
 
 **Isolation levels**
 
-| Level | Mechanism | Use |
-| --- | --- | --- |
-| L0 | compile-time package | trusted first-party |
-| L1 | dynamically loaded trusted package | internal plugins |
-| L2 | child process / sidecar | untrusted or heavy |
-| L3 | remote service via protocol | large independent systems |
+| Level | Mechanism                          | Use                       |
+| ----- | ---------------------------------- | ------------------------- |
+| L0    | compile-time package               | trusted first-party       |
+| L1    | dynamically loaded trusted package | internal plugins          |
+| L2    | child process / sidecar            | untrusted or heavy        |
+| L3    | remote service via protocol        | large independent systems |
 
 v1 is L0/L1. Do not pay distributed-plugin cost until isolation is required.
 
@@ -627,7 +627,7 @@ sequenceDiagram
 
 ## 11. Decisions and provenance
 
-See [ADR-0007](./ADRs/0007-provenance-mandatory.md), [ADR-0008](./ADRs/0008-decisions-first-class.md).
+See [ADR-0007](./adr/0007-provenance-mandatory.md), [ADR-0008](./adr/0008-decisions-first-class.md).
 
 **Decision record**
 
@@ -681,7 +681,7 @@ sequenceDiagram
 
 ## 12. MCP v2 (specification 2026-07-28)
 
-MCP is a **transport adapter**. Python/TS MCP SDKs must not own domain logic. See [ADR-0004](./ADRs/0004-mcp-v2-transport.md).
+MCP is a **transport adapter**. Python/TS MCP SDKs must not own domain logic. See [ADR-0004](./adr/0004-mcp-v2-transport.md).
 
 **Protocol facts used by Kotowari**
 
@@ -752,7 +752,7 @@ sequenceDiagram
 
 ## 13. Authorization
 
-Not RBAC-as-the-model. RBAC is one **input**. See [ADR-0010](./ADRs/0010-namespaces-policy-authorization.md).
+Not RBAC-as-the-model. RBAC is one **input**. See [ADR-0010](./adr/0010-namespaces-policy-authorization.md).
 
 ```text
 allow(principal, action, resource, context)
@@ -777,14 +777,14 @@ GCP-first production profile. High-quality cloud-specific modules; do not invent
 
 **Module set** (`infra/terraform/modules/`):
 
-| Module | Responsibility |
-| --- | --- |
-| `network` | VPC, serverless connector, private ranges |
-| `identity` | IAP / OIDC clients, workload identity, service accounts |
-| `data` | AlloyDB or Cloud SQL Postgres, GCS buckets |
-| `runtime` | Cloud Run service, jobs, worker pools |
-| `secrets` | Secret Manager, KMS |
-| `observability` | Cloud Trace / OTel, logs, metrics, dashboards |
+| Module          | Responsibility                                          |
+| --------------- | ------------------------------------------------------- |
+| `network`       | VPC, serverless connector, private ranges               |
+| `identity`      | IAP / OIDC clients, workload identity, service accounts |
+| `data`          | AlloyDB or Cloud SQL Postgres, GCS buckets              |
+| `runtime`       | Cloud Run service, jobs, worker pools                   |
+| `secrets`       | Secret Manager, KMS                                     |
+| `observability` | Cloud Trace / OTel, logs, metrics, dashboards           |
 
 Environments (`infra/terraform/environments/`) compose modules. Compose file binds MinIO/Postgres/dev-OIDC to the **same ports** (`BlobStore`, `CanonicalStore`, `IdentityProvider`, `Queue`).
 
@@ -815,14 +815,14 @@ flowchart TB
 
 ## 15. Agent plugins (Cursor, Claude Code, Claude Agent SDK, more)
 
-See [ADR-0009](./ADRs/0009-agent-plugins-thin-mcp.md).
+See [ADR-0009](./adr/0009-agent-plugins-thin-mcp.md).
 
-| Pack | Shape |
-| --- | --- |
-| Cursor | `.cursor-plugin/plugin.json`, skills, hooks, MCP server config |
-| Claude Code | Claude plugin marketplace layout, skills, MCP |
-| Claude Agent SDK | helper that points the SDK at Kotowari MCP/HTTP |
-| ADK / Mastra / DeepAgent / Codex / OpenCode | thin adapters over SDK or MCP |
+| Pack                                        | Shape                                                          |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| Cursor                                      | `.cursor-plugin/plugin.json`, skills, hooks, MCP server config |
+| Claude Code                                 | Claude plugin marketplace layout, skills, MCP                  |
+| Claude Agent SDK                            | helper that points the SDK at Kotowari MCP/HTTP                |
+| ADK / Mastra / DeepAgent / Codex / OpenCode | thin adapters over SDK or MCP                                  |
 
 Skills and tool descriptors are **generated from JSON Schema** so they cannot drift from `contracts.ts`.
 
@@ -846,10 +846,10 @@ SDK sketch:
 ```typescript
 const client = new KotowariClient({ baseUrl, auth });
 const context = await client.context.build({
-  subject: { type: "task", id: taskId },
-  purpose: "code-review",
+  subject: { type: 'task', id: taskId },
+  purpose: 'code-review',
 });
-await client.decisions.record({ /* ... */ });
+await client.decisions.record({/* ... */});
 ```
 
 ---
@@ -858,12 +858,12 @@ await client.decisions.record({ /* ... */ });
 
 Never couple these:
 
-| Clock | Example |
-| --- | --- |
-| Domain / DB schema | 37 |
-| Plugin API | v3 |
-| Public protocol | REST v1, MCP capability `knowledge.v2` |
-| Ontology | `customer-domain@7` |
+| Clock              | Example                                |
+| ------------------ | -------------------------------------- |
+| Domain / DB schema | 37                                     |
+| Plugin API         | v3                                     |
+| Public protocol    | REST v1, MCP capability `knowledge.v2` |
+| Ontology           | `customer-domain@7`                    |
 
 ---
 
@@ -885,31 +885,31 @@ flowchart TB
   P4b --> P5
 ```
 
-| Phase | Ship |
-| --- | --- |
-| 0 | Entity, Claim, Evidence, Provenance, Context, Decision, Namespace, PolicyDecision + SQLite |
-| 1 | Web, REST, MCP, filesystem ingest, hybrid retrieval, Vertex or local model plugin, plugin SDK |
-| 2 | PostgreSQL, OIDC, tenancy, Compose, worker, MinIO, audit trail |
-| 3 | Cloud Run, AlloyDB, GCS, Pub/Sub, Tasks, Secret Manager, Terraform modules |
-| 4 | A2A, MCP Apps, more providers, L2 plugins, ontology governance, graph projections, AWS modules |
+| Phase | Ship                                                                                           |
+| ----- | ---------------------------------------------------------------------------------------------- |
+| 0     | Entity, Claim, Evidence, Provenance, Context, Decision, Namespace, PolicyDecision + SQLite     |
+| 1     | Web, REST, MCP, filesystem ingest, hybrid retrieval, Vertex or local model plugin, plugin SDK  |
+| 2     | PostgreSQL, OIDC, tenancy, Compose, worker, MinIO, audit trail                                 |
+| 3     | Cloud Run, AlloyDB, GCS, Pub/Sub, Tasks, Secret Manager, Terraform modules                     |
+| 4     | A2A, MCP Apps, more providers, L2 plugins, ontology governance, graph projections, AWS modules |
 
 ---
 
 ## 18. What not to build initially
 
-| Defer | Why |
-| --- | --- |
-| Kubernetes | Cloud Run sufficient |
-| Required Neo4j | PostgreSQL first |
-| Dedicated vector DB | pgvector first |
-| Generic workflow DSL | Agent frameworks exist |
-| Own agent framework | Not the product |
-| Own model gateway | Adapters first |
-| Own message broker | Cloud/OSS adapters |
-| Every graph algorithm | Workers/plugins |
-| Every RDF store | Export first |
-| Dozens of connectors | Plugin ecosystem |
-| Microservices | Premature |
+| Defer                           | Why                       |
+| ------------------------------- | ------------------------- |
+| Kubernetes                      | Cloud Run sufficient      |
+| Required Neo4j                  | PostgreSQL first          |
+| Dedicated vector DB             | pgvector first            |
+| Generic workflow DSL            | Agent frameworks exist    |
+| Own agent framework             | Not the product           |
+| Own model gateway               | Adapters first            |
+| Own message broker              | Cloud/OSS adapters        |
+| Every graph algorithm           | Workers/plugins           |
+| Every RDF store                 | Export first              |
+| Dozens of connectors            | Plugin ecosystem          |
+| Microservices                   | Premature                 |
 | Cross-cloud runtime abstraction | Terraform modules instead |
 
 ---

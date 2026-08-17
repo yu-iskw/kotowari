@@ -8,4 +8,4 @@ allowedDependencies:
   - '@kotowari/model-fake'
   - '@kotowari/capability-ingestion'
 forbiddenDependencies:
-  - @google-cloud/*
+  - '@google-cloud/*'

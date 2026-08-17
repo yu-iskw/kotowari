@@ -202,7 +202,9 @@ export function canonicalStoreComplianceTests(
       await store.putEmbedding({ claimId: claim.id, vector: [0.4, 0.5, 0.6] });
       const claimIdAfter = (await store.getClaim(claim.id))?.id;
       expect(claimIdAfter).toBe(claim.id);
-      expect(await store.listEmbeddings()).toEqual([{ claimId: claim.id, vector: [0.4, 0.5, 0.6] }]);
+      expect(await store.listEmbeddings()).toEqual([
+        { claimId: claim.id, vector: [0.4, 0.5, 0.6] },
+      ]);
     });
   });
 }

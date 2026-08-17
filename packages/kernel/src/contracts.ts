@@ -1,4 +1,11 @@
-import type { ClaimId, EntityId, EvidenceId, IsoTimestamp, PolicyId, PrincipalId } from './branded-ids.js';
+import type {
+  ClaimId,
+  EntityId,
+  EvidenceId,
+  IsoTimestamp,
+  PolicyId,
+  PrincipalId,
+} from './branded-ids.js';
 import type { ClaimObject, ClaimStatus } from './claim.js';
 import type { ConflictKind, ResolutionStrategy } from './conflict.js';
 import type { ContextSnapshot, PolicyEvaluation, PolicyRules } from './context.js';

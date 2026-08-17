@@ -1,5 +1,4 @@
 name: web
-allowedDependencies:
-  []
+allowedDependencies: []
 forbiddenDependencies:
-  - @google-cloud/*
+  - '@google-cloud/*'

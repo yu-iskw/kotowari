@@ -19,7 +19,10 @@ describe('S1 S3 standalone smoke', () => {
   it('S3 decision survives sqlite file reopen', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
     const docs = mkdtempSync(join(tmpdir(), 'docs-'));
-    writeFileSync(join(docs, 'note.md'), 'Vendor X is the payment processor for the HIPAA workload.\n');
+    writeFileSync(
+      join(docs, 'note.md'),
+      'Vendor X is the payment processor for the HIPAA workload.\n',
+    );
     const first = createStandaloneApp({ dataDir });
     await ingestFilesystemPath(first, docs);
     const decision = await first.recordDecision({

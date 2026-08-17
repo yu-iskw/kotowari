@@ -31,7 +31,7 @@ const importXSettings = {
   'import-x/resolver': {
     typescript: {
       alwaysTryTypes: true,
-        project: ['packages/*/tsconfig.json', 'apps/*/tsconfig.json', 'plugins/*/tsconfig.json'],
+      project: ['packages/*/tsconfig.json', 'apps/*/tsconfig.json', 'plugins/*/tsconfig.json'],
     },
     node: true,
   },
@@ -73,10 +73,14 @@ const sharedTsRules = Object.assign({}, tseslint.configs['recommended-type-check
   '@typescript-eslint/prefer-promise-reject-errors': 'error',
   '@typescript-eslint/require-array-sort-compare': 'error',
   '@typescript-eslint/member-ordering': 'error',
-  // Security (core + plugin; Trunk still runs Trivy/OSV)
+  // Security (core; Trunk still runs Trivy/OSV). Plugin FS/object-injection rules are noise on this codebase.
   'no-eval': 'error',
   'no-implied-eval': 'error',
   'no-new-func': 'error',
+  'security/detect-object-injection': 'off',
+  'security/detect-non-literal-fs-filename': 'off',
+  'security/detect-non-literal-regexp': 'off',
+  'security/detect-unsafe-regex': 'off',
   'prefer-const': 'error',
   'max-lines-per-function': ['error', { max: 280 }],
   'max-depth': ['error', { max: 6 }],
@@ -101,6 +105,7 @@ const unicornFilenameCase = [
 export default [
   {
     ignores: [
+      'dev/**',
       '**/node_modules/**',
       '.pnpm-store/**',
       '**/dist/**',

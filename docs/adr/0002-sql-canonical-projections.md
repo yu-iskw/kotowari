@@ -8,7 +8,7 @@
 
 Semantica treats swappable graph and vector stores as a first-class architectural property. That breadth is useful for a library that must sit on whatever the customer already runs. For a greenfield internal platform it multiplies operational combinations, AI-coding complexity, and the risk that “the graph” and “the claims table” diverge.
 
-The product’s unit of belief is a **Claim** (bitemporal, evidenced, namespaced), not an LPG edge. Graphs, embeddings, FTS, and RDF are ways to *look at* claims. AlloyDB / PostgreSQL pgvector makes a SQL-first enterprise backend viable without a dedicated vector database on day one.
+The product’s unit of belief is a **Claim** (bitemporal, evidenced, namespaced), not an LPG edge. Graphs, embeddings, FTS, and RDF are ways to _look at_ claims. AlloyDB / PostgreSQL pgvector makes a SQL-first enterprise backend viable without a dedicated vector database on day one.
 
 ## Decision
 
@@ -36,4 +36,4 @@ The product’s unit of belief is a **Claim** (bitemporal, evidenced, namespaced
 
 - **Graph database as canonical store:** strong traversal, weak fit for tenancy, bitemporal claims, and cheap standalone.
 - **Semantica-style many equal backends:** defer; optional plugins later.
-- **Event-source everything and fold on read:** too heavy for config/UI; we event-source *semantic* changes only.
+- **Event-source everything and fold on read:** too heavy for config/UI; we event-source _semantic_ changes only.

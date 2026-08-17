@@ -6,7 +6,7 @@
 
 ## Context
 
-Accountability is the product. Optional provenance becomes missing provenance. W3C PROV-O is the right *interoperability* model for export to compliance tooling, but forcing RDF triples through every write makes the kernel unusable and couples SQL-canonical records to semantic-web stacks.
+Accountability is the product. Optional provenance becomes missing provenance. W3C PROV-O is the right _interoperability_ model for export to compliance tooling, but forcing RDF triples through every write makes the kernel unusable and couples SQL-canonical records to semantic-web stacks.
 
 Semantica treats PROV-O as core and warns that whole-graph snapshots are not a substitute for granular lineage. Kotowari agrees with the principle and disagrees with RDF-on-the-hot-path.
 

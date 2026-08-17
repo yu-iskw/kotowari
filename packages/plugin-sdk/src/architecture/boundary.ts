@@ -70,7 +70,6 @@ function parseSimpleYaml(content: string): PackageBoundary {
   return { name, allowedDependencies, forbiddenDependencies };
 }
 
-
 function packageJsonName(packageJsonPath: string): string {
   const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
   if (
@@ -143,7 +142,11 @@ function collectSourceImports(srcDir: string): { file: string; specifier: string
       const content = readFileSync(fullPath, 'utf8');
       for (const match of content.matchAll(IMPORT_PATTERN)) {
         const specifier = match[1];
-        if (specifier !== undefined && !specifier.startsWith('.') && !specifier.startsWith('node:')) {
+        if (
+          specifier !== undefined &&
+          !specifier.startsWith('.') &&
+          !specifier.startsWith('node:')
+        ) {
           imports.push({ file: fullPath, specifier });
         }
       }

@@ -16,9 +16,7 @@ describe('public', () => {
 
 describe('ADR-0009 agent pack must not import kernel', () => {
   it('package.json dependencies must not include @kotowari/kernel', () => {
-    const packageJson = JSON.parse(
-      readFileSync(join(packageDir, '../package.json'), 'utf8'),
-    ) as {
+    const packageJson = JSON.parse(readFileSync(join(packageDir, '../package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
@@ -43,11 +41,7 @@ describe('retrieve profile tool list snapshot', () => {
     const jsonNames = toolsJson.tools.map((tool) => tool.name);
 
     expect(retrieveToolNames).toEqual(jsonNames);
-    expect(retrieveToolNames).toEqual([
-      'search_knowledge',
-      'search_memory',
-      'record_decision',
-    ]);
+    expect(retrieveToolNames).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
 
     for (const name of retrieveToolNames) {
       expect(name).not.toContain('admin');

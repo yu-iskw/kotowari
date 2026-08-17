@@ -5,4 +5,4 @@ forbiddenDependencies:
   - protocol-*
   - adapter-*
   - apps-*
-  - @google-cloud/*
+  - '@google-cloud/*'

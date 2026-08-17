@@ -113,12 +113,17 @@ export interface ModelProvider {
 
 export interface EmbeddingProvider {
   readonly id: string;
-  embed(request: { texts: readonly string[] }): Promise<{ vectors: readonly (readonly number[])[] }>;
+  embed(request: {
+    texts: readonly string[];
+  }): Promise<{ vectors: readonly (readonly number[])[] }>;
 }
 
 export interface ExtractionProvider {
   readonly id: string;
-  extract(request: { text: string; evidenceId: EvidenceId }): Promise<{ drafts: readonly ExtractedClaimDraft[] }>;
+  extract(request: {
+    text: string;
+    evidenceId: EvidenceId;
+  }): Promise<{ drafts: readonly ExtractedClaimDraft[] }>;
 }
 
 export interface RerankerProvider {

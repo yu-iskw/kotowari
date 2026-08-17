@@ -7,12 +7,12 @@ description: Decide when to search Kotowari memory vs search knowledge, record a
 
 ## When to use each tool
 
-| Situation | Tool |
-| --- | --- |
-| Facts from ingested documents, claims, or evidence | `search_knowledge` |
-| Prior agent notes, scratch context, or session memory in the workspace namespace | `search_memory` |
-| User chose an outcome, policy, or precedent to persist | `record_decision` |
-| New files or folders must be added to the workspace | `ingest_path` |
+| Situation                                                                        | Tool               |
+| -------------------------------------------------------------------------------- | ------------------ |
+| Facts from ingested documents, claims, or evidence                               | `search_knowledge` |
+| Prior agent notes, scratch context, or session memory in the workspace namespace | `search_memory`    |
+| User chose an outcome, policy, or precedent to persist                           | `record_decision`  |
+| New files or folders must be added to the workspace                              | `ingest_path`      |
 
 ## Search knowledge first for sourced facts
 

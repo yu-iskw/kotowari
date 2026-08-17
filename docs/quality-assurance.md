@@ -3,7 +3,7 @@
 **Product:** Kotowari
 **Repo:** `kotowari`
 **Audience:** implementers, Cursor Cloud agents, and reviewers who must decide whether a slice is actually done
-**Companion:** [product-design.md](./product-design.md) (stories S1–S18) · [system-design.md](./system-design.md) (architecture) · [ADRs](./ADRs/README.md) (irreversible choices)
+**Companion:** [product-design.md](./product-design.md) (stories S1–S18) · [system-design.md](./system-design.md) (architecture) · [ADRs](./adr/README.md) (irreversible choices)
 
 This document is **not** a unit-test and e2e checklist. It is the **behavior-guarantee system**: executable proofs derived from product stories and ADRs, enforced in CI so a Cursor Cloud agent cannot merge “looks done” code that violates the product.
 
@@ -72,40 +72,40 @@ Every must-have proof maps to a story and/or ADR. Test titles include the IDs (e
 
 ### 3.1 User stories → proofs
 
-| Stories | Must remain true | Proof kind |
-| --- | --- | --- |
-| S1 | `npx kotowari init && kotowari start` serves web, REST, and MCP without Docker | E2E smoke + protocol golden (local HTTP/stdio) |
-| S2 | Ingest then query returns claims linked to evidence | Port contract + fixture ingest + retrieval explanation |
-| S3 | Decision survives process restart | Standalone persist test (SQLite file round-trip) |
-| S4 | IDE plugin uses MCP only | Architecture: agent packs must not import `packages/kernel`; MCP golden |
-| S5, S7 | Compose matches standalone semantics | **Profile parity harness** (same fixtures, same assertions) |
-| S6 | Cloud promote does not change agent APIs | Protocol snapshots stay stable; Phase 3 smoke uses same commands |
-| S8 | Audit view has snapshot, evidence, policy versions, actor, outcome | Kernel invariant + decision contract |
-| S9 | Policy what-if lists affected past decisions | Policy capability tests + fixtures |
-| S10 | Classified evidence omitted for unauthorized agent | ADR-0010 retrieve-empty + explanation `policy_filter` |
-| S11 | Plugin configures stdio (standalone) or HTTP OAuth (enterprise) | Pack golden configs; MCP auth tests in Compose job |
-| S12 | Coding agent does not see admin tools by default | MCP profile fixture: `/mcp/retrieve` tool list snapshot |
-| S13 | MCP Apps are inspectors, not the only UI | Optional; do not block v1 core gates |
-| S14 | `context.build({ purpose })` is bounded and snapshotted | Application command test + snapshot attached to decision |
-| S15 | Shared workspace, isolated memory namespaces | Namespace isolation contract |
-| S16 | Framework adapters stay thin | Architecture: adapters depend on SDK/protocol only |
-| S17 | Conflict resolution recorded with provenance | Kernel write + provenance required |
-| S18 | Re-extract from stored evidence, no origin SaaS | Ingest contract: extract from blob ids only |
+| Stories | Must remain true                                                               | Proof kind                                                              |
+| ------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| S1      | `npx kotowari init && kotowari start` serves web, REST, and MCP without Docker | E2E smoke + protocol golden (local HTTP/stdio)                          |
+| S2      | Ingest then query returns claims linked to evidence                            | Port contract + fixture ingest + retrieval explanation                  |
+| S3      | Decision survives process restart                                              | Standalone persist test (SQLite file round-trip)                        |
+| S4      | IDE plugin uses MCP only                                                       | Architecture: agent packs must not import `packages/kernel`; MCP golden |
+| S5, S7  | Compose matches standalone semantics                                           | **Profile parity harness** (same fixtures, same assertions)             |
+| S6      | Cloud promote does not change agent APIs                                       | Protocol snapshots stay stable; Phase 3 smoke uses same commands        |
+| S8      | Audit view has snapshot, evidence, policy versions, actor, outcome             | Kernel invariant + decision contract                                    |
+| S9      | Policy what-if lists affected past decisions                                   | Policy capability tests + fixtures                                      |
+| S10     | Classified evidence omitted for unauthorized agent                             | ADR-0010 retrieve-empty + explanation `policy_filter`                   |
+| S11     | Plugin configures stdio (standalone) or HTTP OAuth (enterprise)                | Pack golden configs; MCP auth tests in Compose job                      |
+| S12     | Coding agent does not see admin tools by default                               | MCP profile fixture: `/mcp/retrieve` tool list snapshot                 |
+| S13     | MCP Apps are inspectors, not the only UI                                       | Optional; do not block v1 core gates                                    |
+| S14     | `context.build({ purpose })` is bounded and snapshotted                        | Application command test + snapshot attached to decision                |
+| S15     | Shared workspace, isolated memory namespaces                                   | Namespace isolation contract                                            |
+| S16     | Framework adapters stay thin                                                   | Architecture: adapters depend on SDK/protocol only                      |
+| S17     | Conflict resolution recorded with provenance                                   | Kernel write + provenance required                                      |
+| S18     | Re-extract from stored evidence, no origin SaaS                                | Ingest contract: extract from blob ids only                             |
 
 ### 3.2 ADRs → proofs
 
-| ADR | Must-have proof |
-| --- | --- |
-| [0001](./ADRs/0001-kernel-capability-packs-ports.md) | `package-boundary.yaml`: `kernel` must not import `protocol-*`, Vertex, or Postgres. Architecture lint fails the PR. |
-| [0002](./ADRs/0002-sql-canonical-projections.md) | **Same** `canonicalStoreComplianceTests(factory)` on SQLite and Postgres. Graph/vector are projections: deleting a projection and rebuilding does not change canonical claim ids. |
-| [0003](./ADRs/0003-typescript-product-language.md) | Default `verify` does not require Python. Kernel package.json has no vendor ML deps. |
-| [0004](./ADRs/0004-mcp-v2-transport.md) | Streamable HTTP requires `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`; header/body mismatch rejected. Tools invoke application commands, not kernel internals (architecture + a spy in protocol tests). Capability-scoped tool lists differ (`/mcp/retrieve` vs `/mcp/admin`). |
-| [0005](./ADRs/0005-three-deployment-profiles.md) | Profile parity job: standalone process vs Compose app+Postgres+MinIO; identical semantic assertions. Compose does **not** assert GCP APIs. |
-| [0006](./ADRs/0006-vertex-gemini-model-adapters.md) | `modelProviderComplianceTests` + `embeddingProviderComplianceTests` with a **fake** provider on every PR. Vertex plugin uses **recorded fixtures**; live Gemini is not a merge gate. |
-| [0007](./ADRs/0007-provenance-mandatory.md) | Kernel **rejects** semantic writes without provenance (property test). Happy path always persists compact provenance fields. |
-| [0008](./ADRs/0008-decisions-first-class.md) | Decision record requires context snapshot + evidence refs; payload with `chainOfThought` / hidden CoT field is rejected or ignored with test proving it is not stored. |
-| [0009](./ADRs/0009-agent-plugins-thin-mcp.md) | Agent pack packages forbidden to depend on `kernel`. Skills/tool descriptors match JSON Schema snapshots (generated, CI fails on drift). |
-| [0010](./ADRs/0010-namespaces-policy-authorization.md) | Cross-tenant retrieve returns no hits; explanation includes policy filter. `allow(principal, action, resource, context)` property tests. Standalone still has a real local principal (not “ACL off”). |
+| ADR                                                   | Must-have proof                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [0001](./adr/0001-kernel-capability-packs-ports.md)   | `package-boundary.yaml`: `kernel` must not import `protocol-*`, Vertex, or Postgres. Architecture lint fails the PR.                                                                                                                                                               |
+| [0002](./adr/0002-sql-canonical-projections.md)       | **Same** `canonicalStoreComplianceTests(factory)` on SQLite and Postgres. Graph/vector are projections: deleting a projection and rebuilding does not change canonical claim ids.                                                                                                  |
+| [0003](./adr/0003-typescript-product-language.md)     | Default `verify` does not require Python. Kernel package.json has no vendor ML deps.                                                                                                                                                                                               |
+| [0004](./adr/0004-mcp-v2-transport.md)                | Streamable HTTP requires `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`; header/body mismatch rejected. Tools invoke application commands, not kernel internals (architecture + a spy in protocol tests). Capability-scoped tool lists differ (`/mcp/retrieve` vs `/mcp/admin`). |
+| [0005](./adr/0005-three-deployment-profiles.md)       | Profile parity job: standalone process vs Compose app+Postgres+MinIO; identical semantic assertions. Compose does **not** assert GCP APIs.                                                                                                                                         |
+| [0006](./adr/0006-vertex-gemini-model-adapters.md)    | `modelProviderComplianceTests` + `embeddingProviderComplianceTests` with a **fake** provider on every PR. Vertex plugin uses **recorded fixtures**; live Gemini is not a merge gate.                                                                                               |
+| [0007](./adr/0007-provenance-mandatory.md)            | Kernel **rejects** semantic writes without provenance (property test). Happy path always persists compact provenance fields.                                                                                                                                                       |
+| [0008](./adr/0008-decisions-first-class.md)           | Decision record requires context snapshot + evidence refs; payload with `chainOfThought` / hidden CoT field is rejected or ignored with test proving it is not stored.                                                                                                             |
+| [0009](./adr/0009-agent-plugins-thin-mcp.md)          | Agent pack packages forbidden to depend on `kernel`. Skills/tool descriptors match JSON Schema snapshots (generated, CI fails on drift).                                                                                                                                           |
+| [0010](./adr/0010-namespaces-policy-authorization.md) | Cross-tenant retrieve returns no hits; explanation includes policy filter. `allow(principal, action, resource, context)` property tests. Standalone still has a real local principal (not “ACL off”).                                                                              |
 
 ---
 
@@ -113,16 +113,16 @@ Every must-have proof maps to a story and/or ADR. Test titles include the IDs (e
 
 What each layer is **allowed** to prove. Using the wrong layer is a review failure, not extra credit.
 
-| Layer | Proves | Runs in Cloud agent / default CI | Forbidden |
-| --- | --- | --- | --- |
-| **Kernel invariants** | Claim + evidence link + provenance + ACL metadata + outbox in one transaction; reject write without provenance; decision shape | Always, in-process, **no I/O** | Calling Vertex, opening a browser, “testing” MCP |
-| **Port contracts** | `CanonicalStore`, `BlobStore`, `ModelProvider`, `EmbeddingProvider`, `KnowledgeSource`, `GraphProjection` via `*ComplianceTests(factory)` | SQLite + filesystem fake in default CI; Postgres + MinIO in Compose job | One-off adapter tests that skip the shared suite |
-| **Architecture** | Dependency rules, `public.ts` is the only import surface, agent packs vs kernel | Always | “We’ll fix imports later”; relying on `tsc` alone |
-| **Protocol golden** | OpenAPI snapshot; MCP tool JSON Schema snapshot; 2026-07-28 header mismatch; scoped tool lists | Always with fake model | Live Gemini; asserting UI pixels |
-| **Profile parity** | Identical semantic fixtures on standalone vs Compose | Compose service in CI (Phase 2+) | Different expected JSON per profile except where the spec allows (identity UX) |
-| **Retrieval / extract evals** | Quality vs frozen corpus + fake `ExtractionProvider` or recorded Vertex fixtures | PR: fixture replay only. Nightly: optional live eval, **advisory** | Flaky live-model gates on every PR |
-| **E2E smoke** | `kotowari init/start`, ingest fixture, one sourced query, record decision | **One** path, minutes not hours | Replacing contracts with UI-only e2e; covering tenancy only in the browser |
-| **Unit** | Pure functions, parsers, header mapping, score math | Yes | Using unit tests to “prove” tenancy, provenance-on-write, or MCP auth |
+| Layer                         | Proves                                                                                                                                    | Runs in Cloud agent / default CI                                        | Forbidden                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Kernel invariants**         | Claim + evidence link + provenance + ACL metadata + outbox in one transaction; reject write without provenance; decision shape            | Always, in-process, **no I/O**                                          | Calling Vertex, opening a browser, “testing” MCP                               |
+| **Port contracts**            | `CanonicalStore`, `BlobStore`, `ModelProvider`, `EmbeddingProvider`, `KnowledgeSource`, `GraphProjection` via `*ComplianceTests(factory)` | SQLite + filesystem fake in default CI; Postgres + MinIO in Compose job | One-off adapter tests that skip the shared suite                               |
+| **Architecture**              | Dependency rules, `public.ts` is the only import surface, agent packs vs kernel                                                           | Always                                                                  | “We’ll fix imports later”; relying on `tsc` alone                              |
+| **Protocol golden**           | OpenAPI snapshot; MCP tool JSON Schema snapshot; 2026-07-28 header mismatch; scoped tool lists                                            | Always with fake model                                                  | Live Gemini; asserting UI pixels                                               |
+| **Profile parity**            | Identical semantic fixtures on standalone vs Compose                                                                                      | Compose service in CI (Phase 2+)                                        | Different expected JSON per profile except where the spec allows (identity UX) |
+| **Retrieval / extract evals** | Quality vs frozen corpus + fake `ExtractionProvider` or recorded Vertex fixtures                                                          | PR: fixture replay only. Nightly: optional live eval, **advisory**      | Flaky live-model gates on every PR                                             |
+| **E2E smoke**                 | `kotowari init/start`, ingest fixture, one sourced query, record decision                                                                 | **One** path, minutes not hours                                         | Replacing contracts with UI-only e2e; covering tenancy only in the browser     |
+| **Unit**                      | Pure functions, parsers, header mapping, score math                                                                                       | Yes                                                                     | Using unit tests to “prove” tenancy, provenance-on-write, or MCP auth          |
 
 **Property-based tests** (fast-check or equivalent) are required for:
 
@@ -196,11 +196,11 @@ Reviewers reject PRs that only show “added tests in `__tests__/foo.test.ts`”
 
 Aligned with [system-design.md](./system-design.md) §17. Merge to default branch requires **default gates**. Cloud agents cannot skip them.
 
-| Phase | Required on merge | Additional (non-blocking or later required) |
-| --- | --- | --- |
-| **0–1 Standalone** | Kernel invariants; SQLite + filesystem contracts; architecture lint; MCP/OpenAPI goldens; unit; e2e smoke (`init/start/ingest/query/decision`) | Retrieval fixture evals |
-| **2 Compose** | All of 0–1 **plus** Postgres+MinIO contract job; **profile parity** (same semantic fixtures); dev-OIDC retrieve-deny tests | MCP HTTP OAuth against mock AS |
-| **3 GCP** | All of 2 **plus** `terraform validate` / fmt / module contract; Cloud Run **smoke** of the same commands (staging) | Live Vertex nightly eval; IAM residual checklist |
+| Phase              | Required on merge                                                                                                                              | Additional (non-blocking or later required)      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **0–1 Standalone** | Kernel invariants; SQLite + filesystem contracts; architecture lint; MCP/OpenAPI goldens; unit; e2e smoke (`init/start/ingest/query/decision`) | Retrieval fixture evals                          |
+| **2 Compose**      | All of 0–1 **plus** Postgres+MinIO contract job; **profile parity** (same semantic fixtures); dev-OIDC retrieve-deny tests                     | MCP HTTP OAuth against mock AS                   |
+| **3 GCP**          | All of 2 **plus** `terraform validate` / fmt / module contract; Cloud Run **smoke** of the same commands (staging)                             | Live Vertex nightly eval; IAM residual checklist |
 
 **Job sketch (conceptual)**
 
@@ -219,14 +219,14 @@ Parity assertions must be **identical** for knowledge write, provenance presence
 
 When code exists, these are the mechanical homes. Do not invent a second quality system.
 
-| Harness | Role |
-| --- | --- |
-| `packages/plugin-sdk` `*ComplianceTests(factory)` | Port contracts; every adapter registers a factory |
-| `packages/kernel` invariant suite | Provenance, atomic outbox, decision shape, namespace on write |
-| `package-boundary.yaml` + CI architecture test | ADR-0001 / 0009 import rules |
-| `testdata/` corpora + explanation goldens | S2, retrieval debugger, evals |
-| `pnpm verify` | Default gate aggregator for humans and Cloud agents |
-| Profile parity runner | Load fixture pack; run against standalone URL and Compose URL; diff semantic results |
+| Harness                                           | Role                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/plugin-sdk` `*ComplianceTests(factory)` | Port contracts; every adapter registers a factory                                    |
+| `packages/kernel` invariant suite                 | Provenance, atomic outbox, decision shape, namespace on write                        |
+| `package-boundary.yaml` + CI architecture test    | ADR-0001 / 0009 import rules                                                         |
+| `testdata/` corpora + explanation goldens         | S2, retrieval debugger, evals                                                        |
+| `pnpm verify`                                     | Default gate aggregator for humans and Cloud agents                                  |
+| Profile parity runner                             | Load fixture pack; run against standalone URL and Compose URL; diff semantic results |
 
 Protocol tests may spy that `protocol-mcp` calls `application` commands only.
 
@@ -234,14 +234,14 @@ Protocol tests may spy that `protocol-mcp` calls `application` commands only.
 
 ## 9. Residual risk (what we still do not guarantee)
 
-| Risk | Why it is residual | Mitigation |
-| --- | --- | --- |
-| Live Gemini quality / drift | Nondeterministic; not a PR gate | Recorded fixtures on PR; nightly advisory eval |
-| Third-party MCP host quirks (Cursor vs Claude vs VS Code) | Hosts differ; we own the server | Goldens for **our** protocol; manual host smoke when upgrading MCP SDK |
-| GCP IAM / IAP edge cases | Compose reproduces contracts, not Google Cloud | Staging smoke + IAM review; not emulated locally |
-| MCP Apps rendering in a given host | Extension support varies | Inspectors optional for v1 merge |
-| Malicious L2/L3 plugins | v1 is L0/L1 trusted | Isolation levels in ADR-0001; out of default gates |
-| Performance / huge graphs | Correctness first | Projection workers measured later; not a substitute for contracts |
+| Risk                                                      | Why it is residual                             | Mitigation                                                             |
+| --------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| Live Gemini quality / drift                               | Nondeterministic; not a PR gate                | Recorded fixtures on PR; nightly advisory eval                         |
+| Third-party MCP host quirks (Cursor vs Claude vs VS Code) | Hosts differ; we own the server                | Goldens for **our** protocol; manual host smoke when upgrading MCP SDK |
+| GCP IAM / IAP edge cases                                  | Compose reproduces contracts, not Google Cloud | Staging smoke + IAM review; not emulated locally                       |
+| MCP Apps rendering in a given host                        | Extension support varies                       | Inspectors optional for v1 merge                                       |
+| Malicious L2/L3 plugins                                   | v1 is L0/L1 trusted                            | Isolation levels in ADR-0001; out of default gates                     |
+| Performance / huge graphs                                 | Correctness first                              | Projection workers measured later; not a substitute for contracts      |
 
 These gaps are explicit so Cloud agents do not pretend e2e-on-GCP is required to finish a kernel slice—and so reviewers do not confuse a green `verify-default` with “Vertex is production-perfect.”
 
@@ -249,9 +249,9 @@ These gaps are explicit so Cloud agents do not pretend e2e-on-GCP is required to
 
 ## 10. Document map
 
-| If you need | Read |
-| --- | --- |
-| What users experience and story IDs | [product-design.md](./product-design.md) |
-| How the system is built | [system-design.md](./system-design.md) |
-| Why a technical choice is frozen | [ADRs](./ADRs/README.md) |
-| How we prove behavior under Cursor Cloud | This document |
+| If you need                              | Read                                     |
+| ---------------------------------------- | ---------------------------------------- |
+| What users experience and story IDs      | [product-design.md](./product-design.md) |
+| How the system is built                  | [system-design.md](./system-design.md)   |
+| Why a technical choice is frozen         | [ADRs](./adr/README.md)                  |
+| How we prove behavior under Cursor Cloud | This document                            |
