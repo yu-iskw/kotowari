@@ -1,4 +1,4 @@
-import { buildConflictResolved } from '@kotowari/kernel';
+import { asClaimId, buildConflictResolved, compactProvenance } from '@kotowari/kernel';
 
 import type { ConflictResolution, Principal } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
@@ -24,17 +24,15 @@ export async function resolveClaimConflict(input: {
       policyTags: [],
     },
     kind: 'value',
-    claimIds: input.claimIds as never,
+    claimIds: input.claimIds.map((id) => asClaimId(id)),
     strategy: 'human_review',
-    preferredClaimId: input.preferredClaimId as never,
+    preferredClaimId: asClaimId(input.preferredClaimId),
     reason: input.reason,
-    provenance: {
+    provenance: compactProvenance({
       source: 'curator',
       actor: input.principal.id,
       process: 'conflict.resolve',
-      timestamp: new Date().toISOString() as never,
-      parentIds: [],
-    },
+    }),
   });
   await input.store.withTransaction(async (tx) => {
     await tx.putResolution(resolution);

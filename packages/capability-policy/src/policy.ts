@@ -1,4 +1,4 @@
-import { buildPolicyEvaluated, newId } from '@kotowari/kernel';
+import { buildPolicyEvaluated, compactProvenance, newId } from '@kotowari/kernel';
 
 import type { Decision, PolicyEvaluation, PolicyRecord, Principal } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
@@ -51,13 +51,7 @@ export function evaluateDecisionAgainstPolicy(
     candidateOutcome: decision.selectedOutcome,
     confidence: decision.confidence,
     classification: decision.classification,
-    provenance: {
-      source: 'policy',
-      actor: principal.id,
-      process: 'policy.evaluate',
-      timestamp: new Date().toISOString() as never,
-      parentIds: [],
-    },
+    provenance: compactProvenance({ source: 'policy', actor: principal.id, process: 'policy.evaluate' }),
   });
 }
 

@@ -1,13 +1,14 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { join, relative, resolve as resolvePath } from 'node:path';
+import { basename, dirname, join, relative, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createEmbeddedQueue, createFileBlobStore, createLocalIdentityProvider } from '@kotowari/adapter-fs';
 import { createSqliteCanonicalStore } from '@kotowari/adapter-sqlite';
 import { createKotowariApp } from '@kotowari/application';
 import { documentMimeType } from '@kotowari/capability-ingestion';
 import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@kotowari/model-fake';
-import { handleMcpHttp } from '@kotowari/protocol-mcp';
+import { handleMcpHttp, PROFILE_TOOLS } from '@kotowari/protocol-mcp';
 import { handleRest } from '@kotowari/protocol-rest';
 
 import type { KotowariApp } from '@kotowari/application';
@@ -57,7 +58,7 @@ export async function ingestFilesystemPath(app: KotowariApp, target: string): Pr
   const stats = statSync(resolved);
   const files = stats.isDirectory() ? collectFiles(resolved) : [resolved];
   const documents = files.map((file) => ({
-    relativePath: stats.isDirectory() ? relative(resolved, file) : file.split('/').pop() ?? file,
+    relativePath: stats.isDirectory() ? relative(resolved, file) : basename(file),
     bytes: new Uint8Array(readFileSync(file)),
     mimeType: documentMimeType(file),
   }));
@@ -97,18 +98,29 @@ function headersOf(request: IncomingMessage): Record<string, string | undefined>
   return headers;
 }
 
+function isMcpProfile(value: string): value is McpProfile {
+  return Object.hasOwn(PROFILE_TOOLS, value);
+}
+
 function mcpProfileFromPath(pathname: string): McpProfile | undefined {
   const suffix = pathname.replace(/^\/mcp\//, '');
-  if (
-    suffix === 'retrieve' ||
-    suffix === 'knowledge' ||
-    suffix === 'memory' ||
-    suffix === 'ingestion' ||
-    suffix === 'admin'
-  ) {
-    return suffix;
+  return isMcpProfile(suffix) ? suffix : undefined;
+}
+
+function loadIndexHtml(webRoot: string | undefined): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const roots = [webRoot, join(here, '..', '..', 'web', 'public'), join(process.cwd(), 'apps', 'web', 'public')];
+  for (const root of roots) {
+    if (root === undefined) {
+      continue;
+    }
+    try {
+      return readFileSync(join(root, 'index.html'), 'utf8');
+    } catch {
+      continue;
+    }
   }
-  return undefined;
+  return '<!DOCTYPE html><title>Kotowari</title><p>Web UI not found.</p>';
 }
 
 export function startKotowariServer(options: StandaloneOptions & { port: number }): Promise<{
@@ -117,7 +129,7 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
   app: KotowariApp;
 }> {
   const app = createStandaloneApp(options);
-  const webRoot = options.webRoot;
+  const indexHtml = loadIndexHtml(options.webRoot);
 
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
@@ -125,11 +137,8 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
         const host = request.headers.host ?? '127.0.0.1';
         const url = new URL(request.url ?? '/', `http://${host}`);
         if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-          const html = webRoot
-            ? readFileSync(join(webRoot, 'index.html'), 'utf8')
-            : DEFAULT_WEB;
           response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-          response.end(html);
+          response.end(indexHtml);
           return;
         }
         const profile = url.pathname.startsWith('/mcp/') ? mcpProfileFromPath(url.pathname) : undefined;
@@ -190,43 +199,3 @@ export function writeWorkspaceConfig(directory: string, port: number): void {
     `${JSON.stringify({ profile: 'standalone', port, dataDir: '.kotowari' }, null, 2)}\n`,
   );
 }
-
-const DEFAULT_WEB = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <title>Kotowari</title>
-  <style>
-    body { font-family: Georgia, serif; max-width: 52rem; margin: 2rem auto; color: #1b1b1b; }
-    input, textarea, button { font: inherit; }
-    .hits { white-space: pre-wrap; background: #f6f4ef; padding: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Kotowari</h1>
-  <p>Ingest a folder, search with sources, record a decision.</p>
-  <p><button id="ingest">Ingest testdata</button></p>
-  <p><input id="q" size="40" placeholder="What did we decide about vendor X?"/> <button id="search">Search</button></p>
-  <p><input id="outcome" placeholder="selected outcome"/> <button id="decide">Record decision</button></p>
-  <div class="hits" id="out">Empty workspace. Ingest a folder to begin.</div>
-  <script>
-    const out = document.getElementById('out');
-    document.getElementById('ingest').onclick = async () => {
-      const res = await fetch('/v1/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: 'testdata/vendor-x' }) });
-      out.textContent = JSON.stringify(await res.json(), null, 2);
-    };
-    document.getElementById('search').onclick = async () => {
-      const query = document.getElementById('q').value;
-      const res = await fetch('/v1/knowledge/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query, purpose: 'search' }) });
-      out.textContent = JSON.stringify(await res.json(), null, 2);
-    };
-    document.getElementById('decide').onclick = async () => {
-      const query = document.getElementById('q').value;
-      const selectedOutcome = document.getElementById('outcome').value;
-      const res = await fetch('/v1/decisions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ purpose: 'search', query, selectedOutcome, confidence: 0.7 }) });
-      out.textContent = JSON.stringify(await res.json(), null, 2);
-    };
-  </script>
-</body>
-</html>
-`;

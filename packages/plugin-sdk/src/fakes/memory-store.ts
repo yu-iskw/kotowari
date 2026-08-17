@@ -1,3 +1,5 @@
+import { claimValidAt } from '../contracts.js';
+
 import type {
   Claim,
   ClaimId,
@@ -32,14 +34,6 @@ function matchesNamespace<T extends { namespaceId: NamespaceId }>(
   namespaceId: NamespaceId | undefined,
 ): boolean {
   return namespaceId === undefined || record.namespaceId === namespaceId;
-}
-
-function claimAsOf(claim: Claim, asOf: string | undefined): boolean {
-  if (asOf === undefined) {
-    return true;
-  }
-  const { validFrom, validTo } = claim.bitemporal;
-  return validFrom <= asOf && (validTo === undefined || asOf < validTo);
 }
 
 class MemoryCanonicalStore implements CanonicalStore {
@@ -93,7 +87,7 @@ class MemoryCanonicalStore implements CanonicalStore {
       (claim) =>
         matchesTenant(claim, filter.tenantId) &&
         matchesNamespace(claim, filter.namespaceId) &&
-        claimAsOf(claim, filter.asOf),
+        claimValidAt(claim, filter.asOf),
     );
   }
 

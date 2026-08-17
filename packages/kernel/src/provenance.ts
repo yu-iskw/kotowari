@@ -1,3 +1,4 @@
+import { asIsoTimestamp } from './branded-ids.js';
 import { KernelError } from './errors.js';
 
 import type { IsoTimestamp, PrincipalId, ProvenanceId } from './branded-ids.js';
@@ -13,6 +14,25 @@ export type Provenance = {
   timestamp: IsoTimestamp;
   parentIds: readonly ProvenanceId[];
 };
+
+export function nowIso(): IsoTimestamp {
+  return asIsoTimestamp(new Date().toISOString());
+}
+
+export function compactProvenance(input: {
+  source: string;
+  actor: PrincipalId;
+  process: string;
+  parentIds?: readonly ProvenanceId[];
+}): Provenance {
+  return {
+    source: input.source,
+    actor: input.actor,
+    process: input.process,
+    timestamp: nowIso(),
+    parentIds: input.parentIds ?? [],
+  };
+}
 
 export function assertProvenance(provenance: Provenance | undefined): asserts provenance is Provenance {
   if (provenance === undefined) {

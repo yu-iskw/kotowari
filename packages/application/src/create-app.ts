@@ -7,16 +7,21 @@ import { putPolicy, whatIfPolicy } from '@kotowari/capability-policy';
 import { decisionToProvO } from '@kotowari/capability-provenance';
 import { DEFAULT_RETRIEVAL_PLAN, retrieve } from '@kotowari/capability-retrieval';
 import {
+  asDecisionId,
   assertAllowed,
   assertNoChainOfThought,
   buildDecisionRecorded,
+  compactProvenance,
 } from '@kotowari/kernel';
 
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
+import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { RetrievalResult } from '@kotowari/capability-retrieval';
 import type {
+  ConflictResolution,
   ContextSnapshot,
   Decision,
+  Evidence,
   MemoryRecord,
   PolicyRecord,
   Principal,
@@ -88,8 +93,8 @@ export type KotowariApp = {
     claimIds: readonly [string, string, ...string[]];
     preferredClaimId: string;
     reason: string;
-  }) => Promise<unknown>;
-  exportProvO: (decisionId: string) => Promise<unknown>;
+  }) => Promise<ConflictResolution>;
+  exportProvO: (decisionId: string) => Promise<ProvODocument | undefined>;
   listPredicates: () => Promise<readonly string[]>;
   listPolicies: () => Promise<readonly PolicyRecord[]>;
   health: () => { ok: true; profile: 'standalone' };
@@ -97,16 +102,30 @@ export type KotowariApp = {
 };
 
 export function createKotowariApp(ports: KotowariPorts): KotowariApp {
-
-  async function principal(): Promise<Principal> {
+  async function current(): Promise<Principal> {
     return ports.identity.currentPrincipal();
+  }
+
+  async function runRetrieve(
+    actor: Principal,
+    input: { query: string; purpose?: string; asOf?: string },
+  ): Promise<RetrievalResult> {
+    return retrieve({
+      store: ports.store,
+      embeddings: ports.embeddings,
+      reranker: ports.reranker,
+      principal: actor,
+      authz: { tenantId: actor.tenantId, purpose: input.purpose },
+      query: input.query,
+      asOf: input.asOf,
+      plan: DEFAULT_RETRIEVAL_PLAN,
+    });
   }
 
   return {
     async ingestDocuments(documents) {
-      const actor = await principal();
+      const actor = await current();
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), { tenantId: actor.tenantId });
-      await ports.queue.enqueue({ kind: 'ingest', payload: { count: documents.length } });
       return ingestDocuments(
         {
           store: ports.store,
@@ -120,31 +139,12 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     },
 
     async searchKnowledge(input) {
-      const actor = await principal();
-      return retrieve({
-        store: ports.store,
-        embeddings: ports.embeddings,
-        reranker: ports.reranker,
-        principal: actor,
-        authz: { tenantId: actor.tenantId, purpose: input.purpose },
-        query: input.query,
-        asOf: input.asOf,
-        purpose: input.purpose,
-        plan: DEFAULT_RETRIEVAL_PLAN,
-      });
+      return runRetrieve(await current(), input);
     },
 
     async buildContext(input) {
-      const actor = await principal();
-      const retrieval = await retrieve({
-        store: ports.store,
-        embeddings: ports.embeddings,
-        reranker: ports.reranker,
-        principal: actor,
-        authz: { tenantId: actor.tenantId, purpose: input.purpose },
-        query: input.query ?? input.purpose,
-        purpose: input.purpose,
-      });
+      const actor = await current();
+      const retrieval = await runRetrieve(actor, { query: input.query ?? input.purpose, purpose: input.purpose });
       return assembleContext({
         store: ports.store,
         principal: actor,
@@ -159,7 +159,7 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
 
     async recordDecision(input) {
       assertNoChainOfThought(input);
-      const actor = await principal();
+      const actor = await current();
       assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), { tenantId: actor.tenantId });
       const snapshot = await this.buildContext({ purpose: input.purpose, query: input.query });
       const { decision, event } = buildDecisionRecorded({
@@ -181,13 +181,7 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
         rationale: input.rationale,
         resultingActionIds: [],
         policyEvaluations: [],
-        provenance: {
-          source: 'decision',
-          actor: actor.id,
-          process: 'decision.record',
-          timestamp: new Date().toISOString() as never,
-          parentIds: [],
-        },
+        provenance: compactProvenance({ source: 'decision', actor: actor.id, process: 'decision.record' }),
       });
       await ports.store.withTransaction(async (tx) => {
         await tx.putDecision(decision);
@@ -198,11 +192,11 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     },
 
     async getDecision(id) {
-      return ports.store.getDecision(id as never);
+      return ports.store.getDecision(asDecisionId(id));
     },
 
     async listDecisions() {
-      const actor = await principal();
+      const actor = await current();
       return ports.store.listDecisions({
         tenantId: actor.tenantId,
         namespaceId: actor.namespaceIds[0],
@@ -210,50 +204,46 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     },
 
     async recordMemory(input) {
-      const actor = await principal();
+      const actor = await current();
       assertAllowed(actor, 'memory.write', scopeResource(actor, 'memory'), { tenantId: actor.tenantId });
       return recordMemory({ store: ports.store, principal: actor, ...input });
     },
 
     async searchMemory(input) {
-      return searchMemory({ store: ports.store, principal: await principal(), query: input.query });
+      return searchMemory({ store: ports.store, principal: await current(), query: input.query });
     },
 
     async putPolicy(input) {
-      return putPolicy({ store: ports.store, principal: await principal(), ...input });
+      return putPolicy({ store: ports.store, principal: await current(), ...input });
     },
 
     async whatIfPolicy(policy) {
-      return whatIfPolicy({ store: ports.store, principal: await principal(), policy });
+      return whatIfPolicy({ store: ports.store, principal: await current(), policy });
     },
 
     async resolveConflict(input) {
-      return resolveClaimConflict({ store: ports.store, principal: await principal(), ...input });
+      return resolveClaimConflict({ store: ports.store, principal: await current(), ...input });
     },
 
     async exportProvO(decisionId) {
-      const decision = await ports.store.getDecision(decisionId as never);
+      const decision = await ports.store.getDecision(asDecisionId(decisionId));
       if (decision === undefined) {
         return undefined;
       }
-      const evidence = [];
-      for (const evidenceId of decision.consideredEvidenceIds) {
-        const item = await ports.store.getEvidence(evidenceId);
-        if (item) {
-          evidence.push(item);
-        }
-      }
+      const evidence = (
+        await Promise.all(decision.consideredEvidenceIds.map((id) => ports.store.getEvidence(id)))
+      ).filter((item): item is Evidence => item !== undefined);
       return decisionToProvO(decision, evidence);
     },
 
     async listPredicates() {
-      const actor = await principal();
+      const actor = await current();
       const claims = await ports.store.listClaims({ tenantId: actor.tenantId });
       return uniquePredicates(claims);
     },
 
     async listPolicies() {
-      const actor = await principal();
+      const actor = await current();
       return ports.store.listPolicies({ tenantId: actor.tenantId });
     },
 
@@ -262,7 +252,7 @@ export function createKotowariApp(ports: KotowariPorts): KotowariApp {
     },
 
     currentPrincipal() {
-      return principal();
+      return current();
     },
   };
 }

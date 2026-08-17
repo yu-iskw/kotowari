@@ -1,7 +1,7 @@
 import { KernelError } from './errors.js';
 import { classificationRank } from './scoped-metadata.js';
 
-import type { NamespaceId, PrincipalId, TenantId } from './branded-ids.js';
+import type { IsoTimestamp, NamespaceId, PrincipalId, TenantId } from './branded-ids.js';
 import type { KernelErrorCode } from './errors.js';
 import type { Classification, ScopedMetadata } from './scoped-metadata.js';
 
@@ -39,11 +39,9 @@ export type Resource = {
 export type Delegation = {
   delegatorId: PrincipalId;
   scope: readonly Action[];
-  expiresAt: IsoTimestampLike;
+  expiresAt: IsoTimestamp;
   purpose?: string;
 };
-
-type IsoTimestampLike = string;
 
 export type Principal =
   | {
@@ -68,7 +66,7 @@ export type AuthContext = {
   tenantId: TenantId;
   purpose?: string;
   delegation?: Delegation;
-  now?: IsoTimestampLike;
+  now?: IsoTimestamp;
 };
 
 export type AuthDecision = {

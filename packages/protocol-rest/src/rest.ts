@@ -1,3 +1,5 @@
+import { dispatchIngest } from '@kotowari/application';
+
 import type { KotowariApp } from '@kotowari/application';
 
 export const OPENAPI_SNAPSHOT = {
@@ -46,59 +48,12 @@ function asStringArray(value: unknown): readonly string[] {
   return value.filter((item) => typeof item === 'string');
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-type IngestPayload = {
-  relativePath: string;
-  bytes: Uint8Array;
-  mimeType: string;
-};
-
-function parseOneDocument(value: unknown): IngestPayload | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const relativePath = asString(value['relativePath'], asString(value['path'], 'untitled.txt'));
-  const mimeType = asString(value['mimeType'], 'text/plain');
-  if (typeof value['text'] !== 'string') {
-    return undefined;
-  }
-  return { relativePath, mimeType, bytes: new TextEncoder().encode(value['text']) };
-}
-
-function hasInlineDocuments(body: Record<string, unknown>): boolean {
-  return Array.isArray(body['documents']) || typeof body['text'] === 'string';
-}
-
-function parseIngestDocuments(body: Record<string, unknown>): IngestPayload[] {
-  const documents = body['documents'];
-  if (Array.isArray(documents)) {
-    const parsed: IngestPayload[] = [];
-    for (const item of documents) {
-      const document = parseOneDocument(item);
-      if (document !== undefined) {
-        parsed.push(document);
-      }
-    }
-    return parsed;
-  }
-  const single = parseOneDocument(body);
-  return single === undefined ? [] : [single];
-}
-
 async function handleIngest(app: KotowariApp, body: Record<string, unknown>): Promise<RestResponse> {
-  if (!hasInlineDocuments(body)) {
-    const path = asString(body['path']);
-    if (path.length > 0) {
-      if (app.ingestPath === undefined) {
-        return { status: 400, json: { error: 'path ingest is only available in standalone' } };
-      }
-      return { status: 202, json: await app.ingestPath(path) };
-    }
+  const dispatched = await dispatchIngest(app, body);
+  if (!dispatched.ok) {
+    return { status: 400, json: { error: dispatched.error } };
   }
-  return { status: 202, json: await app.ingestDocuments(parseIngestDocuments(body)) };
+  return { status: 202, json: dispatched.result };
 }
 
 type RouteHandler = (app: KotowariApp, body: Record<string, unknown>) => RestResponse | Promise<RestResponse>;

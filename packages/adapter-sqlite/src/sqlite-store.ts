@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
+import { claimValidAt } from '@kotowari/plugin-sdk';
+
 import type {
   CanonicalStore,
   Claim,
@@ -64,19 +66,24 @@ type ScopedRecord = {
   namespaceId: NamespaceId;
 };
 
-function claimAsOf(claim: Claim, asOf: string | undefined): boolean {
-  if (asOf === undefined) {
-    return true;
-  }
-  const { validFrom, validTo } = claim.bitemporal;
-  return validFrom <= asOf && (validTo === undefined || asOf < validTo);
-}
+type PreparedStatement = ReturnType<DatabaseSync['prepare']>;
 
 class SqliteCanonicalStore implements CanonicalStore {
   private transactionDepth = 0;
+  private readonly statements = new Map<string, PreparedStatement>();
 
   constructor(private readonly db: DatabaseSync) {
     this.db.exec(SCHEMA);
+  }
+
+  private stmt(sql: string): PreparedStatement {
+    const cached = this.statements.get(sql);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
+    return prepared;
   }
 
   async withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T> {
@@ -128,7 +135,7 @@ class SqliteCanonicalStore implements CanonicalStore {
     asOf?: string;
   }): Promise<readonly Claim[]> {
     return this.listRecords<Claim>(COLLECTIONS.claims, filter).filter((claim) =>
-      claimAsOf(claim, filter.asOf),
+      claimValidAt(claim, filter.asOf),
     );
   }
 
@@ -199,40 +206,39 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   async appendEvent(event: DomainEvent): Promise<void> {
-    const stmt = this.db.prepare('INSERT INTO events (event_id, payload) VALUES (?, ?)');
-    stmt.run(event.eventId, JSON.stringify(event));
+    this.stmt('INSERT INTO events (event_id, payload) VALUES (?, ?)').run(event.eventId, JSON.stringify(event));
   }
 
   async listEvents(): Promise<readonly DomainEvent[]> {
-    const stmt = this.db.prepare('SELECT payload FROM events');
-    const rows = stmt.all() as { payload: string }[];
+    const rows = this.stmt('SELECT payload FROM events').all() as { payload: string }[];
     return rows.map((row) => JSON.parse(row.payload) as DomainEvent);
   }
 
   async appendOutbox(event: DomainEvent): Promise<void> {
-    const stmt = this.db.prepare('INSERT INTO outbox (event_id, payload) VALUES (?, ?)');
-    stmt.run(event.eventId, JSON.stringify(event));
+    this.stmt('INSERT INTO outbox (event_id, payload) VALUES (?, ?)').run(event.eventId, JSON.stringify(event));
   }
 
   async listOutbox(): Promise<readonly DomainEvent[]> {
-    const stmt = this.db.prepare('SELECT payload FROM outbox');
-    const rows = stmt.all() as { payload: string }[];
+    const rows = this.stmt('SELECT payload FROM outbox').all() as { payload: string }[];
     return rows.map((row) => JSON.parse(row.payload) as DomainEvent);
   }
 
   async ackOutbox(eventId: EventId): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM outbox WHERE event_id = ?');
-    stmt.run(eventId);
+    this.stmt('DELETE FROM outbox WHERE event_id = ?').run(eventId);
   }
 
   async putEmbedding(input: { claimId: ClaimId; vector: readonly number[] }): Promise<void> {
-    const stmt = this.db.prepare('INSERT OR REPLACE INTO embeddings (claim_id, vector) VALUES (?, ?)');
-    stmt.run(input.claimId, JSON.stringify(input.vector));
+    this.stmt('INSERT OR REPLACE INTO embeddings (claim_id, vector) VALUES (?, ?)').run(
+      input.claimId,
+      JSON.stringify(input.vector),
+    );
   }
 
   async listEmbeddings(): Promise<readonly { claimId: ClaimId; vector: readonly number[] }[]> {
-    const stmt = this.db.prepare('SELECT claim_id, vector FROM embeddings');
-    const rows = stmt.all() as { claim_id: string; vector: string }[];
+    const rows = this.stmt('SELECT claim_id, vector FROM embeddings').all() as {
+      claim_id: string;
+      vector: string;
+    }[];
     return rows.map((row) => ({
       claimId: row.claim_id as ClaimId,
       vector: JSON.parse(row.vector) as readonly number[],
@@ -244,15 +250,15 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   private putRecord(collection: string, record: ScopedRecord): void {
-    const stmt = this.db.prepare(
+    this.stmt(
       'INSERT OR REPLACE INTO records (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
-    );
-    stmt.run(collection, record.id, record.tenantId, record.namespaceId, JSON.stringify(record));
+    ).run(collection, record.id, record.tenantId, record.namespaceId, JSON.stringify(record));
   }
 
   private getRecord<T>(collection: string, id: string): T | undefined {
-    const stmt = this.db.prepare('SELECT payload FROM records WHERE collection = ? AND id = ?');
-    const row = stmt.get(collection, id) as { payload: string } | undefined;
+    const row = this.stmt('SELECT payload FROM records WHERE collection = ? AND id = ?').get(collection, id) as
+      | { payload: string }
+      | undefined;
     if (row === undefined) {
       return undefined;
     }
@@ -263,14 +269,15 @@ class SqliteCanonicalStore implements CanonicalStore {
     collection: string,
     filter: { tenantId: TenantId; namespaceId?: NamespaceId },
   ): T[] {
-    let sql = 'SELECT payload FROM records WHERE collection = ? AND tenant_id = ?';
-    const params: (string | TenantId | NamespaceId)[] = [collection, filter.tenantId];
-    if (filter.namespaceId !== undefined) {
-      sql += ' AND namespace_id = ?';
-      params.push(filter.namespaceId);
-    }
-    const stmt = this.db.prepare(sql);
-    const rows = stmt.all(...params) as { payload: string }[];
+    const sql =
+      filter.namespaceId === undefined
+        ? 'SELECT payload FROM records WHERE collection = ? AND tenant_id = ?'
+        : 'SELECT payload FROM records WHERE collection = ? AND tenant_id = ? AND namespace_id = ?';
+    const params =
+      filter.namespaceId === undefined
+        ? [collection, filter.tenantId]
+        : [collection, filter.tenantId, filter.namespaceId];
+    const rows = this.stmt(sql).all(...params) as { payload: string }[];
     return rows.map((row) => JSON.parse(row.payload) as T);
   }
 }

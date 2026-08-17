@@ -1,7 +1,7 @@
-import { asIsoTimestamp, newId } from './branded-ids.js';
+import { newId } from './branded-ids.js';
 import { KernelError } from './errors.js';
 import { createEventId } from './events.js';
-import { assertNoChainOfThought, assertProvenance } from './provenance.js';
+import { assertNoChainOfThought, assertProvenance, nowIso } from './provenance.js';
 import { classificationRank } from './scoped-metadata.js';
 
 import type { ClaimId, EvidenceId } from './branded-ids.js';
@@ -25,11 +25,6 @@ import type { DomainEvent } from './events.js';
 import type { Evidence } from './evidence.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
-
-
-function nowIso(): ReturnType<typeof asIsoTimestamp> {
-  return asIsoTimestamp(new Date().toISOString());
-}
 
 function assertConfidence(confidence: number): void {
   if (confidence < 0 || confidence > 1 || Number.isNaN(confidence)) {

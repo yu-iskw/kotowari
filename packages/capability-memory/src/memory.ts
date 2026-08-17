@@ -1,4 +1,4 @@
-import { allow, asIsoTimestamp, newId } from '@kotowari/kernel';
+import { allow, compactProvenance, newId, nowIso } from '@kotowari/kernel';
 
 import type { MemoryRecord, Principal } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
@@ -24,14 +24,8 @@ export async function recordMemory(input: {
     kind: input.kind ?? 'note',
     body: input.body,
     actor: input.principal.id,
-    recordedAt: asIsoTimestamp(new Date().toISOString()),
-    provenance: {
-      source: 'memory',
-      actor: input.principal.id,
-      process: 'memory.record',
-      timestamp: asIsoTimestamp(new Date().toISOString()),
-      parentIds: [],
-    },
+    recordedAt: nowIso(),
+    provenance: compactProvenance({ source: 'memory', actor: input.principal.id, process: 'memory.record' }),
   };
   await input.store.putMemory(record);
   return record;

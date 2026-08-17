@@ -5,11 +5,14 @@ import {
   buildClaimAsserted,
   buildEntity,
   buildEvidenceInserted,
+  claimText,
+  compactProvenance,
   detectClaimOverlap,
   localStandaloneMetadata,
+  nowIso,
 } from '@kotowari/kernel';
 
-import type { Entity, Principal, Claim } from '@kotowari/kernel';
+import type { Claim, DomainEvent, Entity, Principal } from '@kotowari/kernel';
 import type {
   BlobStore,
   CanonicalStore,
@@ -41,14 +44,8 @@ function isTextMime(mimeType: string): boolean {
   return mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType.endsWith('+json');
 }
 
-function provenance(principal: Principal, process: string) {
-  return {
-    source: 'ingestion',
-    actor: principal.id,
-    process,
-    timestamp: asIsoTimestamp(new Date().toISOString()),
-    parentIds: [] as const,
-  };
+function ingestProvenance(principal: Principal, process: string) {
+  return compactProvenance({ source: 'ingestion', actor: principal.id, process });
 }
 
 export async function ingestDocuments(deps: IngestDeps, documents: readonly IngestDocument[]): Promise<IngestResult> {
@@ -72,7 +69,7 @@ export async function ingestDocuments(deps: IngestDeps, documents: readonly Inge
       contentHash: `sha256:${contentHash}`,
       mimeType: document.mimeType,
       title: document.relativePath,
-      provenance: provenance(deps.principal, 'ingest.put_blob'),
+      provenance: ingestProvenance(deps.principal, 'ingest.put_blob'),
     });
 
     await deps.store.withTransaction(async (tx) => {
@@ -84,8 +81,14 @@ export async function ingestDocuments(deps: IngestDeps, documents: readonly Inge
 
     const text = isTextMime(document.mimeType) ? new TextDecoder().decode(document.bytes) : document.relativePath;
     const { drafts } = await deps.extraction.extract({ text, evidenceId: evidence.id });
+    const existing = await deps.store.listClaims({
+      tenantId: metadata.tenantId,
+      namespaceId: metadata.namespaceId,
+    });
+    const pending: { toStore: Claim; event: DomainEvent }[] = [];
+
     for (const draft of drafts) {
-      const subject = await entityForLabel(deps, entityByLabel, metadata, draft.subjectLabel, deps.principal);
+      const subject = await entityForLabel(deps, entityByLabel, metadata, draft.subjectLabel);
       entityIds.push(subject.id);
       const { claim, event } = buildClaimAsserted({
         metadata,
@@ -93,25 +96,36 @@ export async function ingestDocuments(deps: IngestDeps, documents: readonly Inge
         predicate: normalizePredicate(draft.predicate),
         object: { kind: 'literal', value: draft.objectLiteral },
         validFrom: asIsoTimestamp('1970-01-01T00:00:00.000Z'),
-        assertedAt: asIsoTimestamp(new Date().toISOString()),
+        assertedAt: nowIso(),
         confidence: draft.confidence,
         evidenceIds: [evidence.id],
-        provenance: provenance(deps.principal, 'ingest.extract'),
+        provenance: ingestProvenance(deps.principal, 'ingest.extract'),
         extractor: deps.extraction.id,
         extractionVersion: '1',
       });
-      const existing = await deps.store.listClaims({ tenantId: metadata.tenantId, namespaceId: metadata.namespaceId });
-      const overlapping = existing.filter((other) => detectClaimOverlap(other, claim));
-      const toStore = overlapping.length > 0 ? { ...claim, status: 'conflicted' as const } : claim;
-      const { vectors } = await deps.embeddings.embed({ texts: [claimText(toStore)] });
-      const vector = vectors[0] ?? [];
-      await deps.store.withTransaction(async (tx) => {
-        await tx.assertClaim(toStore);
-        await tx.appendEvent(event);
-        await tx.appendOutbox(event);
-        await tx.putEmbedding({ claimId: toStore.id, vector });
+      const overlapping = [...existing, ...pending.map((item) => item.toStore)].filter((other) =>
+        detectClaimOverlap(other, claim),
+      );
+      pending.push({
+        toStore: overlapping.length > 0 ? { ...claim, status: 'conflicted' as const } : claim,
+        event,
       });
-      claimIds.push(toStore.id);
+    }
+
+    if (pending.length === 0) {
+      continue;
+    }
+
+    const { vectors } = await deps.embeddings.embed({ texts: pending.map((item) => claimText(item.toStore)) });
+    for (const [index, item] of pending.entries()) {
+      const vector = vectors[index] ?? [];
+      await deps.store.withTransaction(async (tx) => {
+        await tx.assertClaim(item.toStore);
+        await tx.appendEvent(item.event);
+        await tx.appendOutbox(item.event);
+        await tx.putEmbedding({ claimId: item.toStore.id, vector });
+      });
+      claimIds.push(item.toStore.id);
     }
   }
 
@@ -122,17 +136,11 @@ function normalizePredicate(predicate: string): string {
   return predicate.trim().toLowerCase().replaceAll(/\s+/g, '_');
 }
 
-function claimText(claim: Claim): string {
-  const object = claim.object.kind === 'literal' ? claim.object.value : claim.object.entityId;
-  return `${claim.predicate} ${object}`;
-}
-
 async function entityForLabel(
   deps: IngestDeps,
   cache: Map<string, Entity>,
   metadata: ReturnType<typeof localStandaloneMetadata>,
   label: string,
-  principal: Principal,
 ): Promise<Entity> {
   const key = label.trim().toLowerCase();
   const cached = cache.get(key);
@@ -142,7 +150,7 @@ async function entityForLabel(
   const entity = buildEntity({
     metadata,
     labels: [label.trim()],
-    provenance: provenance(principal, 'ingest.entity'),
+    provenance: ingestProvenance(deps.principal, 'ingest.entity'),
   });
   await deps.store.putEntity(entity);
   cache.set(key, entity);

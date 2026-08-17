@@ -34,7 +34,7 @@ export type {
   ProvenanceId,
   TenantId,
 } from './branded-ids.js';
-export { CLAIM_STATUSES, claimObjectsEqual, detectClaimOverlap, validityOverlaps } from './claim.js';
+export { CLAIM_STATUSES, claimObjectsEqual, claimText, claimValidAt, detectClaimOverlap, validityOverlaps } from './claim.js';
 export type { Bitemporal, Claim, ClaimObject, ClaimStatus } from './claim.js';
 export { CONFLICT_KINDS, RESOLUTION_STRATEGIES } from './conflict.js';
 export type { Conflict, ConflictKind, ConflictResolution, ResolutionStrategy } from './conflict.js';
@@ -70,7 +70,7 @@ export {
   requireProvenance,
 } from './invariants.js';
 export type { MemoryRecord } from './memory.js';
-export { assertNoChainOfThought, assertProvenance } from './provenance.js';
+export { assertNoChainOfThought, assertProvenance, compactProvenance, nowIso } from './provenance.js';
 export type { Provenance } from './provenance.js';
 export { CLASSIFICATIONS, classificationRank, isClassification, VISIBILITIES } from './scoped-metadata.js';
 export type { Classification, ScopedMetadata, Visibility } from './scoped-metadata.js';

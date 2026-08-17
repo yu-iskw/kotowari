@@ -44,6 +44,19 @@ export function claimObjectsEqual(left: ClaimObject, right: ClaimObject): boolea
   return false;
 }
 
+export function claimText(claim: Pick<Claim, 'predicate' | 'object'>): string {
+  const object = claim.object.kind === 'literal' ? claim.object.value : claim.object.entityId;
+  return `${claim.predicate} ${object}`;
+}
+
+export function claimValidAt(claim: Claim, asOf: string | undefined): boolean {
+  if (asOf === undefined) {
+    return true;
+  }
+  const { validFrom, validTo } = claim.bitemporal;
+  return validFrom <= asOf && (validTo === undefined || asOf < validTo);
+}
+
 export function validityOverlaps(left: Bitemporal, right: Bitemporal): boolean {
   const leftEnd = left.validTo ?? '9999-12-31T23:59:59.999Z';
   const rightEnd = right.validTo ?? '9999-12-31T23:59:59.999Z';
@@ -65,3 +78,4 @@ export function detectClaimOverlap(left: Claim, right: Claim): boolean {
   }
   return validityOverlaps(left.bitemporal, right.bitemporal);
 }
+
