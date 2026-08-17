@@ -1,0 +1,13 @@
+name: kernel
+allowedDependencies: []
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - plugins-*
+  - '@google-cloud/*'
+  - '@kotowari/protocol-rest'
+  - '@kotowari/protocol-mcp'
+  - '@kotowari/adapter-sqlite'
+  - '@kotowari/adapter-fs'
+  - '@kotowari/application'
