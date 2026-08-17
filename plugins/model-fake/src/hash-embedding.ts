@@ -3,19 +3,15 @@
  * Same text always yields the same vector.
  */
 export function hashEmbedding(text: string, dimensions: number): readonly number[] {
-  const vector = new Array<number>(dimensions);
-  for (let d = 0; d < dimensions; d++) {
+  const vector = Array.from({ length: dimensions }, (_, dimension) => {
     let sum = 0;
-    for (let i = 0; i < text.length; i++) {
-      sum += text.charCodeAt(i) * (d + 1 + i);
+    for (let index = 0; index < text.length; index += 1) {
+      sum += text.charCodeAt(index) * (dimension + 1 + index);
     }
-    vector[d] = Math.sin(sum);
-  }
+    return Math.sin(sum);
+  });
 
-  let normSq = 0;
-  for (const value of vector) {
-    normSq += value * value;
-  }
+  const normSq = vector.reduce((total, value) => total + value * value, 0);
   const norm = Math.sqrt(normSq);
   if (norm === 0) {
     return vector;

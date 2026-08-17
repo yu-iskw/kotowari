@@ -1,8 +1,8 @@
 {
-  "name": "typescript-template",
-  "version": "1.0.0",
+  "name": "kotowari-workspace",
+  "version": "0.1.0",
   "private": true,
-  "description": "",
+  "description": "Kotowari is the context-and-accountability layer under agents and applications.",
   "keywords": [],
   "license": "Apache-2.0",
   "author": "",
@@ -25,6 +25,7 @@
     "knip": "knip",
     "codeql:local": "bash dev/codeql.sh",
     "test": "vitest run",
+    "verify": "pnpm build && pnpm lint:eslint && pnpm knip && pnpm test",
     "coverage": "vitest run --coverage",
     "coverage:watch": "vitest --coverage"
   },

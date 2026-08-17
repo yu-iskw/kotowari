@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
 import type {
+  CanonicalStore,
   Claim,
   ClaimId,
   Conflict,
@@ -21,7 +22,6 @@ import type {
   PolicyRecord,
   TenantId,
 } from '@kotowari/plugin-sdk';
-import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
 const COLLECTIONS = {
   entities: 'entities',
@@ -96,37 +96,6 @@ class SqliteCanonicalStore implements CanonicalStore {
     } finally {
       this.transactionDepth--;
     }
-  }
-
-  private putRecord(collection: string, record: ScopedRecord): void {
-    const stmt = this.db.prepare(
-      'INSERT OR REPLACE INTO records (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
-    );
-    stmt.run(collection, record.id, record.tenantId, record.namespaceId, JSON.stringify(record));
-  }
-
-  private getRecord<T>(collection: string, id: string): T | undefined {
-    const stmt = this.db.prepare('SELECT payload FROM records WHERE collection = ? AND id = ?');
-    const row = stmt.get(collection, id) as { payload: string } | undefined;
-    if (row === undefined) {
-      return undefined;
-    }
-    return JSON.parse(row.payload) as T;
-  }
-
-  private listRecords<T extends ScopedRecord>(
-    collection: string,
-    filter: { tenantId: TenantId; namespaceId?: NamespaceId },
-  ): T[] {
-    let sql = 'SELECT payload FROM records WHERE collection = ? AND tenant_id = ?';
-    const params: (string | TenantId | NamespaceId)[] = [collection, filter.tenantId];
-    if (filter.namespaceId !== undefined) {
-      sql += ' AND namespace_id = ?';
-      params.push(filter.namespaceId);
-    }
-    const stmt = this.db.prepare(sql);
-    const rows = stmt.all(...params) as { payload: string }[];
-    return rows.map((row) => JSON.parse(row.payload) as T);
   }
 
   async putEntity(entity: Entity): Promise<void> {
@@ -272,6 +241,37 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async clearEmbeddings(): Promise<void> {
     this.db.exec('DELETE FROM embeddings');
+  }
+
+  private putRecord(collection: string, record: ScopedRecord): void {
+    const stmt = this.db.prepare(
+      'INSERT OR REPLACE INTO records (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
+    );
+    stmt.run(collection, record.id, record.tenantId, record.namespaceId, JSON.stringify(record));
+  }
+
+  private getRecord<T>(collection: string, id: string): T | undefined {
+    const stmt = this.db.prepare('SELECT payload FROM records WHERE collection = ? AND id = ?');
+    const row = stmt.get(collection, id) as { payload: string } | undefined;
+    if (row === undefined) {
+      return undefined;
+    }
+    return JSON.parse(row.payload) as T;
+  }
+
+  private listRecords<T extends ScopedRecord>(
+    collection: string,
+    filter: { tenantId: TenantId; namespaceId?: NamespaceId },
+  ): T[] {
+    let sql = 'SELECT payload FROM records WHERE collection = ? AND tenant_id = ?';
+    const params: (string | TenantId | NamespaceId)[] = [collection, filter.tenantId];
+    if (filter.namespaceId !== undefined) {
+      sql += ' AND namespace_id = ?';
+      params.push(filter.namespaceId);
+    }
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as { payload: string }[];
+    return rows.map((row) => JSON.parse(row.payload) as T);
   }
 }
 

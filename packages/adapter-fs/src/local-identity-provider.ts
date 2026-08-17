@@ -1,4 +1,5 @@
 import { localStandalonePrincipal } from '@kotowari/kernel';
+
 import type { IdentityProvider, Principal } from '@kotowari/plugin-sdk';
 
 class LocalIdentityProvider implements IdentityProvider {

@@ -82,25 +82,6 @@
         "required": ["outcome"],
         "additionalProperties": false
       }
-    },
-    {
-      "name": "ingest_path",
-      "description": "Ingest files or directories into the Kotowari workspace for extraction and retrieval.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Filesystem path to a file or directory to ingest."
-          },
-          "namespaceId": {
-            "type": "string",
-            "description": "Optional namespace id for scoped ingestion."
-          }
-        },
-        "required": ["path"],
-        "additionalProperties": false
-      }
     }
   ]
 }

@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@kotowari/kernel": "workspace:*",
-    "@kotowari/plugin-sdk": "workspace:*",
-    "@kotowari/application": "workspace:*"
+    "@kotowari/plugin-sdk": "workspace:*"
   }
 }

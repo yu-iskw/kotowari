@@ -1,7 +1,5 @@
 name: protocol-rest
 allowedDependencies:
-  - '@kotowari/kernel'
-  - '@kotowari/plugin-sdk'
   - '@kotowari/application'
 forbiddenDependencies:
   - adapter-*

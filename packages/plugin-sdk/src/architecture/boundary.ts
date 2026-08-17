@@ -70,6 +70,20 @@ function parseSimpleYaml(content: string): PackageBoundary {
   return { name, allowedDependencies, forbiddenDependencies };
 }
 
+
+function packageJsonName(packageJsonPath: string): string {
+  const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'name' in parsed &&
+    typeof parsed.name === 'string'
+  ) {
+    return parsed.name;
+  }
+  return '';
+}
+
 function dependencyMatchesPattern(dependency: string, pattern: string): boolean {
   return globToRegExp(pattern).test(dependency);
 }
@@ -171,7 +185,7 @@ export function assertPackageBoundaries(repoRoot: string): BoundaryResult {
       continue;
     }
 
-    const packageName = boundary.name || JSON.parse(readFileSync(packageJsonPath, 'utf8')).name;
+    const packageName = boundary.name.length > 0 ? boundary.name : packageJsonName(packageJsonPath);
     const dependencies = collectPackageJsonDependencies(packageJsonPath);
 
     for (const dependency of dependencies) {
@@ -203,15 +217,14 @@ export function assertPackageBoundaries(repoRoot: string): BoundaryResult {
 }
 
 export function findRepoRoot(startDir: string = process.cwd()): string {
+  const visited = new Set<string>();
   let dir = startDir;
-  while (true) {
+  while (!visited.has(dir)) {
+    visited.add(dir);
     if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
       return dir;
     }
-    const parent = join(dir, '..');
-    if (parent === dir) {
-      throw new Error('Could not find pnpm-workspace.yaml');
-    }
-    dir = parent;
+    dir = join(dir, '..');
   }
+  throw new Error('Could not find pnpm-workspace.yaml');
 }

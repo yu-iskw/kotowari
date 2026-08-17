@@ -15,9 +15,11 @@ import {
   localStandaloneMetadata,
   newId,
 } from '../contracts.js';
-import type { EmbeddingProvider, ModelProvider } from '../ports.js';
-import type { KnowledgeSource } from '../compliance/knowledge-source.js';
+
 import { createMemoryBlobStore, createMemoryCanonicalStore } from './memory-store.js';
+
+import type { KnowledgeSource } from '../compliance/knowledge-source.js';
+import type { EmbeddingProvider, ModelProvider } from '../ports.js';
 
 describe('memory fakes satisfy compliance suites', () => {
   canonicalStoreComplianceTests(() => createMemoryCanonicalStore());

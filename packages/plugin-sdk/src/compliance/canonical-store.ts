@@ -10,14 +10,20 @@ import {
   buildEvidenceInserted,
   localStandaloneMetadata,
 } from '../contracts.js';
+
 import type { CanonicalStore } from '../ports.js';
+
+const COMPLIANCE_INSTANT = '2024-03-12T00:00:00.000Z';
+const COMPLIANCE_VALID_FROM = '2024-01-01T00:00:00.000Z';
+const COMPLIANCE_MIME = 'text/plain';
+const ACME_LABEL = 'Acme';
 
 function provenance() {
   return {
     source: 'compliance-test',
     actor: asPrincipalId('local-user'),
     process: 'canonical-store-compliance',
-    timestamp: asIsoTimestamp('2024-03-12T00:00:00.000Z'),
+    timestamp: asIsoTimestamp(COMPLIANCE_INSTANT),
     parentIds: [] as const,
   };
 }
@@ -29,21 +35,21 @@ export function canonicalStoreComplianceTests(
     it('writes claim, evidence, event, and outbox in one withTransaction', async () => {
       const store = await factory();
       const metadata = localStandaloneMetadata();
-      const entity = buildEntity({ metadata, labels: ['Acme'], provenance: provenance() });
+      const entity = buildEntity({ metadata, labels: [ACME_LABEL], provenance: provenance() });
       const { evidence, event: evidenceEvent } = buildEvidenceInserted({
         metadata,
         uri: 'file://doc.txt',
         contentHash: 'sha256:abc',
-        mimeType: 'text/plain',
+        mimeType: COMPLIANCE_MIME,
         provenance: provenance(),
       });
       const { claim, event: claimEvent } = buildClaimAsserted({
         metadata,
         subject: entity.id,
         predicate: 'is_named',
-        object: { kind: 'literal', value: 'Acme' },
-        validFrom: asIsoTimestamp('2024-01-01T00:00:00.000Z'),
-        assertedAt: asIsoTimestamp('2024-03-12T00:00:00.000Z'),
+        object: { kind: 'literal', value: ACME_LABEL },
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
         confidence: 0.95,
         evidenceIds: [evidence.id],
         provenance: provenance(),
@@ -77,7 +83,7 @@ export function canonicalStoreComplianceTests(
         metadata,
         uri: 'file://valid.txt',
         contentHash: 'sha256:valid',
-        mimeType: 'text/plain',
+        mimeType: COMPLIANCE_MIME,
         provenance: provenance(),
       });
       const { claim } = buildClaimAsserted({
@@ -85,8 +91,8 @@ export function canonicalStoreComplianceTests(
         subject: entity.id,
         predicate: 'status',
         object: { kind: 'literal', value: 'ok' },
-        validFrom: asIsoTimestamp('2024-01-01T00:00:00.000Z'),
-        assertedAt: asIsoTimestamp('2024-03-12T00:00:00.000Z'),
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
         confidence: 1,
         evidenceIds: [evidence.id],
         provenance: provenance(),
@@ -109,7 +115,7 @@ export function canonicalStoreComplianceTests(
         metadata,
         uri: 'file://roundtrip.txt',
         contentHash: 'sha256:round',
-        mimeType: 'text/plain',
+        mimeType: COMPLIANCE_MIME,
         provenance: provenance(),
       });
       const { claim } = buildClaimAsserted({
@@ -117,8 +123,8 @@ export function canonicalStoreComplianceTests(
         subject: entity.id,
         predicate: 'has_label',
         object: { kind: 'literal', value: 'Roundtrip' },
-        validFrom: asIsoTimestamp('2024-01-01T00:00:00.000Z'),
-        assertedAt: asIsoTimestamp('2024-03-12T00:00:00.000Z'),
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
         confidence: 0.9,
         evidenceIds: [evidence.id],
         provenance: provenance(),
@@ -167,7 +173,7 @@ export function canonicalStoreComplianceTests(
         metadata,
         uri: 'file://embed.txt',
         contentHash: 'sha256:embed',
-        mimeType: 'text/plain',
+        mimeType: COMPLIANCE_MIME,
         provenance: provenance(),
       });
       const { claim } = buildClaimAsserted({
@@ -175,8 +181,8 @@ export function canonicalStoreComplianceTests(
         subject: entity.id,
         predicate: 'topic',
         object: { kind: 'literal', value: 'embeddings' },
-        validFrom: asIsoTimestamp('2024-01-01T00:00:00.000Z'),
-        assertedAt: asIsoTimestamp('2024-03-12T00:00:00.000Z'),
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
         confidence: 0.8,
         evidenceIds: [evidence.id],
         provenance: provenance(),

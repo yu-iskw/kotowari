@@ -31,7 +31,7 @@ const importXSettings = {
   'import-x/resolver': {
     typescript: {
       alwaysTryTypes: true,
-      project: ['packages/*/tsconfig.json'],
+        project: ['packages/*/tsconfig.json', 'apps/*/tsconfig.json', 'plugins/*/tsconfig.json'],
     },
     node: true,
   },
@@ -114,7 +114,7 @@ export default [
     ],
   },
   {
-    files: ['packages/**/*.config.ts'],
+    files: ['packages/**/*.config.ts', 'apps/**/*.config.ts', 'plugins/**/*.config.ts'],
     ignores: ['**/dist/**'],
     languageOptions: {
       parser: tsparser,
@@ -141,7 +141,7 @@ export default [
     },
   },
   {
-    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+    files: ['packages/**/*.ts', 'packages/**/*.tsx', 'apps/**/*.ts', 'plugins/**/*.ts'],
     ignores: ['**/dist/**', '**/*.config.ts', '**/*.test.ts', '**/*.test.tsx'],
     languageOptions: {
       parser: tsparser,
@@ -167,7 +167,12 @@ export default [
     },
   },
   {
-    files: ['packages/**/*.test.ts', 'packages/**/*.test.tsx'],
+    files: [
+      'packages/**/*.test.ts',
+      'packages/**/*.test.tsx',
+      'apps/**/*.test.ts',
+      'plugins/**/*.test.ts',
+    ],
     ignores: ['**/dist/**'],
     languageOptions: {
       parser: tsparser,
@@ -194,8 +199,28 @@ export default [
       // Tests often repeat string literals and use conditional expects; keep signal without noise.
       'vitest/no-conditional-expect': 'off',
       'sonarjs/no-duplicate-string': 'off',
+      '@typescript-eslint/require-await': 'off',
       'max-lines-per-function': ['error', { max: 700 }],
       'unicorn/filename-case': unicornFilenameCase,
+    },
+  },
+  {
+    files: [
+      'packages/adapter-*/src/**/*.ts',
+      'packages/plugin-sdk/src/fakes/**/*.ts',
+      'plugins/model-*/src/**/*.ts',
+      'plugins/agent-cursor/src/**/*.ts',
+    ],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
+      'security/detect-non-literal-fs-filename': 'off',
+    },
+  },
+  {
+    files: ['apps/**/*.ts'],
+    rules: {
+      'security/detect-non-literal-fs-filename': 'off',
+      'security/detect-object-injection': 'off',
     },
   },
   {

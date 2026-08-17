@@ -47,7 +47,6 @@ describe('retrieve profile tool list snapshot', () => {
       'search_knowledge',
       'search_memory',
       'record_decision',
-      'ingest_path',
     ]);
 
     for (const name of retrieveToolNames) {

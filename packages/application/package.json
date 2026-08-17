@@ -19,6 +19,14 @@
   },
   "dependencies": {
     "@kotowari/kernel": "workspace:*",
-    "@kotowari/plugin-sdk": "workspace:*"
+    "@kotowari/plugin-sdk": "workspace:*",
+    "@kotowari/capability-knowledge": "workspace:*",
+    "@kotowari/capability-context": "workspace:*",
+    "@kotowari/capability-memory": "workspace:*",
+    "@kotowari/capability-ingestion": "workspace:*",
+    "@kotowari/capability-retrieval": "workspace:*",
+    "@kotowari/capability-ontology": "workspace:*",
+    "@kotowari/capability-policy": "workspace:*",
+    "@kotowari/capability-provenance": "workspace:*"
   }
 }

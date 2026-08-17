@@ -1,6 +1,7 @@
+import { hashEmbedding } from './hash-embedding.js';
+
 import type { EmbeddingProvider } from '@kotowari/plugin-sdk';
 
-import { hashEmbedding } from './hash-embedding.js';
 
 export function createVertexEmbeddingProvider(dimensions = 8): EmbeddingProvider {
   return {

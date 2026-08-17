@@ -1,8 +1,6 @@
 name: capability-ontology
 allowedDependencies:
   - '@kotowari/kernel'
-  - '@kotowari/plugin-sdk'
-  - '@kotowari/application'
 forbiddenDependencies:
   - protocol-*
   - adapter-*

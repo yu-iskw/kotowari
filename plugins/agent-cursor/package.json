@@ -17,7 +17,5 @@
     "build": "tsc",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@kotowari/sdk": "workspace:*"
-  }
+  "dependencies": {}
 }

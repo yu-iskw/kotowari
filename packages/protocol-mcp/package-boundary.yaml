@@ -1,7 +1,5 @@
 name: protocol-mcp
 allowedDependencies:
-  - '@kotowari/kernel'
-  - '@kotowari/plugin-sdk'
   - '@kotowari/application'
 forbiddenDependencies:
   - adapter-*

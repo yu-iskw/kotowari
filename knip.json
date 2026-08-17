@@ -3,10 +3,34 @@
   "ignoreBinaries": ["grype"],
   "workspaces": {
     ".": {
-      "entry": ["stylelint.config.mjs"],
-      "project": ["**/*.{js,cjs,mjs,ts,cts,mts}", "!packages/**", "!.trunk/**", "!node_modules/**"]
+      "entry": ["stylelint.config.mjs", "dev/vitest-aliases.ts"],
+      "project": [
+        "**/*.{js,cjs,mjs,ts,cts,mts}",
+        "!packages/**",
+        "!apps/**",
+        "!plugins/**",
+        "!.trunk/**",
+        "!node_modules/**"
+      ]
     },
     "packages/*": {
+      "entry": ["src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/cli": {
+      "entry": ["src/cli.ts", "src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/server": {
+      "entry": ["src/standalone.ts", "src/public.ts", "src/server.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "plugins/*": {
+      "entry": ["src/public.ts"],
       "project": ["src/**/*.ts"]
     }
   }

@@ -1,20 +1,6 @@
 name: cli
 allowedDependencies:
-  - '@kotowari/kernel'
-  - '@kotowari/plugin-sdk'
-  - '@kotowari/application'
-  - '@kotowari/adapter-sqlite'
-  - '@kotowari/adapter-fs'
-  - '@kotowari/protocol-rest'
-  - '@kotowari/protocol-mcp'
-  - '@kotowari/model-fake'
-  - '@kotowari/capability-knowledge'
-  - '@kotowari/capability-context'
-  - '@kotowari/capability-memory'
-  - '@kotowari/capability-ingestion'
-  - '@kotowari/capability-retrieval'
-  - '@kotowari/capability-ontology'
-  - '@kotowari/capability-policy'
-  - '@kotowari/capability-provenance'
+  - '@kotowari/server'
 forbiddenDependencies:
+  - '@kotowari/kernel'
   - @google-cloud/*
