@@ -1,0 +1,6 @@
+name: agent-cursor
+allowedDependencies:
+  - '@kotowari/sdk'
+forbiddenDependencies:
+  - @kotowari/kernel
+  - @google-cloud/*

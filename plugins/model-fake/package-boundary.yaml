@@ -1,0 +1,9 @@
+name: model-fake
+allowedDependencies:
+  - '@kotowari/plugin-sdk'
+  - '@kotowari/kernel'
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - @google-cloud/*

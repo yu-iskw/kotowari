@@ -1,0 +1,9 @@
+name: application
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - plugins-*

@@ -1,0 +1,11 @@
+name: capability-knowledge
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+  - '@kotowari/application'
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - plugins-*
+  - @google-cloud/*

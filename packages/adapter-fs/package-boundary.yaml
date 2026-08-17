@@ -1,0 +1,9 @@
+name: adapter-fs
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+forbiddenDependencies:
+  - protocol-*
+  - apps-*
+  - plugins-*
+  - @google-cloud/*
