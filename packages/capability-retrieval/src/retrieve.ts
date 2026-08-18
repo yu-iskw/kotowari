@@ -304,7 +304,10 @@ async function fallbackCandidates(input: {
   }
 
   const vectorRanked = claims
-    .map((claim) => ({ claim, vector: cosine(queryVector, embeddingByClaim.get(claim.id) ?? []) }))
+    .map((claim) => ({
+      claim,
+      vector: cosine(queryVector, embeddingByClaim.get(claim.id) ?? []),
+    }))
     .filter((row) => row.vector >= 0.15)
     .sort((left, right) => right.vector - left.vector)
     .slice(0, vectorLimit(input.plan));
@@ -355,7 +358,9 @@ async function indexedCandidates(input: {
     temporal: input.temporal,
     query: input.query,
   };
-  const primaryPlans = input.plan.candidates.filter((candidate) => candidate.strategy !== 'graph');
+  const primaryPlans = input.plan.candidates.filter(
+    (candidate) => candidate.strategy !== 'graph',
+  );
   const primaryLists = await Promise.all(
     primaryPlans.map(async (candidate) => ({
       strategy: candidate.strategy,
@@ -367,7 +372,9 @@ async function indexedCandidates(input: {
       }),
     })),
   );
-  const seedClaimIds = primaryLists.flatMap((list) => list.candidates.map((item) => item.claimId));
+  const seedClaimIds = primaryLists.flatMap((list) =>
+    list.candidates.map((item) => item.claimId),
+  );
   const hops = graphHops(input.plan);
   const graphList =
     hops === 0 || seedClaimIds.length === 0
@@ -389,7 +396,10 @@ async function indexedCandidates(input: {
     input.plan.fusion?.k ?? DEFAULT_RETRIEVAL_PLAN.fusion?.k,
   );
   const hydrated = await Promise.all(
-    fused.map(async (candidate) => ({ candidate, claim: await input.store.getClaim(candidate.claimId) })),
+    fused.map(async (candidate) => ({
+      candidate,
+      claim: await input.store.getClaim(candidate.claimId),
+    })),
   );
   const scored = new Map<string, RetrievalHit>();
   for (const item of hydrated) {
@@ -469,7 +479,11 @@ export async function retrieve(input: {
 
   const hits = ordered.slice(0, plan.budget);
   const omitted: RetrievalOmission[] = [...omittedByClass.entries()].map(
-    ([classification, count]) => ({ reason: 'policy_filter', classification, count }),
+    ([classification, count]) => ({
+      reason: 'policy_filter',
+      classification,
+      count,
+    }),
   );
   const namespaceId = input.principal.namespaceIds[0];
   if (namespaceId === undefined) {
