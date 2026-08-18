@@ -2,6 +2,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { assembleContext } from '@kotowari/capability-context';
 import {
+  buildDecisionAuditBundleCapability,
+  findDecisionPrecedentsCapability,
+  recordDecisionCapability,
+  replayDecisionCapability,
+} from '@kotowari/capability-decision';
+import {
   evidenceBlobKey,
   ingestDocuments,
   reextractFromStoredEvidence,
@@ -13,7 +19,7 @@ import {
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
 import { uniquePredicates } from '@kotowari/capability-ontology';
 import {
-  policyVersionKey,
+  policyVersionRef,
   putPolicy,
   putPolicyVersion,
   selectApplicablePolicies,
@@ -23,17 +29,11 @@ import { decisionToProvO } from '@kotowari/capability-provenance';
 import { DEFAULT_RETRIEVAL_PLAN, retrieve } from '@kotowari/capability-retrieval';
 import { asDecisionId, asEvidenceId, assertAllowed } from '@kotowari/kernel';
 
-import {
-  findDecisionPrecedentsCapability,
-  recordDecisionCapability,
-  replayDecisionCapability,
-} from './decision-capability.js';
-
 import type {
   DecisionPrecedent,
   DecisionRecordRequest,
   DecisionReplay,
-} from './decision-capability.js';
+} from '@kotowari/capability-decision';
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
 import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';
 import type { ProvODocument } from '@kotowari/capability-provenance';
@@ -42,6 +42,7 @@ import type {
   ConflictResolution,
   ContextSnapshot,
   Decision,
+  DecisionAuditBundle,
   Evidence,
   MemoryRecord,
   PolicyId,
@@ -118,6 +119,7 @@ export type KotowariApp = {
   listDecisions: () => Promise<readonly Decision[]>;
   replayDecision?: (id: string) => Promise<DecisionReplay | undefined>;
   findDecisionPrecedents?: (id: string, limit?: number) => Promise<readonly DecisionPrecedent[]>;
+  getDecisionAuditBundle?: (id: string) => Promise<DecisionAuditBundle | undefined>;
   recordMemory: (input: { body: string; kind?: MemoryRecord['kind'] }) => Promise<MemoryRecord>;
   searchMemory: (input: { query: string }) => Promise<readonly MemoryRecord[]>;
   putPolicy: (input: {
@@ -215,7 +217,7 @@ async function captureContext(
     purpose: input.purpose,
     temporal: retrieval.receipt.temporal,
     retrievalReceiptId: retrieval.receipt.id,
-    policyVersionIds: policies.map(policyVersionKey),
+    policyVersions: policies.map(policyVersionRef),
     items: retrieval.hits.map((hit) => ({
       claimId: hit.claim.id,
       evidenceIds: hit.evidenceIds,
@@ -269,6 +271,7 @@ export function createKotowariApp(
       const policies = selectApplicablePolicies(allPolicies, {
         purpose: input.purpose,
         namespaceId: actor.namespaceIds[0],
+        classification: 'internal',
         at: input.temporal?.knownAt ?? input.temporal?.validAt,
       });
       return captureContext(ports, actor, input, policies);
@@ -310,6 +313,14 @@ export function createKotowariApp(
         principal: await current(),
         decisionId: id,
         ...(limit === undefined ? {} : { limit }),
+      });
+    },
+
+    async getDecisionAuditBundle(id) {
+      return buildDecisionAuditBundleCapability({
+        store: ports.store,
+        principal: await current(),
+        decisionId: id,
       });
     },
 
