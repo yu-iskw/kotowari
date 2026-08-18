@@ -358,9 +358,7 @@ async function indexedCandidates(input: {
     temporal: input.temporal,
     query: input.query,
   };
-  const primaryPlans = input.plan.candidates.filter(
-    (candidate) => candidate.strategy !== 'graph',
-  );
+  const primaryPlans = input.plan.candidates.filter((candidate) => candidate.strategy !== 'graph');
   const primaryLists = await Promise.all(
     primaryPlans.map(async (candidate) => ({
       strategy: candidate.strategy,
@@ -372,9 +370,7 @@ async function indexedCandidates(input: {
       }),
     })),
   );
-  const seedClaimIds = primaryLists.flatMap((list) =>
-    list.candidates.map((item) => item.claimId),
-  );
+  const seedClaimIds = primaryLists.flatMap((list) => list.candidates.map((item) => item.claimId));
   const hops = graphHops(input.plan);
   const graphList =
     hops === 0 || seedClaimIds.length === 0
