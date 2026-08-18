@@ -10,6 +10,15 @@ export type McpToolSchema = {
   inputSchema: JsonSchemaObject;
 };
 
+const DECISION_ID_INPUT: JsonSchemaObject = {
+  type: 'object',
+  properties: {
+    decisionId: { type: 'string', description: 'Recorded decision id.' },
+  },
+  required: ['decisionId'],
+  additionalProperties: false,
+};
+
 export const TOOL_SCHEMAS: Record<string, McpToolSchema> = {
   search_knowledge: {
     description:
@@ -87,6 +96,16 @@ export const TOOL_SCHEMAS: Record<string, McpToolSchema> = {
       additionalProperties: false,
     },
   },
+  replay_decision: {
+    description:
+      'Reconstruct the exact context, retrieval receipt, and policy versions used by a decision.',
+    inputSchema: DECISION_ID_INPUT,
+  },
+  audit_decision: {
+    description:
+      'Build a decision audit bundle with context, claims, evidence, policy versions, authorization receipts, events, and content hashes.',
+    inputSchema: DECISION_ID_INPUT,
+  },
   ingest_path: {
     description: 'Ingest a filesystem path or inline document into the workspace.',
     inputSchema: {
@@ -115,14 +134,7 @@ export const TOOL_SCHEMAS: Record<string, McpToolSchema> = {
   },
   export_prov: {
     description: 'Export PROV-O for a recorded decision.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        decisionId: { type: 'string', description: 'Decision id to export.' },
-      },
-      required: ['decisionId'],
-      additionalProperties: false,
-    },
+    inputSchema: DECISION_ID_INPUT,
   },
   list_policies: {
     description: 'List named policies in the current tenant.',
