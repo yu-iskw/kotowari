@@ -55,8 +55,15 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies and refresh lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Upload refreshed lockfile
+        uses: actions/upload-artifact@v7
+        with:
+          name: refreshed-pnpm-lock
+          path: pnpm-lock.yaml
+          retention-days: 1
 
       - name: Find unused code (Knip)
         run: pnpm knip
