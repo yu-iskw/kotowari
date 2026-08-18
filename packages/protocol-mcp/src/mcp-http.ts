@@ -32,7 +32,7 @@ export type McpAuthorization = {
 export type McpFetchHandler = {
   fetch: (request: Request) => Promise<Response>;
   close: () => Promise<void>;
-  resourceMetadataUrl?: string;
+  resourceMetadataUrl?: URL;
 };
 
 function requestHeaders(request: Request): Record<string, string | undefined> {
@@ -74,7 +74,7 @@ export function createMcpHttpHandler(input: {
   authorization?: McpAuthorization;
   audit?: McpAuditSink;
 }): McpFetchHandler {
-  const resourceMetadataUrl =
+  const resourceMetadataUrlValue =
     input.authorization === undefined
       ? undefined
       : getOAuthProtectedResourceMetadataUrl(input.authorization.resourceServerUrl);
@@ -84,7 +84,7 @@ export function createMcpHttpHandler(input: {
       : requireBearerAuth({
           verifier: verifierForSdk(input.authorization.verifier),
           requiredScopes: [...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes],
-          resourceMetadataUrl,
+          resourceMetadataUrl: resourceMetadataUrlValue,
         });
 
   const handler = createMcpHandler(
@@ -101,7 +101,9 @@ export function createMcpHttpHandler(input: {
   );
 
   return {
-    resourceMetadataUrl,
+    ...(resourceMetadataUrlValue === undefined
+      ? {}
+      : { resourceMetadataUrl: new URL(resourceMetadataUrlValue) }),
     async fetch(request) {
       let authInfo: AuthInfo | undefined;
       if (gate !== undefined) {
