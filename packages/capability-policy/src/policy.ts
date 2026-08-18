@@ -1,8 +1,9 @@
-import { buildPolicyEvaluated, compactProvenance, newId, nowIso } from '@kotowari/kernel';
+import { buildPolicyEvaluated, compactProvenance, newId } from '@kotowari/kernel';
 
 import type {
   Decision,
   IsoTimestamp,
+  NamespaceId,
   PolicyEvaluation,
   PolicyId,
   PolicyRecord,
@@ -27,7 +28,7 @@ export function policyVersionKey(policy: PolicyRecord): string {
 
 export function isPolicyApplicable(
   policy: PolicyRecord,
-  input: { purpose?: string; namespaceId?: string; at?: IsoTimestamp },
+  input: { purpose?: string; namespaceId?: NamespaceId; at?: string },
 ): boolean {
   if (!('policyId' in policy)) {
     return true;
@@ -54,7 +55,7 @@ export function isPolicyApplicable(
   if (
     input.namespaceId !== undefined &&
     version.applicability.namespaceIds !== undefined &&
-    !version.applicability.namespaceIds.includes(input.namespaceId as never)
+    !version.applicability.namespaceIds.includes(input.namespaceId)
   ) {
     return false;
   }
@@ -63,7 +64,7 @@ export function isPolicyApplicable(
 
 export function selectApplicablePolicies(
   policies: readonly PolicyRecord[],
-  input: { purpose?: string; namespaceId?: string; at?: IsoTimestamp },
+  input: { purpose?: string; namespaceId?: NamespaceId; at?: string },
 ): readonly PolicyRecord[] {
   return policies.filter((policy) => isPolicyApplicable(policy, input));
 }
@@ -168,8 +169,4 @@ export async function whatIfPolicy(input: {
       violations: evaluation.violations,
     };
   });
-}
-
-export function policyClock(): IsoTimestamp {
-  return nowIso();
 }
