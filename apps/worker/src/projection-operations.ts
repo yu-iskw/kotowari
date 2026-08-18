@@ -100,7 +100,6 @@ export function createProjectionOperations(
         } catch {
           delayMs = retryIntervalMs;
         }
-        if (runOptions.signal?.aborted === true) return;
         await waitFor(delayMs, runOptions.signal);
       }
     },
