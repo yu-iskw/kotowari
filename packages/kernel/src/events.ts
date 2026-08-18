@@ -23,6 +23,10 @@ import type {
   OutcomeObservation,
   PolicyException,
 } from './decision.js';
+import type {
+  EntityResolutionDecision,
+  EntityResolutionProposal,
+} from './entity-resolution.js';
 import type { Provenance } from './provenance.js';
 
 export type DomainEvent =
@@ -51,11 +55,40 @@ export type DomainEvent =
       occurredAt: IsoTimestamp;
     }
   | {
+      kind: 'entity.resolution_proposed';
+      eventId: EventId;
+      tenantId: TenantId;
+      proposal: EntityResolutionProposal;
+      provenance: Provenance;
+      occurredAt: IsoTimestamp;
+    }
+  | {
+      kind: 'entity.resolution_decided';
+      eventId: EventId;
+      tenantId: TenantId;
+      decision: EntityResolutionDecision;
+      provenance: Provenance;
+      occurredAt: IsoTimestamp;
+    }
+  | {
       kind: 'entity.merged';
       eventId: EventId;
       tenantId: TenantId;
       survivingEntityId: EntityId;
       absorbedEntityIds: readonly EntityId[];
+      resolutionProposalId?: EventId;
+      reason?: string;
+      provenance: Provenance;
+      occurredAt: IsoTimestamp;
+    }
+  | {
+      kind: 'entity.merge_reverted';
+      eventId: EventId;
+      tenantId: TenantId;
+      mergeEventId: EventId;
+      survivingEntityId: EntityId;
+      restoredEntityIds: readonly EntityId[];
+      reason: string;
       provenance: Provenance;
       occurredAt: IsoTimestamp;
     }
