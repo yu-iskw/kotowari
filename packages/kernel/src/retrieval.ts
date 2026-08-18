@@ -1,3 +1,4 @@
+import type { AuthorizationReceipt } from './authorization.js';
 import type { ClaimId, EvidenceId, IsoTimestamp, RetrievalReceiptId } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
@@ -30,6 +31,7 @@ export type RetrievalReceipt = ScopedMetadata & {
   planVersion: string;
   selected: readonly RetrievalReceiptSelection[];
   omissions: readonly RetrievalReceiptOmission[];
+  authorizationReceipts: readonly AuthorizationReceipt[];
   executedAt: IsoTimestamp;
   provenance: Provenance;
 };

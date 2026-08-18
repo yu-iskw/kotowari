@@ -2,133 +2,194 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Kotowari</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kotowari Accountability Workbench</title>
     <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #f7f7f5;
+        color: #1f2420;
+      }
       body {
-        font-family: Georgia, serif;
-        max-width: 52rem;
-        margin: 2rem auto;
-        color: #1b1b1b;
-        line-height: 1.45;
+        margin: 0;
       }
-      input,
-      button {
-        font: inherit;
+      header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #d9ddd8;
+        background: #ffffff;
       }
-      .hits {
-        white-space: pre-wrap;
-        background: #f6f4ef;
+      main {
+        display: grid;
+        grid-template-columns: minmax(18rem, 25rem) minmax(0, 1fr);
+        gap: 1rem;
+        padding: 1rem 2rem 2rem;
+      }
+      nav,
+      section {
+        background: #ffffff;
+        border: 1px solid #d9ddd8;
+        border-radius: 0.75rem;
         padding: 1rem;
       }
-      a {
-        color: #1a4a7a;
+      .stack {
+        display: grid;
+        gap: 0.75rem;
+      }
+      input,
+      button,
+      select {
+        font: inherit;
+        padding: 0.55rem 0.65rem;
+      }
+      button {
+        cursor: pointer;
+      }
+      label {
+        display: grid;
+        gap: 0.25rem;
+        font-size: 0.85rem;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #f3f5f2;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        min-height: 16rem;
+      }
+      .muted {
+        color: #616b62;
+      }
+      .row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .metric {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d9ddd8;
+        border-radius: 999px;
+        font-size: 0.85rem;
+      }
+      @media (max-width: 800px) {
+        main {
+          grid-template-columns: 1fr;
+          padding: 1rem;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>Kotowari</h1>
-    <p>Ingest a folder, search with sources, record a decision.</p>
-    <p>
-      <button id="ingest" type="button">Ingest testdata</button>
-    </p>
-    <p>
-      <input id="q" size="48" placeholder="What did we decide about vendor X?" />
-      <button id="search" type="button">Search</button>
-    </p>
-    <p>
-      <input id="outcome" placeholder="Record an outcome" />
-      <button id="decide" type="button">Record decision</button>
-    </p>
-    <div class="hits" id="out">Empty workspace. Ingest a folder, then search.</div>
+    <header>
+      <h1>Kotowari Accountability Workbench</h1>
+      <p class="muted">
+        Inspect what was known, what was authorized, which policy applied, and why a decision happened.
+      </p>
+    </header>
+    <main>
+      <nav class="stack">
+        <h2>Investigate</h2>
+        <label>
+          Query or entity
+          <input id="query" value="Vendor X" />
+        </label>
+        <label>
+          Purpose
+          <input id="purpose" value="audit" />
+        </label>
+        <label>
+          Valid at
+          <input id="validAt" type="datetime-local" />
+        </label>
+        <label>
+          Known at
+          <input id="knownAt" type="datetime-local" />
+        </label>
+        <div class="row">
+          <button id="search" type="button">Search knowledge</button>
+          <button id="resolve" type="button">Resolve entity</button>
+        </div>
+        <hr />
+        <h2>Decisions</h2>
+        <button id="decisions" type="button">List decisions</button>
+        <label>
+          Decision ID
+          <input id="decisionId" placeholder="DecisionId" />
+        </label>
+        <div class="row">
+          <button id="replay" type="button">Replay</button>
+          <button id="precedents" type="button">Precedents</button>
+          <button id="provenance" type="button">Provenance</button>
+        </div>
+        <hr />
+        <button id="policies" type="button">Policy versions</button>
+      </nav>
+      <section>
+        <div class="row" id="metrics">
+          <span class="metric">Temporal reconstruction</span>
+          <span class="metric">Authorization receipts</span>
+          <span class="metric">Policy versions</span>
+          <span class="metric">Deterministic replay</span>
+        </div>
+        <h2 id="resultTitle">Workbench result</h2>
+        <pre id="output">Choose an investigation action.</pre>
+      </section>
+    </main>
     <script>
-      const out = document.getElementById('out');
-      let lastDecisionId = '';
-      function show(value) {
-        out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-      }
-      document.getElementById('ingest').onclick = async () => {
-        const res = await fetch('/v1/ingest', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ path: 'testdata/vendor-x' }),
-        });
-        show(await res.json());
+      const output = document.getElementById('output');
+      const resultTitle = document.getElementById('resultTitle');
+      const value = (id) => document.getElementById(id).value;
+      const show = (title, data) => {
+        resultTitle.textContent = title;
+        output.textContent = JSON.stringify(data, null, 2);
+      };
+      const temporal = () => {
+        const result = {};
+        if (value('validAt')) result.validAt = new Date(value('validAt')).toISOString();
+        if (value('knownAt')) result.knownAt = new Date(value('knownAt')).toISOString();
+        return result;
+      };
+      const json = async (url, options) => {
+        const response = await fetch(url, options);
+        const body = await response.json();
+        if (!response.ok) throw new Error(JSON.stringify(body));
+        return body;
       };
       document.getElementById('search').onclick = async () => {
-        const query = document.getElementById('q').value;
-        const res = await fetch('/v1/knowledge/search', {
+        const data = await json('/v1/knowledge/search', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ query, purpose: 'search' }),
+          body: JSON.stringify({ query: value('query'), purpose: value('purpose'), temporal: temporal() }),
         });
-        const result = await res.json();
-        const hits = result.hits ?? [];
-        const lines = hits.map((hit) => {
-          const evidence = (hit.evidenceIds ?? [])
-            .map((id) => id + ' — open /v1/evidence/' + id + '/content')
-            .join(', ');
-          return (
-            (hit.claimId ?? '') +
-            ' score ' +
-            (hit.score ?? '') +
-            '\n  why: ' +
-            (hit.whySelected ?? '') +
-            '\n  evidence: ' +
-            evidence
-          );
-        });
-        show(lines.length ? lines.join('\n\n') : result);
-        out.innerHTML = '';
-        for (const hit of hits) {
-          const block = document.createElement('div');
-          const title = document.createElement('p');
-          title.textContent = (hit.claimId ?? '') + ' — ' + (hit.whySelected ?? '');
-          block.appendChild(title);
-          for (const id of hit.evidenceIds ?? []) {
-            const link = document.createElement('a');
-            link.href = '/v1/evidence/' + id + '/content';
-            link.textContent = 'Open source ' + id;
-            link.onclick = async (event) => {
-              event.preventDefault();
-              const content = await fetch(link.href);
-              show(await content.json());
-            };
-            block.appendChild(link);
-            block.appendChild(document.createElement('br'));
-          }
-          out.appendChild(block);
-        }
-        if (hits.length === 0) {
-          show(result);
-        }
+        show('Knowledge + retrieval receipt', data);
       };
-      document.getElementById('decide').onclick = async () => {
-        const query = document.getElementById('q').value;
-        const selectedOutcome = document.getElementById('outcome').value;
-        const res = await fetch('/v1/decisions', {
+      document.getElementById('resolve').onclick = async () => {
+        const data = await json('/v1/entities/resolve', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ purpose: 'search', query, selectedOutcome, confidence: 0.7 }),
+          body: JSON.stringify({ label: value('query'), limit: 8 }),
         });
-        const decision = await res.json();
-        lastDecisionId = decision.id ?? '';
-        const audit = lastDecisionId
-          ? await (await fetch('/v1/decisions/' + lastDecisionId)).json()
-          : decision;
-        const prov = lastDecisionId
-          ? await (await fetch('/v1/decisions/' + lastDecisionId + '/prov')).json()
-          : {};
-        show({
-          decision: audit,
-          snapshot: audit.inputContextSnapshot,
-          applicablePolicyIds: audit.applicablePolicyIds,
-          actor: audit.actor,
-          outcome: audit.selectedOutcome,
-          evidenceIds: audit.consideredEvidenceIds,
-          prov,
-          exportUrl: lastDecisionId ? '/v1/decisions/' + lastDecisionId + '/export' : '',
-        });
+        show('Entity resolution candidates', data);
       };
+      document.getElementById('decisions').onclick = async () => {
+        const data = await json('/v1/decisions');
+        show('Decision timeline', data);
+        if (Array.isArray(data) && data[0]?.id) document.getElementById('decisionId').value = data[0].id;
+      };
+      document.getElementById('replay').onclick = async () => {
+        show('Deterministic decision replay', await json(`/v1/decisions/${value('decisionId')}/replay`));
+      };
+      document.getElementById('precedents').onclick = async () => {
+        show('Decision precedents', await json(`/v1/decisions/${value('decisionId')}/precedents`));
+      };
+      document.getElementById('provenance').onclick = async () => {
+        show('Decision provenance', await json(`/v1/decisions/${value('decisionId')}/prov`));
+      };
+      document.getElementById('policies').onclick = async () => {
+        show('Policy versions', await json('/v1/policies'));
+      };
+      window.addEventListener('unhandledrejection', (event) => show('Request failed', { error: String(event.reason) }));
     </script>
   </body>
 </html>

@@ -1,5 +1,6 @@
 export {
   allow,
+  allowWithReceipt,
   assertAllowed,
   localStandaloneMetadata,
   localStandalonePrincipal,
@@ -8,6 +9,7 @@ export type {
   Action,
   AuthContext,
   AuthDecision,
+  AuthorizationReceipt,
   Delegation,
   Principal,
   Resource,
@@ -65,9 +67,14 @@ export type { Conflict, ConflictKind, ConflictResolution, ResolutionStrategy } f
 export type {
   ContextSliceItem,
   ContextSnapshot,
+  Policy,
+  PolicyApplicability,
   PolicyEvaluation,
   PolicyRecord,
   PolicyRules,
+  PolicyStatus,
+  PolicyVersion,
+  PolicyVersionRef,
 } from './context.js';
 export type {
   AssertClaimInput,

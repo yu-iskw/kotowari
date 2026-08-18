@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
-  allow,
+  allowWithReceipt,
   claimText,
   compactProvenance,
   newId,
@@ -11,6 +11,7 @@ import {
 
 import type {
   AuthContext,
+  AuthorizationReceipt,
   Claim,
   ConflictResolution,
   EvidenceId,
@@ -104,7 +105,7 @@ function explainHit(components: RetrievalHit['scoreComponents']): string {
   const parts = [
     components.lexical === undefined ? undefined : `lexical ${String(components.lexical)}`,
     components.vector === undefined ? undefined : `vector ${components.vector.toFixed(2)}`,
-    components.graph === undefined ? undefined : `graph neighborhood`,
+    components.graph === undefined ? undefined : 'graph neighborhood',
   ].filter((part) => part !== undefined);
   return parts.length > 0 ? parts.join('; ') : 'metadata match';
 }
@@ -203,19 +204,25 @@ function authorizeHits(input: {
   suppressed: Set<string>;
   principal: Principal;
   authz: AuthContext;
-}): { allowed: RetrievalHit[]; omittedByClass: Map<string, number> } {
+}): {
+  allowed: RetrievalHit[];
+  omittedByClass: Map<string, number>;
+  receipts: AuthorizationReceipt[];
+} {
   const omittedByClass = new Map<string, number>();
   const allowed: RetrievalHit[] = [];
+  const receipts: AuthorizationReceipt[] = [];
   for (const hit of input.scored.values()) {
     if (input.suppressed.has(hit.claimId)) {
       continue;
     }
-    const decision = allow(
+    const { decision, receipt } = allowWithReceipt(
       input.principal,
       'knowledge.read',
       { kind: 'claim', id: hit.claimId, metadata: hit.claim },
       input.authz,
     );
+    receipts.push(receipt);
     if (decision.effect === 'deny') {
       const classification = hit.claim.classification;
       omittedByClass.set(classification, (omittedByClass.get(classification) ?? 0) + 1);
@@ -223,7 +230,7 @@ function authorizeHits(input: {
     }
     allowed.push(hit);
   }
-  return { allowed, omittedByClass };
+  return { allowed, omittedByClass, receipts };
 }
 
 async function maybeRerank(input: {
@@ -319,7 +326,7 @@ export async function retrieve(input: {
     expandGraphNeighborhood(claims, scored, hops);
   }
 
-  const { allowed, omittedByClass } = authorizeHits({
+  const { allowed, omittedByClass, receipts } = authorizeHits({
     scored,
     suppressed: suppressedClaimIds(resolutions),
     principal: input.principal,
@@ -365,6 +372,7 @@ export async function retrieve(input: {
       scoreComponents: hit.scoreComponents,
     })),
     omissions: omitted,
+    authorizationReceipts: receipts,
     executedAt: nowIso(),
     provenance: compactProvenance({
       source: 'retrieval',

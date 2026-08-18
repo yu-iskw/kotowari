@@ -16,6 +16,12 @@ export type ContextSliceItem = {
   evidenceIds: readonly EvidenceId[];
 };
 
+export type PolicyVersionRef = {
+  policyId: PolicyId;
+  policyVersionId: PolicyId;
+  version: number;
+};
+
 export type ContextSnapshot = ScopedMetadata & {
   id: ContextId;
   capturedAt: IsoTimestamp;
@@ -26,8 +32,15 @@ export type ContextSnapshot = ScopedMetadata & {
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
   policyVersionIds: readonly string[];
+  policyVersions?: readonly PolicyVersionRef[];
   items: readonly ContextSliceItem[];
   budget: number;
+};
+
+export type PolicyRules = {
+  minConfidence?: number;
+  allowedOutcomes?: readonly string[];
+  maxClassification?: Classification;
 };
 
 export type PolicyRecord = ScopedMetadata & {
@@ -37,10 +50,27 @@ export type PolicyRecord = ScopedMetadata & {
   rules: PolicyRules;
 };
 
-export type PolicyRules = {
-  minConfidence?: number;
-  allowedOutcomes?: readonly string[];
-  maxClassification?: Classification;
+export type Policy = ScopedMetadata & {
+  id: PolicyId;
+  name: string;
+  description?: string;
+  createdAt: IsoTimestamp;
+};
+
+export type PolicyStatus = 'draft' | 'active' | 'retired';
+
+export type PolicyApplicability = {
+  purposes?: readonly string[];
+  namespaceIds?: readonly NamespaceId[];
+  classifications?: readonly Classification[];
+};
+
+export type PolicyVersion = PolicyRecord & {
+  policyId: PolicyId;
+  status: PolicyStatus;
+  effectiveFrom?: IsoTimestamp;
+  effectiveTo?: IsoTimestamp;
+  applicability: PolicyApplicability;
 };
 
 export type PolicyEvaluation = ScopedMetadata & {

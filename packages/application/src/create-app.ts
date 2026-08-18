@@ -6,12 +6,17 @@ import {
   ingestDocuments,
   reextractFromStoredEvidence,
 } from '@kotowari/capability-ingestion';
-import { resolveClaimConflict } from '@kotowari/capability-knowledge';
+import {
+  findEntityResolutionCandidates,
+  resolveClaimConflict,
+} from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
 import { uniquePredicates } from '@kotowari/capability-ontology';
 import {
-  evaluateDecisionAgainstPolicy,
+  policyVersionKey,
   putPolicy,
+  putPolicyVersion,
+  selectApplicablePolicies,
   whatIfPolicy,
 } from '@kotowari/capability-policy';
 import { decisionToProvO } from '@kotowari/capability-provenance';
@@ -20,12 +25,16 @@ import {
   asDecisionId,
   asEvidenceId,
   assertAllowed,
-  assertNoChainOfThought,
-  buildDecisionRecorded,
-  compactProvenance,
 } from '@kotowari/kernel';
 
+import {
+  findDecisionPrecedentsCapability,
+  recordDecisionCapability,
+  replayDecisionCapability,
+} from './decision-capability.js';
+
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
+import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';
 import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { RetrievalResult } from '@kotowari/capability-retrieval';
 import type {
@@ -34,8 +43,9 @@ import type {
   Decision,
   Evidence,
   MemoryRecord,
-  PolicyEvaluation,
+  PolicyId,
   PolicyRecord,
+  PolicyVersion,
   Principal,
   Resource,
   TemporalPerspective,
@@ -49,6 +59,11 @@ import type {
   Queue,
   RerankerProvider,
 } from '@kotowari/plugin-sdk';
+import type {
+  DecisionPrecedent,
+  DecisionRecordRequest,
+  DecisionReplay,
+} from './decision-capability.js';
 
 function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
   const namespaceId = principal.namespaceIds[0];
@@ -67,10 +82,6 @@ function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
       policyTags: [],
     },
   };
-}
-
-function policyVersionKey(policy: PolicyRecord): string {
-  return `${policy.id}@${String(policy.version)}`;
 }
 
 export type KotowariPorts = {
@@ -102,19 +113,14 @@ export type KotowariApp = {
     query?: string;
     temporal?: TemporalPerspective;
   }) => Promise<ContextSnapshot>;
-  recordDecision: (input: {
-    purpose: string;
-    query?: string;
-    temporal?: TemporalPerspective;
-    selectedOutcome: string;
-    alternatives?: readonly string[];
-    confidence: number;
-    rationale?: string;
-    chainOfThought?: unknown;
-    hiddenCoT?: unknown;
-  }) => Promise<Decision>;
+  recordDecision: (input: DecisionRecordRequest) => Promise<Decision>;
   getDecision: (id: string) => Promise<Decision | undefined>;
   listDecisions: () => Promise<readonly Decision[]>;
+  replayDecision?: (id: string) => Promise<DecisionReplay | undefined>;
+  findDecisionPrecedents?: (
+    id: string,
+    limit?: number,
+  ) => Promise<readonly DecisionPrecedent[]>;
   recordMemory: (input: { body: string; kind?: MemoryRecord['kind'] }) => Promise<MemoryRecord>;
   searchMemory: (input: { query: string }) => Promise<readonly MemoryRecord[]>;
   putPolicy: (input: {
@@ -122,6 +128,16 @@ export type KotowariApp = {
     version: number;
     rules: PolicyRecord['rules'];
   }) => Promise<PolicyRecord>;
+  putPolicyVersion?: (input: {
+    policyId?: PolicyId;
+    name: string;
+    version: number;
+    rules: PolicyRecord['rules'];
+    status?: PolicyVersion['status'];
+    effectiveFrom?: PolicyVersion['effectiveFrom'];
+    effectiveTo?: PolicyVersion['effectiveTo'];
+    applicability?: PolicyVersion['applicability'];
+  }) => Promise<PolicyVersion>;
   whatIfPolicy: (
     policy: PolicyRecord,
   ) => Promise<
@@ -132,6 +148,10 @@ export type KotowariApp = {
     preferredClaimId: string;
     reason: string;
   }) => Promise<ConflictResolution>;
+  findEntityCandidates?: (input: {
+    label: string;
+    limit?: number;
+  }) => Promise<readonly EntityResolutionCandidate[]>;
   exportProvO: (decisionId: string) => Promise<ProvODocument | undefined>;
   listPredicates: () => Promise<readonly string[]>;
   listPolicies: () => Promise<readonly PolicyRecord[]>;
@@ -228,7 +248,7 @@ export function createKotowariApp(
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
         tenantId: actor.tenantId,
       });
-      return ingestDocuments(
+      const result = await ingestDocuments(
         {
           store: ports.store,
           blobs: ports.blobs,
@@ -237,13 +257,12 @@ export function createKotowariApp(
           principal: actor,
         },
         documents,
-      ).then(async (result) => {
-        await ports.queue.enqueue({
-          kind: 'ingest.documents',
-          payload: { evidenceIds: [...result.evidenceIds], claimIds: [...result.claimIds] },
-        });
-        return result;
+      );
+      await ports.queue.enqueue({
+        kind: 'ingest.documents',
+        payload: { evidenceIds: [...result.evidenceIds], claimIds: [...result.claimIds] },
       });
+      return result;
     },
 
     async searchKnowledge(input) {
@@ -252,75 +271,22 @@ export function createKotowariApp(
 
     async buildContext(input) {
       const actor = await current();
-      const policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
+      const allPolicies = await ports.store.listPolicies({ tenantId: actor.tenantId });
+      const policies = selectApplicablePolicies(allPolicies, {
+        purpose: input.purpose,
+        namespaceId: actor.namespaceIds[0],
+        at: input.temporal?.knownAt ?? input.temporal?.validAt,
+      });
       return captureContext(actor, input, policies);
     },
 
     async recordDecision(input) {
-      assertNoChainOfThought(input);
-      const actor = await current();
-      assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), {
-        tenantId: actor.tenantId,
+      return recordDecisionCapability({
+        store: ports.store,
+        principal: await current(),
+        request: input,
+        captureContext,
       });
-      let policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
-      if (policies.length === 0) {
-        const created = await putPolicy({
-          store: ports.store,
-          principal: actor,
-          name: 'workspace-default',
-          version: 1,
-          rules: {},
-        });
-        policies = [created];
-      }
-      const snapshot = await captureContext(
-        actor,
-        {
-          purpose: input.purpose,
-          ...(input.query === undefined ? {} : { query: input.query }),
-          ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
-        },
-        policies,
-      );
-      const candidate = {
-        selectedOutcome: input.selectedOutcome,
-        confidence: input.confidence,
-        classification: 'internal' as const,
-      };
-      const evaluations: PolicyEvaluation[] = policies.map(
-        (policy) => evaluateDecisionAgainstPolicy(actor, policy, candidate).evaluation,
-      );
-      const { decision, event } = buildDecisionRecorded({
-        metadata: {
-          tenantId: actor.tenantId,
-          namespaceId: actor.namespaceIds[0] ?? snapshot.namespaceId,
-          principalId: actor.id,
-          classification: 'internal',
-          visibility: 'workspace',
-          policyTags: [input.purpose],
-        },
-        inputContextSnapshot: snapshot,
-        consideredEvidenceIds: snapshot.evidenceIds,
-        applicablePolicyIds: policies.map((policy) => policy.id),
-        selectedOutcome: input.selectedOutcome,
-        alternatives: input.alternatives ?? [],
-        confidence: input.confidence,
-        actor: actor.id,
-        rationale: input.rationale,
-        resultingActionIds: [],
-        policyEvaluations: evaluations,
-        provenance: compactProvenance({
-          source: 'decision',
-          actor: actor.id,
-          process: 'decision.record',
-        }),
-      });
-      await ports.store.withTransaction(async (tx) => {
-        await tx.putDecision(decision);
-        await tx.appendEvent(event);
-        await tx.appendOutbox(event);
-      });
-      return decision;
     },
 
     async getDecision(id) {
@@ -332,6 +298,19 @@ export function createKotowariApp(
       return ports.store.listDecisions({
         tenantId: actor.tenantId,
         namespaceId: actor.namespaceIds[0],
+      });
+    },
+
+    async replayDecision(id) {
+      return replayDecisionCapability({ store: ports.store, principal: await current(), decisionId: id });
+    },
+
+    async findDecisionPrecedents(id, limit) {
+      return findDecisionPrecedentsCapability({
+        store: ports.store,
+        principal: await current(),
+        decisionId: id,
+        ...(limit === undefined ? {} : { limit }),
       });
     },
 
@@ -348,15 +327,44 @@ export function createKotowariApp(
     },
 
     async putPolicy(input) {
-      return putPolicy({ store: ports.store, principal: await current(), ...input });
+      const actor = await current();
+      assertAllowed(actor, 'policy.manage', scopeResource(actor, 'policy'), {
+        tenantId: actor.tenantId,
+      });
+      return putPolicy({ store: ports.store, principal: actor, ...input });
+    },
+
+    async putPolicyVersion(input) {
+      const actor = await current();
+      assertAllowed(actor, 'policy.manage', scopeResource(actor, 'policy'), {
+        tenantId: actor.tenantId,
+      });
+      return putPolicyVersion({ store: ports.store, principal: actor, ...input });
     },
 
     async whatIfPolicy(policy) {
-      return whatIfPolicy({ store: ports.store, principal: await current(), policy });
+      const actor = await current();
+      assertAllowed(actor, 'policy.evaluate', scopeResource(actor, 'policy'), {
+        tenantId: actor.tenantId,
+      });
+      return whatIfPolicy({ store: ports.store, principal: actor, policy });
     },
 
     async resolveConflict(input) {
-      return resolveClaimConflict({ store: ports.store, principal: await current(), ...input });
+      const actor = await current();
+      assertAllowed(actor, 'conflict.resolve', scopeResource(actor, 'conflict'), {
+        tenantId: actor.tenantId,
+      });
+      return resolveClaimConflict({ store: ports.store, principal: actor, ...input });
+    },
+
+    async findEntityCandidates(input) {
+      return findEntityResolutionCandidates({
+        store: ports.store,
+        principal: await current(),
+        label: input.label,
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+      });
     },
 
     async exportProvO(decisionId) {
@@ -372,13 +380,18 @@ export function createKotowariApp(
 
     async listPredicates() {
       const actor = await current();
-      const claims = await ports.store.listClaims({ tenantId: actor.tenantId });
+      const claims = await ports.store.listClaims({
+        tenantId: actor.tenantId,
+        namespaceId: actor.namespaceIds[0],
+      });
       return uniquePredicates(claims);
     },
 
     async listPolicies() {
       const actor = await current();
-      return ports.store.listPolicies({ tenantId: actor.tenantId });
+      return (await ports.store.listPolicies({ tenantId: actor.tenantId })).filter(
+        (policy) => policy.namespaceId === actor.namespaceIds[0],
+      );
     },
 
     async getEvidence(id) {
