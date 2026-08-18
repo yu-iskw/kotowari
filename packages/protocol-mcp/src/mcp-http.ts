@@ -32,7 +32,7 @@ export type McpAuthorization = {
 export type McpFetchHandler = {
   fetch: (request: Request) => Promise<Response>;
   close: () => Promise<void>;
-  resourceMetadataUrl?: URL;
+  resourceMetadataUrl?: string;
 };
 
 function requestHeaders(request: Request): Record<string, string | undefined> {
