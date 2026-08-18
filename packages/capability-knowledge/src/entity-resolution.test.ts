@@ -264,9 +264,9 @@ describe('entity identity and resolution v1', () => {
     expect(lineage.absorbedEntityIds).toEqual([absorbed.id]);
     expect((await store.getEntity(absorbed.id))?.id).toBe(absorbed.id);
     expect((await store.getClaim(claim.id))?.subject).toBe(absorbed.id);
-    expect(
-      (await resolveCanonicalEntity({ store, principal, entityId: absorbed.id })).id,
-    ).toBe(survivor.id);
+    expect((await resolveCanonicalEntity({ store, principal, entityId: absorbed.id })).id).toBe(
+      survivor.id,
+    );
 
     const candidates = await findEntityResolutionCandidates({
       store,
@@ -323,13 +323,15 @@ describe('entity identity and resolution v1', () => {
 
     expect(reverted.revertedByEventId).toBeDefined();
     expect(reverted.revertReason).toContain('separate legal registrations');
-    expect(
-      (await resolveCanonicalEntity({ store, principal, entityId: absorbed.id })).id,
-    ).toBe(absorbed.id);
+    expect((await resolveCanonicalEntity({ store, principal, entityId: absorbed.id })).id).toBe(
+      absorbed.id,
+    );
     const lineage = await listEntityMergeLineage({ store, principal, entityId: absorbed.id });
     expect(lineage).toHaveLength(1);
     expect(lineage[0]?.mergeEventId).toBe(merged.mergeEventId);
-    expect((await store.listEvents()).map((event) => event.kind)).toContain('entity.merge_reverted');
+    expect((await store.listEvents()).map((event) => event.kind)).toContain(
+      'entity.merge_reverted',
+    );
   });
 
   it('finds candidates for an entity while excluding its existing canonical cluster', async () => {

@@ -22,7 +22,4 @@ export {
   canonicalEntityIdFromEvents,
   createEventBackedEntityResolutionStore,
 } from './entity-resolution-store.js';
-export type {
-  EntityResolutionFilter,
-  EntityResolutionStore,
-} from './entity-resolution-store.js';
+export type { EntityResolutionFilter, EntityResolutionStore } from './entity-resolution-store.js';

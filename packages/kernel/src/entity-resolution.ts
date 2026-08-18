@@ -1,9 +1,4 @@
-import type {
-  EntityId,
-  EventId,
-  IsoTimestamp,
-  PrincipalId,
-} from './branded-ids.js';
+import type { EntityId, EventId, IsoTimestamp, PrincipalId } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
 

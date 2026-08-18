@@ -10,11 +10,11 @@ import {
   nowIso,
 } from '@kotowari/kernel';
 
-import { CapabilityKnowledgeError } from './errors.js';
 import {
   canonicalEntityIdFromEvents,
   createEventBackedEntityResolutionStore,
 } from './entity-resolution-store.js';
+import { CapabilityKnowledgeError } from './errors.js';
 
 import type {
   AuthorizationReceipt,
@@ -28,7 +28,6 @@ import type {
   EntityResolutionDecisionOutcome,
   EntityResolutionProposal,
   EntityResolutionSignal,
-  EventId,
   Principal,
   ScopedMetadata,
   Visibility,
@@ -36,6 +35,11 @@ import type {
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
 export const ENTITY_RESOLVER_VERSION = 'entity-resolution-v1' as const;
+
+const ENTITY_RESOLUTION_PURPOSE = 'entity-resolution' as const;
+const KNOWLEDGE_READ_ACTION = 'knowledge.read' as const;
+const ENTITY_MERGED_EVENT = 'entity.merged' as const;
+const ENTITY_MERGE_REVERTED_EVENT = 'entity.merge_reverted' as const;
 
 export type EntityResolutionCandidate = {
   entity: Entity;
@@ -192,7 +196,10 @@ function externalIdSignals(
   return signals;
 }
 
-function signalsForEntity(query: CandidateQuery, entity: Entity): readonly EntityResolutionSignal[] {
+function signalsForEntity(
+  query: CandidateQuery,
+  entity: Entity,
+): readonly EntityResolutionSignal[] {
   const signals: EntityResolutionSignal[] = [...externalIdSignals(query.externalIds, entity)];
   for (const label of query.labels) {
     for (const candidate of entity.labels) {
@@ -222,14 +229,16 @@ function entityResource(entity: Entity) {
 function readReceipt(principal: Principal, entity: Entity): AuthorizationReceipt | undefined {
   const { decision, receipt } = allowWithReceipt(
     principal,
-    'knowledge.read',
+    KNOWLEDGE_READ_ACTION,
     entityResource(entity),
-    { tenantId: principal.tenantId, purpose: 'entity-resolution' },
+    { tenantId: principal.tenantId, purpose: ENTITY_RESOLUTION_PURPOSE },
   );
   return decision.effect === 'allow' ? receipt : undefined;
 }
 
-function uniqueReceipts(receipts: readonly AuthorizationReceipt[]): readonly AuthorizationReceipt[] {
+function uniqueReceipts(
+  receipts: readonly AuthorizationReceipt[],
+): readonly AuthorizationReceipt[] {
   const byKey = new Map<string, AuthorizationReceipt>();
   for (const receipt of receipts) {
     byKey.set(`${receipt.action}\u0000${receipt.resourceKind}\u0000${receipt.resourceId}`, receipt);
@@ -241,7 +250,10 @@ function uniqueReceipts(receipts: readonly AuthorizationReceipt[]): readonly Aut
   );
 }
 
-async function scopedEntities(store: CanonicalStore, principal: Principal): Promise<readonly Entity[]> {
+async function scopedEntities(
+  store: CanonicalStore,
+  principal: Principal,
+): Promise<readonly Entity[]> {
   const byId = new Map<EntityId, Entity>();
   for (const namespaceId of principal.namespaceIds) {
     const entities = await store.listEntities({ tenantId: principal.tenantId, namespaceId });
@@ -281,7 +293,8 @@ async function findCandidates(input: {
     if (canonicalEntityId === input.excludeCanonicalEntityId) {
       continue;
     }
-    const canonical = entityById.get(canonicalEntityId) ?? (await input.store.getEntity(canonicalEntityId));
+    const canonical =
+      entityById.get(canonicalEntityId) ?? (await input.store.getEntity(canonicalEntityId));
     if (canonical === undefined) {
       continue;
     }
@@ -352,7 +365,7 @@ export async function findEntityResolutionCandidatesForEntity(input: {
   const source = await requireEntity(input.store, input.entityId);
   assertAllowed(input.principal, 'knowledge.read', entityResource(source), {
     tenantId: input.principal.tenantId,
-    purpose: 'entity-resolution',
+    purpose: ENTITY_RESOLUTION_PURPOSE,
   });
   const events = await input.store.listEvents();
   const canonicalSourceId = canonicalEntityIdFromEvents(events, source.id);
@@ -435,7 +448,7 @@ function assertEntityWrite(
   for (const entity of entities) {
     assertAllowed(principal, action, entityResource(entity), {
       tenantId: principal.tenantId,
-      purpose: 'entity-resolution',
+      purpose: ENTITY_RESOLUTION_PURPOSE,
     });
   }
 }
@@ -491,17 +504,21 @@ async function assertNoOpenEquivalentProposal(
     }
     if (decision.outcome === 'approved') {
       const merge = events.find(
-        (event) =>
-          event.kind === 'entity.merged' && event.resolutionProposalId === proposal.id,
+        (event) => event.kind === ENTITY_MERGED_EVENT && event.resolutionProposalId === proposal.id,
       );
       if (merge === undefined) {
-        throw new CapabilityKnowledgeError(`Equivalent proposal is already approved: ${proposal.id}`);
+        throw new CapabilityKnowledgeError(
+          `Equivalent proposal is already approved: ${proposal.id}`,
+        );
       }
       const reverted = events.some(
-        (event) => event.kind === 'entity.merge_reverted' && event.mergeEventId === merge.eventId,
+        (event) =>
+          event.kind === ENTITY_MERGE_REVERTED_EVENT && event.mergeEventId === merge.eventId,
       );
       if (!reverted) {
-        throw new CapabilityKnowledgeError(`Equivalent entity merge is already active: ${merge.eventId}`);
+        throw new CapabilityKnowledgeError(
+          `Equivalent entity merge is already active: ${merge.eventId}`,
+        );
       }
     }
   }
@@ -570,7 +587,9 @@ export async function decideEntityResolutionProposal(input: {
     throw new CapabilityKnowledgeError('A resolution review decision requires a reason');
   }
   if ((await resolutionStore.listDecisions(proposalId)).length > 0) {
-    throw new CapabilityKnowledgeError(`Entity resolution proposal is already decided: ${proposalId}`);
+    throw new CapabilityKnowledgeError(
+      `Entity resolution proposal is already decided: ${proposalId}`,
+    );
   }
 
   const source = await requireEntity(input.store, proposal.sourceEntityId);
@@ -640,7 +659,7 @@ export async function mergeApprovedEntityResolution(input: {
 
   const events = await input.store.listEvents();
   const previousMerge = events.find(
-    (event) => event.kind === 'entity.merged' && event.resolutionProposalId === proposalId,
+    (event) => event.kind === ENTITY_MERGED_EVENT && event.resolutionProposalId === proposalId,
   );
   if (previousMerge !== undefined) {
     throw new CapabilityKnowledgeError(
@@ -695,14 +714,14 @@ export async function revertEntityMerge(input: {
   const events = await input.store.listEvents();
   const merge = events.find(
     (event): event is Extract<DomainEvent, { kind: 'entity.merged' }> =>
-      event.kind === 'entity.merged' && event.eventId === mergeEventId,
+      event.kind === ENTITY_MERGED_EVENT && event.eventId === mergeEventId,
   );
   if (merge === undefined) {
     throw new CapabilityKnowledgeError(`Entity merge event not found: ${mergeEventId}`);
   }
   if (
     events.some(
-      (event) => event.kind === 'entity.merge_reverted' && event.mergeEventId === mergeEventId,
+      (event) => event.kind === ENTITY_MERGE_REVERTED_EVENT && event.mergeEventId === mergeEventId,
     )
   ) {
     throw new CapabilityKnowledgeError(`Entity merge is already reverted: ${mergeEventId}`);
@@ -758,7 +777,7 @@ export async function resolveCanonicalEntity(input: {
   const entity = await requireEntity(input.store, input.entityId);
   assertAllowed(input.principal, 'knowledge.read', entityResource(entity), {
     tenantId: input.principal.tenantId,
-    purpose: 'entity-resolution',
+    purpose: ENTITY_RESOLUTION_PURPOSE,
   });
   const canonicalId = await createEventBackedEntityResolutionStore(
     input.store,
@@ -766,7 +785,7 @@ export async function resolveCanonicalEntity(input: {
   const canonical = await requireEntity(input.store, canonicalId);
   assertAllowed(input.principal, 'knowledge.read', entityResource(canonical), {
     tenantId: input.principal.tenantId,
-    purpose: 'entity-resolution',
+    purpose: ENTITY_RESOLUTION_PURPOSE,
   });
   return canonical;
 }
@@ -787,9 +806,9 @@ export async function listEntityMergeLineage(input: {
     });
     for (const item of scoped) {
       const ids = [item.survivingEntityId, ...item.absorbedEntityIds];
-      const entities = (
-        await Promise.all(ids.map((id) => input.store.getEntity(id)))
-      ).filter((entity): entity is Entity => entity !== undefined);
+      const entities = (await Promise.all(ids.map((id) => input.store.getEntity(id)))).filter(
+        (entity): entity is Entity => entity !== undefined,
+      );
       if (entities.length !== ids.length) {
         continue;
       }

@@ -23,10 +23,7 @@ import type {
   OutcomeObservation,
   PolicyException,
 } from './decision.js';
-import type {
-  EntityResolutionDecision,
-  EntityResolutionProposal,
-} from './entity-resolution.js';
+import type { EntityResolutionDecision, EntityResolutionProposal } from './entity-resolution.js';
 import type { Provenance } from './provenance.js';
 
 export type DomainEvent =

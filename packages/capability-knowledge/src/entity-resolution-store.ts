@@ -34,10 +34,14 @@ type EntityMergedEvent = Extract<DomainEvent, { kind: 'entity.merged' }>;
 const RESOLUTION_PROPOSED_EVENT = 'entity.resolution_proposed' as const;
 
 function eventOrder(left: DomainEvent, right: DomainEvent): number {
-  return left.occurredAt.localeCompare(right.occurredAt) || left.eventId.localeCompare(right.eventId);
+  return (
+    left.occurredAt.localeCompare(right.occurredAt) || left.eventId.localeCompare(right.eventId)
+  );
 }
 
-export function activeEntityMergeEvents(events: readonly DomainEvent[]): readonly EntityMergedEvent[] {
+export function activeEntityMergeEvents(
+  events: readonly DomainEvent[],
+): readonly EntityMergedEvent[] {
   const reverted = new Set(
     events
       .filter((event) => event.kind === 'entity.merge_reverted')
