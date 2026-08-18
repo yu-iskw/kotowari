@@ -1,6 +1,12 @@
 import { buildContextSnapshot, localStandaloneMetadata } from '@kotowari/kernel';
 
-import type { ClaimId, EvidenceId, Principal } from '@kotowari/kernel';
+import type {
+  ClaimId,
+  EvidenceId,
+  Principal,
+  RetrievalReceiptId,
+  TemporalPerspective,
+} from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
 type ContextItem = {
@@ -12,6 +18,9 @@ export async function assembleContext(input: {
   store: CanonicalStore;
   principal: Principal;
   purpose: string;
+  temporal?: TemporalPerspective;
+  retrievalReceiptId?: RetrievalReceiptId;
+  policyVersionIds: readonly string[];
   items: readonly ContextItem[];
   budget: number;
 }): Promise<ReturnType<typeof buildContextSnapshot>> {
@@ -37,9 +46,11 @@ export async function assembleContext(input: {
       policyTags: [input.purpose],
     },
     purpose: input.purpose,
+    temporal: input.temporal,
+    retrievalReceiptId: input.retrievalReceiptId,
     claimIds,
     evidenceIds,
-    policyVersionIds: [],
+    policyVersionIds: input.policyVersionIds,
     items: input.items,
     budget: input.budget,
   });
