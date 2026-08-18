@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 import { localStandaloneMetadata } from './authorization.js';
 import { asPrincipalId } from './branded-ids.js';
-import { asIsoTimestamp, claimText, claimValidAt, detectClaimOverlap } from './public.js';
+import {
+  asIsoTimestamp,
+  claimText,
+  claimValidAt,
+  detectClaimOverlap,
+  validityOverlaps,
+} from './public.js';
 
 import type { Claim } from './public.js';
 
@@ -101,6 +107,23 @@ describe('bitemporal claim overlap', () => {
       },
     });
     expect(detectClaimOverlap(a, b)).toBe(false);
+  });
+
+  it('treats adjacent half-open validity windows as non-overlapping', () => {
+    const left = {
+      validFrom: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+      validTo: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+      recordedAt: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+      assertedAt: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+    };
+    const right = {
+      validFrom: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+      validTo: asIsoTimestamp('2026-03-01T00:00:00.000Z'),
+      recordedAt: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+      assertedAt: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+    };
+
+    expect(validityOverlaps(left, right)).toBe(false);
   });
 
   it('property: identical objects never conflict', () => {

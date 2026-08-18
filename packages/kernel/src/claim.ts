@@ -72,7 +72,7 @@ export function claimVisibleAt(claim: Claim, temporal: TemporalPerspective = {})
 export function validityOverlaps(left: Bitemporal, right: Bitemporal): boolean {
   const leftEnd = left.validTo ?? '9999-12-31T23:59:59.999Z';
   const rightEnd = right.validTo ?? '9999-12-31T23:59:59.999Z';
-  return left.validFrom <= rightEnd && right.validFrom <= leftEnd;
+  return left.validFrom < rightEnd && right.validFrom < leftEnd;
 }
 
 export function detectClaimOverlap(left: Claim, right: Claim): boolean {

@@ -1,4 +1,4 @@
-import type { ClaimId, ConflictId, IsoTimestamp } from './branded-ids.js';
+import type { ClaimId, ConflictId, EntityId, IsoTimestamp } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
 
@@ -13,10 +13,32 @@ export const RESOLUTION_STRATEGIES = [
 ] as const;
 export type ResolutionStrategy = (typeof RESOLUTION_STRATEGIES)[number];
 
+/**
+ * A generic rule consumed by the knowledge capability. Standards-specific
+ * packages may translate their own schema/contract concepts into this shape.
+ */
+export type CardinalityConflictRule = {
+  kind: 'max-cardinality';
+  predicate: string;
+  terms: readonly string[];
+  max: number;
+  source?: string;
+};
+
+export type ConflictCause = {
+  kind: 'max-cardinality';
+  subject: EntityId;
+  predicate: string;
+  max: number;
+  ruleSource?: string;
+};
+
 export type Conflict = ScopedMetadata & {
   id: ConflictId;
   kind: ConflictKind;
   claimIds: readonly ClaimId[];
+  cause?: ConflictCause;
+  provenance?: Provenance;
   recordedAt: IsoTimestamp;
 };
 

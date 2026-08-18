@@ -13,11 +13,12 @@ import {
   reextractFromStoredEvidence,
 } from '@kotowari/capability-ingestion';
 import {
+  detectClaimConflicts,
   findEntityResolutionCandidates,
   resolveClaimConflict,
 } from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
-import { uniquePredicates } from '@kotowari/capability-ontology';
+import { semanticContractConflictRules, uniquePredicates } from '@kotowari/capability-ontology';
 import {
   policyVersionRef,
   putPolicy,
@@ -36,9 +37,11 @@ import type {
 } from '@kotowari/capability-decision';
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
 import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';
+import type { SemanticContract } from '@kotowari/capability-ontology';
 import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { RetrievalResult } from '@kotowari/capability-retrieval';
 import type {
+  Conflict,
   ConflictResolution,
   ContextSnapshot,
   Decision,
@@ -155,7 +158,9 @@ export type KotowariApp = {
   ) => Promise<
     readonly { decisionId: string; wouldFail: boolean; violations: readonly string[] }[]
   >;
+  detectSemanticConflicts?: (contract: SemanticContract) => Promise<readonly Conflict[]>;
   resolveConflict: (input: {
+    conflictId?: string;
     claimIds: readonly [string, string, ...string[]];
     preferredClaimId: string;
     reason: string;
@@ -236,6 +241,18 @@ async function captureContext(
       evidenceIds: hit.evidenceIds,
     })),
     budget: DEFAULT_RETRIEVAL_PLAN.budget,
+  });
+}
+
+async function detectSemanticConflictsFor(
+  store: CanonicalStore,
+  principal: Principal,
+  contract: SemanticContract,
+): Promise<readonly Conflict[]> {
+  return detectClaimConflicts({
+    store,
+    principal,
+    rules: semanticContractConflictRules(contract),
   });
 }
 
@@ -377,6 +394,10 @@ export function createKotowariApp(
         tenantId: actor.tenantId,
       });
       return whatIfPolicy({ store: ports.store, principal: actor, policy });
+    },
+
+    async detectSemanticConflicts(contract) {
+      return detectSemanticConflictsFor(ports.store, await current(), contract);
     },
 
     async resolveConflict(input) {
