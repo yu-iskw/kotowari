@@ -16,13 +16,17 @@ describe('public', () => {
         '/v1/decisions',
         '/v1/decisions/{id}',
         '/v1/decisions/{id}/export',
+        '/v1/decisions/{id}/precedents',
         '/v1/decisions/{id}/prov',
+        '/v1/decisions/{id}/replay',
+        '/v1/entities/resolve',
         '/v1/evidence/{id}',
         '/v1/evidence/{id}/content',
         '/v1/health',
         '/v1/ingest',
         '/v1/knowledge/search',
         '/v1/memory',
+        '/v1/policies',
       ].sort((left, right) => left.localeCompare(right)),
     );
   });
