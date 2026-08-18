@@ -9,6 +9,7 @@ import {
   buildEntity,
   buildEvidenceInserted,
   localStandaloneMetadata,
+  newId,
 } from '../contracts.js';
 
 import type { CanonicalStore } from '../ports.js';
@@ -163,6 +164,84 @@ export function canonicalStoreComplianceTests(
       expect(await store.getClaim(claim.id)).toEqual(claim);
       expect(await store.getContextSnapshot(snapshot.id)).toEqual(snapshot);
       expect(await store.getDecision(decision.id)).toEqual(decision);
+    });
+
+    it('preserves prior claim versions for knownAt queries after retraction', async () => {
+      const store = await factory();
+      const metadata = localStandaloneMetadata();
+      const entity = buildEntity({ metadata, labels: ['Temporal'], provenance: provenance() });
+      const { evidence } = buildEvidenceInserted({
+        metadata,
+        uri: 'file://temporal.txt',
+        contentHash: 'sha256:temporal',
+        mimeType: COMPLIANCE_MIME,
+        provenance: provenance(),
+      });
+      const { claim } = buildClaimAsserted({
+        metadata,
+        subject: entity.id,
+        predicate: 'status',
+        object: { kind: 'literal', value: 'active' },
+        validFrom: asIsoTimestamp(COMPLIANCE_VALID_FROM),
+        assertedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+        confidence: 1,
+        evidenceIds: [evidence.id],
+        provenance: provenance(),
+      });
+      const retractedAt = asIsoTimestamp(
+        new Date(Date.parse(claim.bitemporal.recordedAt) + 1_000).toISOString(),
+      );
+      const retracted = {
+        ...claim,
+        status: 'retracted' as const,
+        bitemporal: { ...claim.bitemporal, recordedAt: retractedAt },
+      };
+
+      await store.assertClaim(claim);
+      await store.retractClaim(retracted);
+
+      const beforeRetraction = await store.listClaims({
+        tenantId: metadata.tenantId,
+        temporal: {
+          validAt: '2024-02-01T00:00:00.000Z',
+          knownAt: claim.bitemporal.recordedAt,
+        },
+      });
+      const afterRetraction = await store.listClaims({
+        tenantId: metadata.tenantId,
+        temporal: {
+          validAt: '2024-02-01T00:00:00.000Z',
+          knownAt: retractedAt,
+        },
+      });
+      const current = await store.listClaims({ tenantId: metadata.tenantId });
+
+      expect(beforeRetraction.some((item) => item.id === claim.id)).toBe(true);
+      expect(afterRetraction.some((item) => item.id === claim.id)).toBe(false);
+      expect(current.some((item) => item.id === claim.id)).toBe(false);
+    });
+
+    it('round-trips immutable retrieval receipts', async () => {
+      const store = await factory();
+      const metadata = localStandaloneMetadata();
+      const receipt = {
+        ...metadata,
+        id: newId('RetrievalReceiptId'),
+        queryHash: 'sha256:test-query',
+        temporal: {
+          validAt: '2024-02-01T00:00:00.000Z',
+          knownAt: '2024-03-12T00:00:00.000Z',
+        },
+        planVersion: 'compliance-v1',
+        selected: [],
+        omissions: [],
+        executedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+        provenance: provenance(),
+      };
+
+      await store.putRetrievalReceipt(receipt);
+
+      expect(await store.getRetrievalReceipt(receipt.id)).toEqual(receipt);
     });
 
     it('ADR-0002: clearing embeddings then re-put does not change claim ids', async () => {
