@@ -34,11 +34,11 @@ describe('policy versions', () => {
     expect(isPolicyApplicable(second, { purpose: 'release', classification: 'internal' })).toBe(
       true,
     );
-    expect(
-      isPolicyApplicable(second, { purpose: 'release', classification: 'confidential' }),
-    ).toBe(false);
-    expect(isPolicyApplicable(second, { purpose: 'underwriting', classification: 'internal' })).toBe(
+    expect(isPolicyApplicable(second, { purpose: 'release', classification: 'confidential' })).toBe(
       false,
     );
+    expect(
+      isPolicyApplicable(second, { purpose: 'underwriting', classification: 'internal' }),
+    ).toBe(false);
   });
 });

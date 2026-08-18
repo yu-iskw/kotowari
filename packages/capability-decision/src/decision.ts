@@ -208,9 +208,7 @@ async function loadPolicyVersions(
   for (const ref of refsFromSnapshot(snapshot)) {
     const match = records.find((record) => {
       const candidate = policyVersionRef(record);
-      return (
-        candidate.policyVersionId === ref.policyVersionId && candidate.version === ref.version
-      );
+      return candidate.policyVersionId === ref.policyVersionId && candidate.version === ref.version;
     });
     if (match === undefined) {
       missing.push(`policy:${ref.policyVersionId}@${String(ref.version)}`);
@@ -410,7 +408,10 @@ function eventTouchesDecisionContext(
   if ('claimId' in event && decision.inputContextSnapshot.claimIds.includes(event.claimId)) {
     return true;
   }
-  if ('evidenceId' in event && decision.inputContextSnapshot.evidenceIds.includes(event.evidenceId)) {
+  if (
+    'evidenceId' in event &&
+    decision.inputContextSnapshot.evidenceIds.includes(event.evidenceId)
+  ) {
     return true;
   }
   return false;

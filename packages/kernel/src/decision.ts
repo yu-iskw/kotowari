@@ -43,11 +43,7 @@ export type Decision = ScopedMetadata & {
 };
 
 export type DecisionRelationKind =
-  | 'depends_on'
-  | 'supersedes'
-  | 'precedent_for'
-  | 'caused'
-  | 'informed_by';
+  'depends_on' | 'supersedes' | 'precedent_for' | 'caused' | 'informed_by';
 
 export type DecisionRelation = ScopedMetadata & {
   id: DecisionRelationId;
