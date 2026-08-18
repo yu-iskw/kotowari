@@ -71,3 +71,5 @@ jobs:
           git add -u
           git commit -m "style: apply prettier to accountability changes"
           git push
+
+# Temporary branch-local formatter; removed before merge.
