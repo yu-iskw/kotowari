@@ -24,13 +24,13 @@ class RecordingSqlClient implements SqlClient {
   ): Promise<T[]> {
     this.calls.push({ kind: 'query', sql, ...(params === undefined ? {} : { params }) });
     if (sql.includes('SELECT COUNT(*) AS count')) {
-      return [{ count: '0' }] as T[];
+      return [{ count: '0' }] as unknown as T[];
     }
     if (sql.includes('1 - (vector_embedding')) {
-      return [{ claim_id: 'claim-alpha', score: 0.99 }] as T[];
+      return [{ claim_id: 'claim-alpha', score: 0.99 }] as unknown as T[];
     }
     if (sql.includes('FROM pg_indexes')) {
-      return [{ indexname: 'retrieval_projection_vector_hnsw' }] as T[];
+      return [{ indexname: 'retrieval_projection_vector_hnsw' }] as unknown as T[];
     }
     return [];
   }
