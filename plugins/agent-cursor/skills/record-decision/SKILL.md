@@ -5,7 +5,7 @@ description: Record an explicit decision with selectedOutcome, rationale, and a 
 
 # Record decision
 
-`record_decision` is intentionally exposed by the dedicated `decision-write` MCP profile, not the read-only `retrieve` profile. The Cursor pack connects both capability-scoped servers; enterprise deployments can grant their OAuth scopes independently.
+`record_decision` is part of the default standalone `personal` MCP preset, so an individual user gets decision recording from the same local Kotowari MCP server used for knowledge and memory. Enterprise deployments continue to expose decision writes through the independently scoped `decision-write` HTTP profile.
 
 ## When to record
 
