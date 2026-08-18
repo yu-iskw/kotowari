@@ -7,7 +7,7 @@ import { classificationRank } from './scoped-metadata.js';
 import type { ClaimId, EvidenceId, RetrievalReceiptId } from './branded-ids.js';
 import type { Claim, ClaimStatus } from './claim.js';
 import type { Conflict, ConflictResolution } from './conflict.js';
-import type { ContextSnapshot, PolicyEvaluation } from './context.js';
+import type { ContextSnapshot, PolicyEvaluation, PolicyVersionRef } from './context.js';
 import type {
   AssertClaimInput,
   EvaluatePolicyInput,
@@ -339,10 +339,16 @@ export function buildContextSnapshot(input: {
   retrievalReceiptId?: RetrievalReceiptId;
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
-  policyVersionIds: readonly string[];
+  policyVersions?: readonly PolicyVersionRef[];
+  /** @deprecated Compatibility input for pre-typed policy snapshots. */
+  policyVersionIds?: readonly string[];
   items: ContextSnapshot['items'];
   budget: number;
 }): ContextSnapshot {
+  const policyVersions = input.policyVersions ?? [];
+  const policyVersionIds =
+    input.policyVersionIds ??
+    policyVersions.map((ref) => `${ref.policyVersionId}@${String(ref.version)}`);
   return {
     ...input.metadata,
     id: newId('ContextId'),
@@ -355,7 +361,8 @@ export function buildContextSnapshot(input: {
     namespaceIds: [input.metadata.namespaceId],
     claimIds: input.claimIds,
     evidenceIds: input.evidenceIds,
-    policyVersionIds: input.policyVersionIds,
+    policyVersions,
+    ...(policyVersionIds.length === 0 ? {} : { policyVersionIds }),
     items: input.items,
     budget: input.budget,
   };
