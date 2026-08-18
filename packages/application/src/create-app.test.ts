@@ -92,13 +92,14 @@ describe('S3 decision persistence', () => {
         mimeType: 'text/markdown',
       },
     ]);
+    const temporal = {
+      validAt: '2026-08-18T23:59:59.000Z',
+      knownAt: '2026-08-18T23:59:59.000Z',
+    };
     const decision = await app.recordDecision({
       purpose: 'library-choice',
       query: 'Vendor X',
-      temporal: {
-        validAt: '2026-08-18T00:00:00.000Z',
-        knownAt: '2026-08-18T00:00:00.000Z',
-      },
+      temporal,
       selectedOutcome: 'use_vendor_x',
       confidence: 0.8,
       rationale: 'HIPAA workload needs a sourced processor',
@@ -107,10 +108,7 @@ describe('S3 decision persistence', () => {
     expect(decision.consideredEvidenceIds.length).toBeGreaterThan(0);
     expect(decision.inputContextSnapshot.retrievalReceiptId).toBeDefined();
     expect(decision.inputContextSnapshot.policyVersionIds.length).toBeGreaterThan(0);
-    expect(decision.inputContextSnapshot.temporal).toEqual({
-      validAt: '2026-08-18T00:00:00.000Z',
-      knownAt: '2026-08-18T00:00:00.000Z',
-    });
+    expect(decision.inputContextSnapshot.temporal).toEqual(temporal);
     const receiptId = decision.inputContextSnapshot.retrievalReceiptId;
     expect(receiptId).toBeDefined();
     if (receiptId !== undefined) {
