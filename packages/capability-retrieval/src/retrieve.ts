@@ -9,6 +9,8 @@ import {
   nowIso,
 } from '@kotowari/kernel';
 
+import { reciprocalRankFuse } from './fusion.js';
+
 import type {
   AuthContext,
   AuthorizationReceipt,
@@ -19,7 +21,13 @@ import type {
   RetrievalReceipt,
   TemporalPerspective,
 } from '@kotowari/kernel';
-import type { CanonicalStore, EmbeddingProvider, RerankerProvider } from '@kotowari/plugin-sdk';
+import type {
+  CanonicalStore,
+  EmbeddingProvider,
+  RerankerProvider,
+  RetrievalCandidateSource,
+  RetrievalCandidateStrategy,
+} from '@kotowari/plugin-sdk';
 
 export type RetrievalPlan = {
   candidates: readonly (
@@ -30,6 +38,7 @@ export type RetrievalPlan = {
   rerank: string;
   budget: number;
   explain: boolean;
+  fusion?: { strategy: 'rrf'; k: number };
 };
 
 export const DEFAULT_RETRIEVAL_PLAN: RetrievalPlan = {
@@ -41,9 +50,10 @@ export const DEFAULT_RETRIEVAL_PLAN: RetrievalPlan = {
   rerank: 'none',
   budget: 20,
   explain: true,
+  fusion: { strategy: 'rrf', k: 60 },
 };
 
-export const RETRIEVAL_PLAN_VERSION = 'retrieval-v1' as const;
+export const RETRIEVAL_PLAN_VERSION = 'retrieval-v2' as const;
 
 export type RetrievalHit = {
   claimId: string;
@@ -146,7 +156,7 @@ function hitFromClaim(
     score,
     scoreComponents,
     evidenceIds: claim.evidenceIds,
-    graphRoute,
+    ...(graphRoute === undefined ? {} : { graphRoute }),
     policy: { passed: true },
     whySelected: explainHit(scoreComponents),
     claim,
@@ -262,32 +272,24 @@ function graphHops(plan: RetrievalPlan): number {
   return plan.candidates.find(isGraphCandidate)?.hops ?? 0;
 }
 
-export async function retrieve(input: {
+async function fallbackCandidates(input: {
   store: CanonicalStore;
   embeddings: EmbeddingProvider;
-  reranker?: RerankerProvider;
   principal: Principal;
-  authz: AuthContext;
   query: string;
-  purpose?: string;
-  temporal?: TemporalPerspective;
-  /** @deprecated Use temporal.validAt. */
-  asOf?: string;
-  plan?: RetrievalPlan;
-}): Promise<RetrievalResult> {
-  const plan = input.plan ?? DEFAULT_RETRIEVAL_PLAN;
-  const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
+  temporal: TemporalPerspective;
+  plan: RetrievalPlan;
+}): Promise<Map<string, RetrievalHit>> {
   const filter = {
     tenantId: input.principal.tenantId,
     namespaceId: input.principal.namespaceIds[0],
-    temporal,
+    temporal: input.temporal,
   };
-  const [claims, embeddings, queryEmbedding, resolutions, lexicalClaims] = await Promise.all([
+  const [claims, embeddings, queryEmbedding, lexicalClaims] = await Promise.all([
     input.store.listClaims(filter),
     input.store.listEmbeddings(),
     input.embeddings.embed({ texts: [input.query] }),
-    input.store.listResolutions({ tenantId: input.principal.tenantId }),
-    input.store.searchLexical({ ...filter, query: input.query, limit: lexicalLimit(plan) }),
+    input.store.searchLexical({ ...filter, query: input.query, limit: lexicalLimit(input.plan) }),
   ]);
   const embeddingByClaim = new Map(embeddings.map((row) => [row.claimId, row.vector]));
   const queryTokens = tokenize(input.query);
@@ -308,7 +310,7 @@ export async function retrieve(input: {
     }))
     .filter((row) => row.vector >= 0.15)
     .sort((left, right) => right.vector - left.vector)
-    .slice(0, vectorLimit(plan));
+    .slice(0, vectorLimit(input.plan));
   for (const row of vectorRanked) {
     const existing = scored.get(row.claim.id);
     const lexical = existing?.scoreComponents.lexical ?? 0;
@@ -321,10 +323,140 @@ export async function retrieve(input: {
     );
   }
 
-  const hops = graphHops(plan);
+  const hops = graphHops(input.plan);
   if (hops > 0) {
     expandGraphNeighborhood(claims, scored, hops);
   }
+  return scored;
+}
+
+function candidateLimit(plan: RetrievalPlan, strategy: RetrievalCandidateStrategy): number {
+  if (strategy === 'lexical') {
+    return lexicalLimit(plan);
+  }
+  if (strategy === 'vector') {
+    return vectorLimit(plan);
+  }
+  return Math.max(plan.budget * 2, 20);
+}
+
+async function indexedCandidates(input: {
+  source: RetrievalCandidateSource;
+  store: CanonicalStore;
+  embeddings: EmbeddingProvider;
+  principal: Principal;
+  query: string;
+  temporal: TemporalPerspective;
+  plan: RetrievalPlan;
+}): Promise<Map<string, RetrievalHit>> {
+  const namespaceId = input.principal.namespaceIds[0];
+  const queryEmbedding = await input.embeddings.embed({ texts: [input.query] });
+  const queryVector = queryEmbedding.vectors[0] ?? [];
+  const base = {
+    tenantId: input.principal.tenantId,
+    ...(namespaceId === undefined ? {} : { namespaceId }),
+    temporal: input.temporal,
+    query: input.query,
+  };
+  const primaryPlans = input.plan.candidates.filter((candidate) => candidate.strategy !== 'graph');
+  const primaryLists = await Promise.all(
+    primaryPlans.map(async (candidate) => ({
+      strategy: candidate.strategy,
+      candidates: await input.source.search({
+        ...base,
+        strategy: candidate.strategy,
+        limit: candidateLimit(input.plan, candidate.strategy),
+        ...(candidate.strategy === 'vector' ? { queryVector } : {}),
+      }),
+    })),
+  );
+  const seedClaimIds = primaryLists.flatMap((list) => list.candidates.map((item) => item.claimId));
+  const hops = graphHops(input.plan);
+  const graphList =
+    hops === 0 || seedClaimIds.length === 0
+      ? []
+      : [
+          {
+            strategy: 'graph' as const,
+            candidates: await input.source.search({
+              ...base,
+              strategy: 'graph',
+              limit: candidateLimit(input.plan, 'graph'),
+              seedClaimIds,
+              hops,
+            }),
+          },
+        ];
+  const fused = reciprocalRankFuse(
+    [...primaryLists, ...graphList],
+    input.plan.fusion?.k ?? DEFAULT_RETRIEVAL_PLAN.fusion?.k,
+  );
+  const hydrated = await Promise.all(
+    fused.map(async (candidate) => ({
+      candidate,
+      claim: await input.store.getClaim(candidate.claimId),
+    })),
+  );
+  const scored = new Map<string, RetrievalHit>();
+  for (const item of hydrated) {
+    if (item.claim === undefined) {
+      continue;
+    }
+    const components = item.candidate.scoreComponents;
+    scored.set(
+      item.claim.id,
+      hitFromClaim(
+        item.claim,
+        item.candidate.score,
+        {
+          ...(components.lexical === undefined ? {} : { lexical: components.lexical }),
+          ...(components.vector === undefined ? {} : { vector: components.vector }),
+          ...(components.graph === undefined ? {} : { graph: components.graph }),
+        },
+        item.candidate.graphRoute,
+      ),
+    );
+  }
+  return scored;
+}
+
+export async function retrieve(input: {
+  store: CanonicalStore;
+  embeddings: EmbeddingProvider;
+  candidateSource?: RetrievalCandidateSource;
+  reranker?: RerankerProvider;
+  principal: Principal;
+  authz: AuthContext;
+  query: string;
+  purpose?: string;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
+  asOf?: string;
+  plan?: RetrievalPlan;
+}): Promise<RetrievalResult> {
+  const plan = input.plan ?? DEFAULT_RETRIEVAL_PLAN;
+  const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
+  const [scored, resolutions] = await Promise.all([
+    input.candidateSource === undefined
+      ? fallbackCandidates({
+          store: input.store,
+          embeddings: input.embeddings,
+          principal: input.principal,
+          query: input.query,
+          temporal,
+          plan,
+        })
+      : indexedCandidates({
+          source: input.candidateSource,
+          store: input.store,
+          embeddings: input.embeddings,
+          principal: input.principal,
+          query: input.query,
+          temporal,
+          plan,
+        }),
+    input.store.listResolutions({ tenantId: input.principal.tenantId }),
+  ]);
 
   const { allowed, omittedByClass, receipts } = authorizeHits({
     scored,
@@ -375,7 +507,7 @@ export async function retrieve(input: {
     authorizationReceipts: receipts,
     executedAt: nowIso(),
     provenance: compactProvenance({
-      source: 'retrieval',
+      source: input.candidateSource?.id ?? 'retrieval',
       actor: input.principal.id,
       process: 'knowledge.retrieve',
     }),

@@ -63,6 +63,7 @@ import type {
   IdentityProvider,
   Queue,
   RerankerProvider,
+  RetrievalCandidateSource,
 } from '@kotowari/plugin-sdk';
 
 function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
@@ -105,6 +106,7 @@ export type KotowariPorts = {
   extraction: ExtractionProvider;
   embeddings: EmbeddingProvider;
   reranker?: RerankerProvider;
+  retrievalCandidateSource?: RetrievalCandidateSource;
 };
 
 export type KotowariAppOptions = {
@@ -208,6 +210,9 @@ async function runRetrieve(
     store: ports.store,
     embeddings: ports.embeddings,
     reranker: ports.reranker,
+    ...(ports.retrievalCandidateSource === undefined
+      ? {}
+      : { candidateSource: ports.retrievalCandidateSource }),
     principal: actor,
     authz: { tenantId: actor.tenantId, purpose: input.purpose },
     query: input.query,

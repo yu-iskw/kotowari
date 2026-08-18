@@ -58,6 +58,33 @@ export type ClaimReadFilter = {
   asOf?: string;
 };
 
+export type RetrievalCandidateStrategy = 'lexical' | 'vector' | 'graph';
+
+export type RetrievalCandidate = {
+  claimId: ClaimId;
+  /** Source-native score for observability only; rank drives fusion. */
+  score?: number;
+  graphRoute?: readonly string[];
+};
+
+export type RetrievalCandidateRequest = ClaimReadFilter & {
+  strategy: RetrievalCandidateStrategy;
+  query: string;
+  limit: number;
+  queryVector?: readonly number[];
+  seedClaimIds?: readonly ClaimId[];
+  hops?: number;
+};
+
+/**
+ * Read-only projection/index boundary for scalable retrieval.
+ * Implementations return candidate claim IDs; CanonicalStore remains authoritative.
+ */
+export interface RetrievalCandidateSource {
+  readonly id: string;
+  search(request: RetrievalCandidateRequest): Promise<readonly RetrievalCandidate[]>;
+}
+
 export interface CanonicalStore {
   withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T>;
   putEntity(entity: Entity): Promise<void>;
