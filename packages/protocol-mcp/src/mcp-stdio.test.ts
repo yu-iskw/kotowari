@@ -22,6 +22,7 @@ function fakeApp(): KotowariApp {
       hits: [],
       omitted: [],
       plan: { candidates: [], rerank: 'none', budget: 20, explain: true },
+      receipt: {} as never,
     }),
     buildContext: async () => ({}) as never,
     recordDecision: async () => ({ id: 'd1' }) as never,
