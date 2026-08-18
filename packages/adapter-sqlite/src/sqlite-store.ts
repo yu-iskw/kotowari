@@ -424,8 +424,7 @@ class SqliteCanonicalStore implements CanonicalStore {
     const current = this.stmt(
       'SELECT tenant_id, namespace_id, payload FROM records WHERE collection = ? AND id = ?',
     ).get(collection, record.id) as
-      | { tenant_id: string; namespace_id: string | null; payload: string }
-      | undefined;
+      { tenant_id: string; namespace_id: string | null; payload: string } | undefined;
     if (current !== undefined) {
       this.stmt(
         'INSERT INTO record_history (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
