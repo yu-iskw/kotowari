@@ -1,13 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/server';
 
-import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
-import { mcpOperation, type McpOperationRisk } from './operation-registry.js';
+import { mcpOperation, type McpOperationName, type McpOperationRisk } from './operation-registry.js';
 
 import type { KotowariApp } from '@kotowari/application';
 
 export type McpAuditEvent = {
   event: 'mcp.tool';
-  profile: McpProfile;
+  surface: string;
   tool: string;
   action: string;
   risk: McpOperationRisk;
@@ -20,7 +19,8 @@ export type McpAuditSink = (event: McpAuditEvent) => void | Promise<void>;
 
 export type CreateKotowariMcpServerInput = {
   app: KotowariApp;
-  profile: McpProfile;
+  name: string;
+  operations: readonly McpOperationName[];
   enforceScopes?: boolean;
   scopes?: readonly string[];
   clientId?: string;
@@ -43,10 +43,9 @@ function resultText(output: unknown): string {
 }
 
 export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): McpServer {
-  const server = new McpServer({ name: `kotowari-${input.profile}`, version: '0.1.0' });
-  const profile = MCP_PROFILE_DEFINITIONS[input.profile];
+  const server = new McpServer({ name: `kotowari-${input.name}`, version: '0.1.0' });
 
-  for (const toolName of profile.tools) {
+  for (const toolName of input.operations) {
     const operation = mcpOperation(toolName);
     server.registerTool(
       operation.name,
@@ -76,7 +75,7 @@ export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): Mc
         ) {
           await input.audit?.({
             event: 'mcp.tool',
-            profile: input.profile,
+            surface: input.name,
             tool: operation.name,
             action: operation.action,
             risk: operation.risk,
@@ -99,7 +98,7 @@ export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): Mc
           const output = await operation.execute(input.app, rawInput);
           await input.audit?.({
             event: 'mcp.tool',
-            profile: input.profile,
+            surface: input.name,
             tool: operation.name,
             action: operation.action,
             risk: operation.risk,
@@ -114,7 +113,7 @@ export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): Mc
         } catch {
           await input.audit?.({
             event: 'mcp.tool',
-            profile: input.profile,
+            surface: input.name,
             tool: operation.name,
             action: operation.action,
             risk: operation.risk,
