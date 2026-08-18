@@ -129,7 +129,13 @@ describe('semantic conflict detection v1', () => {
       value: 'Different Later Name',
       validFrom: '2026-02-01T00:00:00.000Z',
     });
-    await putClaim({ store, principal, subject: company, value: 'Different Later Name' });
+    await putClaim({
+      store,
+      principal,
+      subject: company,
+      value: 'Different Later Name',
+      validFrom: '2026-02-01T00:00:00.000Z',
+    });
 
     expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
       [],
