@@ -3,11 +3,11 @@ export const MCP_PROFILES = ['retrieve', 'knowledge', 'memory', 'ingestion', 'ad
 export type McpProfile = (typeof MCP_PROFILES)[number];
 
 export const PROFILE_TOOLS: Record<McpProfile, readonly string[]> = {
-  retrieve: ['search_knowledge', 'search_memory', 'record_decision'],
+  retrieve: ['search_knowledge', 'search_memory', 'record_decision', 'replay_decision'],
   knowledge: ['search_knowledge', 'record_decision', 'resolve_conflict'],
   memory: ['search_memory', 'record_memory'],
   ingestion: ['ingest_path'],
-  admin: ['list_policies', 'what_if_policy', 'export_prov'],
+  admin: ['list_policies', 'what_if_policy', 'replay_decision', 'audit_decision', 'export_prov'],
 };
 
 export function isMcpProfile(value: string): value is McpProfile {
