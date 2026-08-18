@@ -23,7 +23,7 @@ function tempDocs(): string {
 }
 
 describe('S1 S4 MCP 2026-07-28 stdio', () => {
-  it('S12 retrieve profile is modern-only and strictly read-only', async () => {
+  it('S12 standalone defaults to the useful personal preset', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
     const stdin = new PassThrough();
     const stdout = new PassThrough();
@@ -32,7 +32,7 @@ describe('S1 S4 MCP 2026-07-28 stdio', () => {
       chunks.push(chunk);
     });
     const running = runKotowariMcpStdio({
-      argv: ['--profile', 'retrieve'],
+      argv: [],
       dataDir,
       stdin,
       stdout,
@@ -67,7 +67,14 @@ describe('S1 S4 MCP 2026-07-28 stdio', () => {
 
     const toolsMessage = messages.find((message) => message.id === 'tools');
     const tools = (toolsMessage?.result?.['tools'] ?? []) as { name: string }[];
-    expect(tools.map((tool) => tool.name)).toEqual(['search_knowledge', 'search_memory']);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'search_knowledge',
+      'search_memory',
+      'record_memory',
+      'record_decision',
+      'replay_decision',
+      'audit_decision',
+    ]);
   });
 });
 
