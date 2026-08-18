@@ -115,75 +115,86 @@ function duplicateIssues(
   }));
 }
 
+function unknownParentIssues(
+  contract: SemanticContract,
+  known: ReadonlySet<string>,
+): readonly SemanticContractIssue[] {
+  return contract.entityTypes.flatMap((entityType, index) =>
+    (entityType.extends ?? [])
+      .filter((parent) => !known.has(parent))
+      .map((parent) => ({
+        code: 'UNKNOWN_PARENT_ENTITY_TYPE' as const,
+        path: `entityTypes[${String(index)}].extends`,
+        message: `Unknown parent entity type: ${parent}`,
+      })),
+  );
+}
+
+function unknownDomainIssues(
+  contract: SemanticContract,
+  known: ReadonlySet<string>,
+): readonly SemanticContractIssue[] {
+  return contract.predicates.flatMap((predicate, index) =>
+    (predicate.domain ?? [])
+      .filter((entityTypeId) => !known.has(entityTypeId))
+      .map((entityTypeId) => ({
+        code: 'UNKNOWN_DOMAIN_ENTITY_TYPE' as const,
+        path: `predicates[${String(index)}].domain`,
+        message: `Unknown domain entity type: ${entityTypeId}`,
+      })),
+  );
+}
+
+function unknownRangeIssues(
+  contract: SemanticContract,
+  known: ReadonlySet<string>,
+): readonly SemanticContractIssue[] {
+  return contract.predicates.flatMap((predicate, index) => {
+    if (predicate.range.kind !== 'entity') {
+      return [];
+    }
+    return (predicate.range.entityTypeIds ?? [])
+      .filter((entityTypeId) => !known.has(entityTypeId))
+      .map((entityTypeId) => ({
+        code: 'UNKNOWN_RANGE_ENTITY_TYPE' as const,
+        path: `predicates[${String(index)}].range.entityTypeIds`,
+        message: `Unknown range entity type: ${entityTypeId}`,
+      }));
+  });
+}
+
 function entityTypeReferenceIssues(contract: SemanticContract): readonly SemanticContractIssue[] {
   const known = new Set(contract.entityTypes.map((item) => item.id));
-  const issues: SemanticContractIssue[] = [];
-  for (const [index, entityType] of contract.entityTypes.entries()) {
-    for (const parent of entityType.extends ?? []) {
-      if (!known.has(parent)) {
-        issues.push({
-          code: 'UNKNOWN_PARENT_ENTITY_TYPE',
-          path: `entityTypes[${String(index)}].extends`,
-          message: `Unknown parent entity type: ${parent}`,
-        });
-      }
-    }
+  return [
+    ...unknownParentIssues(contract, known),
+    ...unknownDomainIssues(contract, known),
+    ...unknownRangeIssues(contract, known),
+  ];
+}
+
+function hasEntityTypeCycle(
+  parents: ReadonlyMap<string, readonly string[]>,
+  id: string,
+  visiting: Set<string>,
+): boolean {
+  if (visiting.has(id)) {
+    return true;
   }
-  for (const [index, predicate] of contract.predicates.entries()) {
-    for (const entityTypeId of predicate.domain ?? []) {
-      if (!known.has(entityTypeId)) {
-        issues.push({
-          code: 'UNKNOWN_DOMAIN_ENTITY_TYPE',
-          path: `predicates[${String(index)}].domain`,
-          message: `Unknown domain entity type: ${entityTypeId}`,
-        });
-      }
-    }
-    if (predicate.range.kind === 'entity') {
-      for (const entityTypeId of predicate.range.entityTypeIds ?? []) {
-        if (!known.has(entityTypeId)) {
-          issues.push({
-            code: 'UNKNOWN_RANGE_ENTITY_TYPE',
-            path: `predicates[${String(index)}].range.entityTypeIds`,
-            message: `Unknown range entity type: ${entityTypeId}`,
-          });
-        }
-      }
-    }
-  }
-  return issues;
+  visiting.add(id);
+  const found = (parents.get(id) ?? []).some((parent) => hasEntityTypeCycle(parents, parent, visiting));
+  visiting.delete(id);
+  return found;
 }
 
 function entityTypeCycleIssues(contract: SemanticContract): readonly SemanticContractIssue[] {
   const parents = new Map(contract.entityTypes.map((item) => [item.id, item.extends ?? []] as const));
-  const issues: SemanticContractIssue[] = [];
-  for (const entityType of contract.entityTypes) {
-    const visiting = new Set<string>();
-    let found = false;
-    const visit = (id: string): void => {
-      if (found) {
-        return;
-      }
-      if (visiting.has(id)) {
-        found = true;
-        return;
-      }
-      visiting.add(id);
-      for (const parent of parents.get(id) ?? []) {
-        visit(parent);
-      }
-      visiting.delete(id);
-    };
-    visit(entityType.id);
-    if (found) {
-      issues.push({
-        code: 'ENTITY_TYPE_CYCLE',
-        path: `entityTypes.${entityType.id}.extends`,
-        message: `Entity type inheritance must be acyclic: ${entityType.id}`,
-      });
-    }
-  }
-  return issues;
+  return contract.entityTypes
+    .filter((entityType) => hasEntityTypeCycle(parents, entityType.id, new Set()))
+    .map((entityType) => ({
+      code: 'ENTITY_TYPE_CYCLE' as const,
+      path: `entityTypes.${entityType.id}.extends`,
+      message: `Entity type inheritance must be acyclic: ${entityType.id}`,
+    }));
 }
 
 function predicateConstraintIssues(contract: SemanticContract): readonly SemanticContractIssue[] {
@@ -191,7 +202,11 @@ function predicateConstraintIssues(contract: SemanticContract): readonly Semanti
   for (const [index, predicate] of contract.predicates.entries()) {
     const min = predicate.cardinality?.min ?? 0;
     const max = predicate.cardinality?.max;
-    if (min < 0 || !Number.isInteger(min) || (max !== undefined && (max < min || !Number.isInteger(max)))) {
+    if (
+      min < 0 ||
+      !Number.isInteger(min) ||
+      (max !== undefined && (max < min || !Number.isInteger(max)))
+    ) {
       issues.push({
         code: 'INVALID_CARDINALITY',
         path: `predicates[${String(index)}].cardinality`,
