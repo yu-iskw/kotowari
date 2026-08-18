@@ -6,11 +6,11 @@ import {
   requireBearerAuth,
 } from '@modelcontextprotocol/server';
 
-import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
 import {
   MCP_STANDALONE_PRESET_TOOLS,
   type McpStandalonePreset,
 } from './mcp-presets.js';
+import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
 import { createKotowariMcpServer, type McpAuditSink } from './mcp-server.js';
 
 import type { KotowariApp } from '@kotowari/application';
