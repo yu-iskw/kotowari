@@ -15,6 +15,7 @@ describe('public', () => {
         '/v1/context/build',
         '/v1/decisions',
         '/v1/decisions/{id}',
+        '/v1/decisions/{id}/audit',
         '/v1/decisions/{id}/export',
         '/v1/decisions/{id}/precedents',
         '/v1/decisions/{id}/prov',

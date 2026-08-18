@@ -5,6 +5,7 @@ import type {
   IsoTimestamp,
   NamespaceId,
   PolicyId,
+  PolicyVersionId,
   RetrievalReceiptId,
 } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
@@ -18,7 +19,7 @@ export type ContextSliceItem = {
 
 export type PolicyVersionRef = {
   policyId: PolicyId;
-  policyVersionId: PolicyId;
+  policyVersionId: PolicyVersionId;
   version: number;
 };
 
@@ -31,8 +32,9 @@ export type ContextSnapshot = ScopedMetadata & {
   namespaceIds: readonly NamespaceId[];
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
-  policyVersionIds: readonly string[];
-  policyVersions?: readonly PolicyVersionRef[];
+  policyVersions: readonly PolicyVersionRef[];
+  /** @deprecated Compatibility field for snapshots created before typed policy version refs. */
+  policyVersionIds?: readonly string[];
   items: readonly ContextSliceItem[];
   budget: number;
 };
@@ -67,6 +69,7 @@ export type PolicyApplicability = {
 
 export type PolicyVersion = PolicyRecord & {
   policyId: PolicyId;
+  versionId: PolicyVersionId;
   status: PolicyStatus;
   effectiveFrom?: IsoTimestamp;
   effectiveTo?: IsoTimestamp;

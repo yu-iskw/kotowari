@@ -7,6 +7,7 @@ export const kotowariAliases: Record<string, string> = {
   '@kotowari/kernel': path.join(root, 'packages/kernel/src/public.ts'),
   '@kotowari/plugin-sdk': path.join(root, 'packages/plugin-sdk/src/public.ts'),
   '@kotowari/application': path.join(root, 'packages/application/src/public.ts'),
+  '@kotowari/capability-decision': path.join(root, 'packages/capability-decision/src/public.ts'),
   '@kotowari/capability-knowledge': path.join(root, 'packages/capability-knowledge/src/public.ts'),
   '@kotowari/capability-context': path.join(root, 'packages/capability-context/src/public.ts'),
   '@kotowari/capability-memory': path.join(root, 'packages/capability-memory/src/public.ts'),

@@ -92,6 +92,11 @@ describe('S3 decision persistence', () => {
         mimeType: 'text/markdown',
       },
     ]);
+    await app.putPolicy({
+      name: 'library-choice-policy',
+      version: 1,
+      rules: { allowedOutcomes: ['use_vendor_x'] },
+    });
     const temporal = {
       validAt: '2026-08-18T23:59:59.000Z',
       knownAt: '2026-08-18T23:59:59.000Z',
@@ -107,7 +112,7 @@ describe('S3 decision persistence', () => {
     expect(decision.inputContextSnapshot.purpose).toBe('library-choice');
     expect(decision.consideredEvidenceIds.length).toBeGreaterThan(0);
     expect(decision.inputContextSnapshot.retrievalReceiptId).toBeDefined();
-    expect(decision.inputContextSnapshot.policyVersionIds.length).toBeGreaterThan(0);
+    expect(decision.inputContextSnapshot.policyVersions.length).toBeGreaterThan(0);
     expect(decision.inputContextSnapshot.temporal).toEqual(temporal);
     const receiptId = decision.inputContextSnapshot.retrievalReceiptId;
     expect(receiptId).toBeDefined();
@@ -186,6 +191,7 @@ describe('S2 evidence locker and S8 audit export', () => {
         mimeType: 'text/markdown',
       },
     ]);
+    await app.putPolicy({ name: 'audit-policy', version: 1, rules: {} });
     const decision = await app.recordDecision({
       purpose: 'audit',
       query: 'Vendor X',

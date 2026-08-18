@@ -7,7 +7,7 @@ export const PROFILE_TOOLS: Record<McpProfile, readonly string[]> = {
   knowledge: ['search_knowledge', 'record_decision', 'resolve_conflict'],
   memory: ['search_memory', 'record_memory'],
   ingestion: ['ingest_path'],
-  admin: ['list_policies', 'what_if_policy', 'export_prov'],
+  admin: ['list_policies', 'what_if_policy', 'replay_decision', 'audit_decision', 'export_prov'],
 };
 
 export function isMcpProfile(value: string): value is McpProfile {

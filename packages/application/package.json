@@ -20,6 +20,7 @@
   "dependencies": {
     "@kotowari/kernel": "workspace:*",
     "@kotowari/plugin-sdk": "workspace:*",
+    "@kotowari/capability-decision": "workspace:*",
     "@kotowari/capability-knowledge": "workspace:*",
     "@kotowari/capability-context": "workspace:*",
     "@kotowari/capability-memory": "workspace:*",

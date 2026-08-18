@@ -79,6 +79,20 @@ async function runWhatIfPolicy(app: KotowariApp, args: Record<string, unknown>):
   return app.whatIfPolicy(policy as Parameters<KotowariApp['whatIfPolicy']>[0]);
 }
 
+async function replayDecision(app: KotowariApp, decisionId: string): Promise<unknown> {
+  if (app.replayDecision === undefined) {
+    return { error: 'decision replay unavailable' };
+  }
+  return (await app.replayDecision(decisionId)) ?? { error: 'decision not found' };
+}
+
+async function auditDecision(app: KotowariApp, decisionId: string): Promise<unknown> {
+  if (app.getDecisionAuditBundle === undefined) {
+    return { error: 'decision audit unavailable' };
+  }
+  return (await app.getDecisionAuditBundle(decisionId)) ?? { error: 'decision not found' };
+}
+
 const TOOL_HANDLERS = new Map<string, ToolHandler>([
   [
     'search_knowledge',
@@ -101,6 +115,8 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
         rationale: args['rationale'] === undefined ? undefined : asString(args['rationale']),
       }),
   ],
+  ['replay_decision', async (app, args) => replayDecision(app, asString(args['decisionId']))],
+  ['audit_decision', async (app, args) => auditDecision(app, asString(args['decisionId']))],
   ['ingest_path', async (app, args) => ingestFromToolArgs(app, args)],
   [
     'resolve_conflict',
@@ -136,6 +152,10 @@ export function spyApplicationCommandName(toolName: string): string {
       return 'searchMemory';
     case 'record_decision':
       return 'recordDecision';
+    case 'replay_decision':
+      return 'replayDecision';
+    case 'audit_decision':
+      return 'getDecisionAuditBundle';
     case 'record_memory':
       return 'recordMemory';
     case 'ingest_path':

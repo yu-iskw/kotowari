@@ -5,15 +5,20 @@ export type { ApplicationContracts } from './contracts.js';
 export { PACKAGE_EVENTS } from './events.js';
 export { createKotowariApp } from './create-app.js';
 export {
+  buildDecisionAuditBundleCapability,
+  createApprovalRecord,
+  createDecisionRelation,
+  createOutcomeObservation,
+  createPolicyException,
   findDecisionPrecedentsCapability,
   recordDecisionCapability,
   replayDecisionCapability,
-} from './decision-capability.js';
+} from '@kotowari/capability-decision';
 export type {
   DecisionPrecedent,
   DecisionRecordRequest,
   DecisionReplay,
-} from './decision-capability.js';
+} from '@kotowari/capability-decision';
 export { dispatchIngest } from './ingest-request.js';
 export type { IngestDispatch } from './ingest-request.js';
 export type { KotowariApp, KotowariAppOptions, KotowariPorts } from './create-app.js';

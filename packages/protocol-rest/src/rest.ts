@@ -17,6 +17,7 @@ export const OPENAPI_SNAPSHOT = {
     '/v1/decisions/{id}': { get: {} },
     '/v1/decisions/{id}/replay': { get: {} },
     '/v1/decisions/{id}/precedents': { get: {} },
+    '/v1/decisions/{id}/audit': { get: {} },
     '/v1/decisions/{id}/prov': { get: {} },
     '/v1/decisions/{id}/export': { get: {} },
     '/v1/entities/resolve': { post: {} },
@@ -160,7 +161,7 @@ function evidenceIdFromPath(pathname: string): { id: string; content: boolean } 
 
 function decisionPath(
   pathname: string,
-): { id: string; kind: 'get' | 'replay' | 'precedents' | 'prov' | 'export' } | undefined {
+): { id: string; kind: 'get' | 'replay' | 'precedents' | 'audit' | 'prov' | 'export' } | undefined {
   if (!pathname.startsWith('/v1/decisions/')) {
     return undefined;
   }
@@ -170,6 +171,9 @@ function decisionPath(
   }
   if (rest.endsWith('/precedents')) {
     return { id: rest.slice(0, -'/precedents'.length), kind: 'precedents' };
+  }
+  if (rest.endsWith('/audit')) {
+    return { id: rest.slice(0, -'/audit'.length), kind: 'audit' };
   }
   if (rest.endsWith('/prov')) {
     return { id: rest.slice(0, -'/prov'.length), kind: 'prov' };
@@ -224,6 +228,15 @@ async function handleDecisionGet(
       return { status: 501, json: { error: 'precedent search unavailable' } };
     }
     return { status: 200, json: await app.findDecisionPrecedents(decision.id) };
+  }
+  if (decision.kind === 'audit') {
+    if (app.getDecisionAuditBundle === undefined) {
+      return { status: 501, json: { error: 'decision audit unavailable' } };
+    }
+    const bundle = await app.getDecisionAuditBundle(decision.id);
+    return bundle === undefined
+      ? { status: 404, json: { error: 'not found' } }
+      : { status: 200, json: bundle };
   }
   if (decision.kind === 'prov') {
     const prov = await app.exportProvO(decision.id);

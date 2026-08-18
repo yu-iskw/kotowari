@@ -17,17 +17,23 @@ export type {
 } from './authorization.js';
 export { ACTIONS } from './authorization.js';
 export {
+  asApprovalRecordId,
+  asAuditBundleId,
   asClaimId,
   asConflictId,
   asContextId,
   asDecisionId,
+  asDecisionRelationId,
   asEntityId,
   asEventId,
   asEvidenceId,
   asIsoTimestamp,
   asMemoryId,
   asNamespaceId,
+  asOutcomeObservationId,
+  asPolicyExceptionId,
   asPolicyId,
+  asPolicyVersionId,
   asPrincipalId,
   asProvenanceId,
   asRetrievalReceiptId,
@@ -35,17 +41,23 @@ export {
   newId,
 } from './branded-ids.js';
 export type {
+  ApprovalRecordId,
+  AuditBundleId,
   ClaimId,
   ConflictId,
   ContextId,
   DecisionId,
+  DecisionRelationId,
   EntityId,
   EventId,
   EvidenceId,
   IsoTimestamp,
   MemoryId,
   NamespaceId,
+  OutcomeObservationId,
+  PolicyExceptionId,
   PolicyId,
+  PolicyVersionId,
   PrincipalId,
   ProvenanceId,
   RetrievalReceiptId,
@@ -87,7 +99,18 @@ export type {
   RetractClaimInput,
   SemanticWriteInput,
 } from './contracts.js';
-export type { Decision } from './decision.js';
+export type {
+  ApprovalRecord,
+  ApprovalStatus,
+  Decision,
+  DecisionAuditBundle,
+  DecisionAuditManifest,
+  DecisionRelation,
+  DecisionRelationKind,
+  OutcomeMetricValue,
+  OutcomeObservation,
+  PolicyException,
+} from './decision.js';
 export type { Entity } from './entity.js';
 export { KernelError, KERNEL_ERROR_CODES } from './errors.js';
 export type { KernelErrorCode } from './errors.js';

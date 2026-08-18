@@ -3,6 +3,7 @@ import { buildContextSnapshot, localStandaloneMetadata } from '@kotowari/kernel'
 import type {
   ClaimId,
   EvidenceId,
+  PolicyVersionRef,
   Principal,
   RetrievalReceiptId,
   TemporalPerspective,
@@ -20,7 +21,7 @@ export async function assembleContext(input: {
   purpose: string;
   temporal?: TemporalPerspective;
   retrievalReceiptId?: RetrievalReceiptId;
-  policyVersionIds: readonly string[];
+  policyVersions: readonly PolicyVersionRef[];
   items: readonly ContextItem[];
   budget: number;
 }): Promise<ReturnType<typeof buildContextSnapshot>> {
@@ -50,7 +51,7 @@ export async function assembleContext(input: {
     retrievalReceiptId: input.retrievalReceiptId,
     claimIds,
     evidenceIds,
-    policyVersionIds: input.policyVersionIds,
+    policyVersions: input.policyVersions,
     items: input.items,
     budget: input.budget,
   });
