@@ -4,6 +4,8 @@ import {
   MCP_OPERATIONS,
   MCP_PROFILE_DEFINITIONS,
   MCP_PROFILES,
+  MCP_STANDALONE_PRESETS,
+  MCP_STANDALONE_PRESET_TOOLS,
   invokeMcpOperation,
 } from './public.js';
 
@@ -53,12 +55,42 @@ describe('MCP operation registry', () => {
     }
   });
 
-  it('only references registered operations from profiles', () => {
+  it('only references registered operations from profiles and standalone presets', () => {
     for (const profile of MCP_PROFILES) {
       for (const tool of MCP_PROFILE_DEFINITIONS[profile].tools) {
         expect(MCP_OPERATIONS[tool]).toBeDefined();
       }
     }
+    for (const preset of MCP_STANDALONE_PRESETS) {
+      for (const tool of MCP_STANDALONE_PRESET_TOOLS[preset]) {
+        expect(MCP_OPERATIONS[tool]).toBeDefined();
+      }
+    }
+  });
+
+  it('makes personal useful without ambient ingestion, curation, admin, or export authority', () => {
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).toEqual([
+      'search_knowledge',
+      'search_memory',
+      'record_memory',
+      'record_decision',
+      'replay_decision',
+      'audit_decision',
+    ]);
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).not.toContain('ingest_path');
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).not.toContain('resolve_conflict');
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).not.toContain('list_policies');
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).not.toContain('what_if_policy');
+    expect(MCP_STANDALONE_PRESET_TOOLS.personal).not.toContain('export_prov');
+  });
+
+  it('keeps readonly free of write operations and advanced exposes the whole registry', () => {
+    for (const tool of MCP_STANDALONE_PRESET_TOOLS.readonly) {
+      expect(MCP_OPERATIONS[tool].risk).not.toBe('write');
+    }
+    expect(new Set(MCP_STANDALONE_PRESET_TOOLS.advanced)).toEqual(
+      new Set(Object.keys(MCP_OPERATIONS)),
+    );
   });
 
   it('rejects malformed tool inputs instead of coercing values', async () => {
