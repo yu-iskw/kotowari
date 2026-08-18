@@ -31,6 +31,8 @@ export interface EntityResolutionStore {
 type EventStore = Pick<CanonicalStore, 'appendEvent' | 'getEntity' | 'listEvents'>;
 type EntityMergedEvent = Extract<DomainEvent, { kind: 'entity.merged' }>;
 
+const RESOLUTION_PROPOSED_EVENT = 'entity.resolution_proposed' as const;
+
 function eventOrder(left: DomainEvent, right: DomainEvent): number {
   return left.occurredAt.localeCompare(right.occurredAt) || left.eventId.localeCompare(right.eventId);
 }
@@ -87,7 +89,7 @@ export function createEventBackedEntityResolutionStore(store: EventStore): Entit
   return {
     async putProposal(proposal) {
       const event: DomainEvent = {
-        kind: 'entity.resolution_proposed',
+        kind: RESOLUTION_PROPOSED_EVENT,
         eventId: proposal.id,
         tenantId: proposal.tenantId,
         proposal,
@@ -101,8 +103,8 @@ export function createEventBackedEntityResolutionStore(store: EventStore): Entit
     async getProposal(id) {
       const events = await store.listEvents();
       return events.find(
-        (event): event is Extract<DomainEvent, { kind: 'entity.resolution_proposed' }> =>
-          event.kind === 'entity.resolution_proposed' && event.eventId === id,
+        (event): event is Extract<DomainEvent, { kind: typeof RESOLUTION_PROPOSED_EVENT }> =>
+          event.kind === RESOLUTION_PROPOSED_EVENT && event.eventId === id,
       )?.proposal;
     },
 
@@ -110,13 +112,14 @@ export function createEventBackedEntityResolutionStore(store: EventStore): Entit
       const events = await store.listEvents();
       return events
         .filter(
-          (event): event is Extract<DomainEvent, { kind: 'entity.resolution_proposed' }> =>
-            event.kind === 'entity.resolution_proposed',
+          (event): event is Extract<DomainEvent, { kind: typeof RESOLUTION_PROPOSED_EVENT }> =>
+            event.kind === RESOLUTION_PROPOSED_EVENT,
         )
         .map((event) => event.proposal)
         .filter((proposal) => proposalMatches(proposal, filter))
-        .sort((left, right) =>
-          left.proposedAt.localeCompare(right.proposedAt) || left.id.localeCompare(right.id),
+        .sort(
+          (left, right) =>
+            left.proposedAt.localeCompare(right.proposedAt) || left.id.localeCompare(right.id),
         );
     },
 
@@ -142,8 +145,9 @@ export function createEventBackedEntityResolutionStore(store: EventStore): Entit
         )
         .map((event) => event.decision)
         .filter((decision) => proposalId === undefined || decision.proposalId === proposalId)
-        .sort((left, right) =>
-          left.decidedAt.localeCompare(right.decidedAt) || left.id.localeCompare(right.id),
+        .sort(
+          (left, right) =>
+            left.decidedAt.localeCompare(right.decidedAt) || left.id.localeCompare(right.id),
         );
     },
 
