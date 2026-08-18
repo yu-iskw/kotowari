@@ -109,7 +109,11 @@ async function canonicalSearch(
   };
   if (request.strategy === 'lexical') {
     const queryTokens = tokenize(request.query);
-    const claims = await store.searchLexical({ ...filter, query: request.query, limit: request.limit });
+    const claims = await store.searchLexical({
+      ...filter,
+      query: request.query,
+      limit: request.limit,
+    });
     return claims.map((claim) => ({
       claimId: claim.id,
       score: queryTokens.filter((token) => claimText(claim).toLowerCase().includes(token)).length,
@@ -122,7 +126,10 @@ async function canonicalSearch(
     store.listClaims(filter),
     store.listEmbeddings(),
   ]);
-  const vector = request.queryVector ?? (await embeddings.embed({ texts: [request.query] })).vectors[0] ?? [];
+  const vector =
+    request.queryVector ??
+    (await embeddings.embed({ texts: [request.query] })).vectors[0] ??
+    [];
   const byClaim = new Map(storedEmbeddings.map((row) => [row.claimId, row.vector]));
   return claims
     .map((claim) => ({ claimId: claim.id, score: cosine(vector, byClaim.get(claim.id) ?? []) }))
