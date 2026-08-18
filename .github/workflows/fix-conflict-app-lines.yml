@@ -27,13 +27,13 @@ jobs:
         shell: bash
         run: |
           python3 <<'PY'
+          import re
           from pathlib import Path
           p = Path('packages/application/src/create-app.ts')
           text = p.read_text()
-          marker = '''export function createKotowariApp(
-            ports: KotowariPorts,
-            options: KotowariAppOptions = {},
-          ): KotowariApp {'''
+          marker = 'export function createKotowariApp('
+          if marker not in text:
+              raise SystemExit('createKotowariApp marker not found')
           helper = '''async function detectSemanticConflictsFor(
             store: CanonicalStore,
             principal: Principal,
@@ -47,22 +47,24 @@ jobs:
           }
 
           '''
-          if marker not in text:
-              raise SystemExit('createKotowariApp marker not found')
           text = text.replace(marker, helper + marker, 1)
-          old = '''    async detectSemanticConflicts(contract) {
-              return detectClaimConflicts({
-                store: ports.store,
-                principal: await current(),
-                rules: semanticContractConflictRules(contract),
-              });
-            },'''
-          new = '''    async detectSemanticConflicts(contract) {
-              return detectSemanticConflictsFor(ports.store, await current(), contract);
-            },'''
-          if old not in text:
-              raise SystemExit('semantic conflict method block not found')
-          p.write_text(text.replace(old, new, 1))
+          pattern = re.compile(
+              r'''\n    async detectSemanticConflicts\(contract\) \{\n'''
+              r'''      return detectClaimConflicts\(\{\n'''
+              r'''        store: ports\.store,\n'''
+              r'''        principal: await current\(\),\n'''
+              r'''        rules: semanticContractConflictRules\(contract\),\n'''
+              r'''      \}\);\n'''
+              r'''    \},'''
+          )
+          replacement = '''
+              async detectSemanticConflicts(contract) {
+                return detectSemanticConflictsFor(ports.store, await current(), contract);
+              },'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'semantic conflict method replacement count: {count}')
+          p.write_text(text)
           PY
           pnpm exec prettier --write packages/application/src/create-app.ts
       - name: Commit extraction
