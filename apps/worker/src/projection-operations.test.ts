@@ -8,11 +8,13 @@ function maintenance(input: {
   status: () => RetrievalProjectionStatus;
   sync?: () => Promise<void>;
   rebuild?: () => Promise<void>;
+  rebuildVectorIndex?: () => Promise<void>;
 }): RetrievalProjectionMaintenance {
   return {
     status: async () => input.status(),
     sync: input.sync ?? (async () => undefined),
     rebuild: input.rebuild ?? (async () => undefined),
+    rebuildVectorIndex: input.rebuildVectorIndex ?? (async () => undefined),
   };
 }
 
@@ -107,6 +109,37 @@ describe('retrieval projection operations', () => {
     expect(await operations.rebuild()).toMatchObject({
       ready: true,
       lastSuccessfulSyncAt: '2026-08-18T04:05:06.000Z',
+    });
+    expect(rebuilds).toBe(1);
+  });
+
+  it('rebuilds the HNSW vector index through the operator checkpoint', async () => {
+    let rebuilds = 0;
+    const projection = maintenance({
+      status: () => ({
+        projectionId: 'postgres-retrieval-v1',
+        pendingEvents: 0,
+        stale: false,
+        vectorIndex: {
+          kind: 'pgvector-hnsw',
+          indexName: 'retrieval_projection_vector_hnsw',
+          dimensions: 768,
+          efSearch: 100,
+          present: true,
+        },
+      }),
+      rebuildVectorIndex: async () => {
+        rebuilds += 1;
+      },
+    });
+    const operations = createProjectionOperations(projection, {
+      now: () => new Date('2026-08-18T05:06:07.000Z'),
+    });
+
+    expect(await operations.rebuildVectorIndex()).toMatchObject({
+      ready: true,
+      lastSuccessfulSyncAt: '2026-08-18T05:06:07.000Z',
+      vectorIndex: { present: true },
     });
     expect(rebuilds).toBe(1);
   });
