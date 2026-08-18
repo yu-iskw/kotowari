@@ -17,9 +17,9 @@ export type RetrievalProjectionMaintenance = Pick<
 
 export type { RetrievalProjectionStatus };
 
-export function createComposeRetrievalProjectionFromEnv(
+export function createComposeRetrievalProjectionRuntimeFromEnv(
   env: Record<string, string | undefined> = process.env,
-): RetrievalProjectionMaintenance {
+): PostgresRetrievalProjection {
   const databaseUrl = env['DATABASE_URL'];
   if (databaseUrl === undefined || databaseUrl.length === 0) {
     throw new Error('DATABASE_URL is required for retrieval projection maintenance');
@@ -31,4 +31,10 @@ export function createComposeRetrievalProjectionFromEnv(
     store,
     embeddings: createFakeEmbeddingProvider(),
   });
+}
+
+export function createComposeRetrievalProjectionFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): RetrievalProjectionMaintenance {
+  return createComposeRetrievalProjectionRuntimeFromEnv(env);
 }
