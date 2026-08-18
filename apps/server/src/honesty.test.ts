@@ -30,11 +30,12 @@ async function resolveFirstConflictAndSearch(
     body: JSON.stringify({ path: overlappingDocs() }),
   });
   const listed = await fetch(`${baseUrl}/v1/conflicts`, { headers });
-  const conflicts = (await listed.json()) as { claimIds: string[] }[];
+  const conflicts = (await listed.json()) as { id: string; claimIds: string[] }[];
   expect(conflicts.length).toBeGreaterThan(0);
-  const claimIds = conflicts[0]?.claimIds ?? [];
+  const conflict = conflicts[0];
+  const claimIds = conflict?.claimIds ?? [];
   const preferredClaimId = claimIds[0] ?? '';
-  await fetch(`${baseUrl}/v1/conflicts`, {
+  const resolved = await fetch(`${baseUrl}/v1/conflicts`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify({
@@ -43,8 +44,11 @@ async function resolveFirstConflictAndSearch(
       reason: 'Later filing is authoritative',
     }),
   });
-  const remaining = await fetch(`${baseUrl}/v1/conflicts`, { headers });
-  expect(await remaining.json()).toEqual([]);
+  expect(resolved.status).toBe(201);
+  const remaining = (await (await fetch(`${baseUrl}/v1/conflicts`, { headers })).json()) as {
+    id: string;
+  }[];
+  expect(remaining.some((item) => item.id === conflict?.id)).toBe(false);
   const search = await fetch(`${baseUrl}/v1/knowledge/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
