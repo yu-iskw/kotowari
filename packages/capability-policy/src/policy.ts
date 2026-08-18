@@ -1,6 +1,7 @@
 import { buildPolicyEvaluated, compactProvenance, newId } from '@kotowari/kernel';
 
 import type {
+  Classification,
   Decision,
   IsoTimestamp,
   NamespaceId,
@@ -14,13 +15,22 @@ import type {
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
 export function policyVersionRef(policy: PolicyRecord): PolicyVersionRef {
+  if ('versionId' in policy && 'policyId' in policy) {
+    const version = policy as PolicyVersion;
+    return {
+      policyId: version.policyId,
+      policyVersionId: version.versionId,
+      version: version.version,
+    };
+  }
   return {
-    policyId: 'policyId' in policy ? (policy as PolicyVersion).policyId : policy.id,
-    policyVersionId: policy.id,
+    policyId: policy.id,
+    policyVersionId: policy.id as unknown as PolicyVersionRef['policyVersionId'],
     version: policy.version,
   };
 }
 
+/** @deprecated Prefer the typed PolicyVersionRef stored on ContextSnapshot. */
 export function policyVersionKey(policy: PolicyRecord): string {
   const ref = policyVersionRef(policy);
   return `${ref.policyVersionId}@${String(ref.version)}`;
@@ -28,7 +38,12 @@ export function policyVersionKey(policy: PolicyRecord): string {
 
 export function isPolicyApplicable(
   policy: PolicyRecord,
-  input: { purpose?: string; namespaceId?: NamespaceId; at?: string },
+  input: {
+    purpose?: string;
+    namespaceId?: NamespaceId;
+    classification?: Classification;
+    at?: string;
+  },
 ): boolean {
   if (!('policyId' in policy)) {
     return true;
@@ -59,12 +74,24 @@ export function isPolicyApplicable(
   ) {
     return false;
   }
+  if (
+    input.classification !== undefined &&
+    version.applicability.classifications !== undefined &&
+    !version.applicability.classifications.includes(input.classification)
+  ) {
+    return false;
+  }
   return true;
 }
 
 export function selectApplicablePolicies(
   policies: readonly PolicyRecord[],
-  input: { purpose?: string; namespaceId?: NamespaceId; at?: string },
+  input: {
+    purpose?: string;
+    namespaceId?: NamespaceId;
+    classification?: Classification;
+    at?: string;
+  },
 ): readonly PolicyRecord[] {
   return policies.filter((policy) => isPolicyApplicable(policy, input));
 }
@@ -92,9 +119,12 @@ export async function putPolicyVersion(input: {
   ) {
     throw new Error('effectiveTo must be greater than effectiveFrom');
   }
+  const versionId = newId('PolicyVersionId');
   const policy: PolicyVersion = {
-    id: newId('PolicyId'),
+    // Transitional storage key. Canonical APIs must use versionId for exact version references.
+    id: versionId as unknown as PolicyId,
     policyId: input.policyId ?? newId('PolicyId'),
+    versionId,
     tenantId: input.principal.tenantId,
     namespaceId,
     principalId: input.principal.id,
