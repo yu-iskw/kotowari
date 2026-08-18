@@ -5,6 +5,11 @@ import {
 } from '@kotowari/adapter-postgres';
 import { createFakeEmbeddingProvider } from '@kotowari/model-fake';
 
+import {
+  embeddingDimensionsFromEnv,
+  vectorAccelerationFromEnv,
+} from './vector-acceleration.js';
+
 import type {
   PostgresRetrievalProjection,
   RetrievalProjectionStatus,
@@ -12,7 +17,7 @@ import type {
 
 export type RetrievalProjectionMaintenance = Pick<
   PostgresRetrievalProjection,
-  'rebuild' | 'status' | 'sync'
+  'rebuild' | 'rebuildVectorIndex' | 'status' | 'sync'
 >;
 
 export type { RetrievalProjectionStatus };
@@ -26,10 +31,12 @@ export function createComposeRetrievalProjectionRuntimeFromEnv(
   }
   const sql = createPgPoolClient(databaseUrl);
   const store = createPostgresCanonicalStore(sql);
+  const vectorAcceleration = vectorAccelerationFromEnv(env);
   return createPostgresRetrievalProjection({
     sql,
     store,
-    embeddings: createFakeEmbeddingProvider(),
+    embeddings: createFakeEmbeddingProvider(embeddingDimensionsFromEnv(env)),
+    ...(vectorAcceleration === undefined ? {} : { vectorAcceleration }),
   });
 }
 
