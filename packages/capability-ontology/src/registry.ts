@@ -21,34 +21,50 @@ function stableContractJson(contract: SemanticContract): string {
   return JSON.stringify(contract);
 }
 
+function putContract(contracts: Map<string, SemanticContract>, contract: SemanticContract): void {
+  const issues = validateSemanticContract(contract);
+  if (issues.length > 0) {
+    throw new Error(`Invalid semantic contract: ${issues.map((issue) => issue.code).join(', ')}`);
+  }
+  const key = semanticContractKey(contract);
+  const existing = contracts.get(key);
+  if (existing !== undefined && stableContractJson(existing) !== stableContractJson(contract)) {
+    throw new Error(`Semantic contract versions are immutable: ${key}`);
+  }
+  contracts.set(key, contract);
+}
+
+function listContracts(
+  contracts: Map<string, SemanticContract>,
+  filter: SemanticContractFilter,
+): readonly SemanticContract[] {
+  return [...contracts.values()]
+    .filter((contract) => filter.id === undefined || contract.id === filter.id)
+    .filter((contract) => filter.status === undefined || contract.status === filter.status)
+    .sort((left, right) => {
+      const byId = left.id.localeCompare(right.id);
+      return byId === 0 ? left.version - right.version : byId;
+    });
+}
+
 export function createInMemorySemanticContractRegistry(): SemanticContractRegistry {
   const contracts = new Map<string, SemanticContract>();
   return {
-    async put(contract) {
-      const issues = validateSemanticContract(contract);
-      if (issues.length > 0) {
-        throw new Error(`Invalid semantic contract: ${issues.map((issue) => issue.code).join(', ')}`);
+    put(contract) {
+      try {
+        putContract(contracts, contract);
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
       }
-      const key = semanticContractKey(contract);
-      const existing = contracts.get(key);
-      if (existing !== undefined && stableContractJson(existing) !== stableContractJson(contract)) {
-        throw new Error(`Semantic contract versions are immutable: ${key}`);
-      }
-      contracts.set(key, contract);
     },
 
-    async get(id, version) {
-      return contracts.get(`${id}@${String(version)}`);
+    get(id, version) {
+      return Promise.resolve(contracts.get(`${id}@${String(version)}`));
     },
 
-    async list(filter = {}) {
-      return [...contracts.values()]
-        .filter((contract) => filter.id === undefined || contract.id === filter.id)
-        .filter((contract) => filter.status === undefined || contract.status === filter.status)
-        .sort((left, right) => {
-          const byId = left.id.localeCompare(right.id);
-          return byId === 0 ? left.version - right.version : byId;
-        });
+    list(filter = {}) {
+      return Promise.resolve(listContracts(contracts, filter));
     },
   };
 }
