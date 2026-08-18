@@ -2,6 +2,7 @@ import { claimText } from '@kotowari/plugin-sdk';
 
 import { AdapterPostgresError } from './errors.js';
 
+import type { SqlClient } from './sql-client.js';
 import type {
   CanonicalStore,
   Claim,
@@ -13,11 +14,14 @@ import type {
   RetrievalCandidateRequest,
   RetrievalCandidateSource,
 } from '@kotowari/plugin-sdk';
-import type { SqlClient } from './sql-client.js';
 
 const PROJECTION_ID = 'postgres-retrieval-v1' as const;
-const CLAIM_EVENT_KINDS = ['claim.asserted', 'claim.retracted'] as const;
-const ENTITY_IDENTITY_EVENT_KINDS = ['entity.merged', 'entity.merge_reverted'] as const;
+const CLAIM_ASSERTED_EVENT = 'claim.asserted' as const;
+const CLAIM_RETRACTED_EVENT = 'claim.retracted' as const;
+const ENTITY_MERGED_EVENT = 'entity.merged' as const;
+const ENTITY_MERGE_REVERTED_EVENT = 'entity.merge_reverted' as const;
+const CLAIM_EVENT_KINDS = [CLAIM_ASSERTED_EVENT, CLAIM_RETRACTED_EVENT] as const;
+const ENTITY_IDENTITY_EVENT_KINDS = [ENTITY_MERGED_EVENT, ENTITY_MERGE_REVERTED_EVENT] as const;
 const RELEVANT_EVENT_KINDS = new Set<DomainEvent['kind']>([
   ...CLAIM_EVENT_KINDS,
   ...ENTITY_IDENTITY_EVENT_KINDS,
@@ -114,12 +118,12 @@ function relevantEvents(events: readonly DomainEvent[]): readonly DomainEvent[] 
 function canonicalEntityResolver(events: readonly DomainEvent[]): (id: EntityId) => EntityId {
   const reverted = new Set(
     events
-      .filter((event) => event.kind === 'entity.merge_reverted')
+      .filter((event) => event.kind === ENTITY_MERGE_REVERTED_EVENT)
       .map((event) => event.mergeEventId),
   );
   const redirects = new Map<EntityId, EntityId>();
   for (const event of events) {
-    if (event.kind !== 'entity.merged' || reverted.has(event.eventId)) {
+    if (event.kind !== ENTITY_MERGED_EVENT || reverted.has(event.eventId)) {
       continue;
     }
     for (const absorbed of event.absorbedEntityIds) {
@@ -267,8 +271,10 @@ class RetrievalProjection implements PostgresRetrievalProjection {
           .filter(
             (
               event,
-            ): event is Extract<DomainEvent, { kind: 'claim.asserted' | 'claim.retracted' }> =>
-              event.kind === 'claim.asserted' || event.kind === 'claim.retracted',
+            ): event is Extract<
+              DomainEvent,
+              { kind: typeof CLAIM_ASSERTED_EVENT | typeof CLAIM_RETRACTED_EVENT }
+            > => event.kind === CLAIM_ASSERTED_EVENT || event.kind === CLAIM_RETRACTED_EVENT,
           )
           .map((event) => event.claimId),
       ),
@@ -307,7 +313,7 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     }
     if (
       pending.some(
-        (event) => event.kind === 'entity.merged' || event.kind === 'entity.merge_reverted',
+        (event) => event.kind === ENTITY_MERGED_EVENT || event.kind === ENTITY_MERGE_REVERTED_EVENT,
       )
     ) {
       await this.rebuild();
@@ -316,8 +322,12 @@ class RetrievalProjection implements PostgresRetrievalProjection {
 
     const resolveEntity = canonicalEntityResolver(events);
     const claimEvents = pending.filter(
-      (event): event is Extract<DomainEvent, { kind: 'claim.asserted' | 'claim.retracted' }> =>
-        event.kind === 'claim.asserted' || event.kind === 'claim.retracted',
+      (
+        event,
+      ): event is Extract<
+        DomainEvent,
+        { kind: typeof CLAIM_ASSERTED_EVENT | typeof CLAIM_RETRACTED_EVENT }
+      > => event.kind === CLAIM_ASSERTED_EVENT || event.kind === CLAIM_RETRACTED_EVENT,
     );
     const claimIds = [...new Set(claimEvents.map((event) => event.claimId))];
     const claims = await Promise.all(claimIds.map(async (claimId) => this.store.getClaim(claimId)));
@@ -428,10 +438,7 @@ class RetrievalProjection implements PostgresRetrievalProjection {
         claimId: row.claim_id as ClaimId,
         score: cosine(queryVector, parseVector(row.vector)),
       }))
-      .sort(
-        (left, right) =>
-          (right.score ?? 0) - (left.score ?? 0) || left.claimId.localeCompare(right.claimId),
-      )
+      .sort((left, right) => right.score - left.score || left.claimId.localeCompare(right.claimId))
       .slice(0, request.limit);
   }
 
