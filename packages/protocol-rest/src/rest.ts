@@ -1,7 +1,9 @@
 import { dispatchIngest } from '@kotowari/application';
 
 import type { KotowariApp } from '@kotowari/application';
-import type { TemporalPerspective } from '@kotowari/kernel';
+
+type SearchKnowledgeInput = Parameters<KotowariApp['searchKnowledge']>[0];
+type TemporalPerspective = NonNullable<SearchKnowledgeInput['temporal']>;
 
 export const OPENAPI_SNAPSHOT = {
   openapi: '3.1.0',
