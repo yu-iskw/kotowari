@@ -1,5 +1,3 @@
-import { describe, expect, it } from 'vitest';
-
 import {
   asIsoTimestamp,
   asPrincipalId,
@@ -8,11 +6,12 @@ import {
   localStandaloneMetadata,
   newId,
 } from '@kotowari/kernel';
+import { describe, expect, it } from 'vitest';
 
 import { validateClaimAgainstContract } from './claim-validation.js';
 
-import type { ClaimObject } from '@kotowari/kernel';
 import type { SemanticContract } from './semantic-contract.js';
+import type { ClaimObject } from '@kotowari/kernel';
 
 const CONTRACT: SemanticContract = {
   id: 'people',
