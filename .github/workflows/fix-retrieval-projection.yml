@@ -1,0 +1,55 @@
+name: Fix retrieval projection
+
+on:
+  pull_request:
+    types: [synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'feat/enterprise-retrieval-projection-v1' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: feat/enterprise-retrieval-projection-v1
+      - name: Refactor lint findings
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/adapter-postgres/src/retrieval-projection.ts';
+          let s = fs.readFileSync(path, 'utf8');
+          s = s.replace(
+            "import type {\n  CanonicalStore,",
+            "import type { SqlClient } from './sql-client.js';\n\nimport type {\n  CanonicalStore,",
+          ).replace("import type { SqlClient } from './sql-client.js';\n", '');
+          s = s.replace(
+            "const RELEVANT_EVENT_KINDS = new Set<DomainEvent['kind']>([\n  'claim.asserted',\n  'claim.retracted',\n  'entity.merged',\n  'entity.merge_reverted',\n]);",
+            "const CLAIM_EVENT_KINDS = ['claim.asserted', 'claim.retracted'] as const;\nconst ENTITY_IDENTITY_EVENT_KINDS = ['entity.merged', 'entity.merge_reverted'] as const;\nconst RELEVANT_EVENT_KINDS = new Set<DomainEvent['kind']>([\n  ...CLAIM_EVENT_KINDS,\n  ...ENTITY_IDENTITY_EVENT_KINDS,\n]);",
+          );
+          s = s.replace('score: cosine(request.queryVector ?? [], parseVector(row.vector)),', 'score: cosine(request.queryVector, parseVector(row.vector)),');
+          const marker = 'class RetrievalProjection implements PostgresRetrievalProjection {';
+          const helpers = `async function seedGraphEntities(\n  sql: SqlClient,\n  seedClaimIds: readonly ClaimId[],\n): Promise<Set<string>> {\n  const entities = new Set<string>();\n  for (const claimId of seedClaimIds) {\n    const row = (\n      await sql.query<ProjectionRow>(\n        'SELECT claim_id, subject_id, object_entity_id, vector FROM retrieval_projection WHERE claim_id = $1',\n        [claimId],\n      )\n    )[0];\n    if (row === undefined) {\n      continue;\n    }\n    entities.add(row.subject_id);\n    if (row.object_entity_id !== null) {\n      entities.add(row.object_entity_id);\n    }\n  }\n  return entities;\n}\n\nasync function graphRowsForEntity(\n  sql: SqlClient,\n  request: RetrievalCandidateRequest,\n  entityId: string,\n): Promise<readonly ProjectionRow[]> {\n  const params: unknown[] = [];\n  const scope = scopeSql(request, params);\n  params.push(entityId);\n  const entityIndex = params.length;\n  const temporal = temporalSql(request, params);\n  return sql.query<ProjectionRow>(\n    \`SELECT claim_id, subject_id, object_entity_id, vector\n     FROM retrieval_projection\n     WHERE \${scope}\${temporal}\n       AND (subject_id = $\${entityIndex} OR object_entity_id = $\${entityIndex})\`,\n    params,\n  );\n}\n\nfunction collectGraphRows(input: {\n  rows: readonly ProjectionRow[];\n  entityId: string;\n  hop: number;\n  seenClaims: Set<ClaimId>;\n  candidates: Map<ClaimId, RetrievalCandidate>;\n}): Set<string> {\n  const next = new Set<string>();\n  for (const row of input.rows) {\n    const claimId = row.claim_id as ClaimId;\n    if (!input.seenClaims.has(claimId)) {\n      input.seenClaims.add(claimId);\n      input.candidates.set(claimId, {\n        claimId,\n        score: 1 / input.hop,\n        graphRoute: [input.entityId],\n      });\n    }\n    if (row.subject_id !== input.entityId) {\n      next.add(row.subject_id);\n    }\n    if (row.object_entity_id !== null && row.object_entity_id !== input.entityId) {\n      next.add(row.object_entity_id);\n    }\n  }\n  return next;\n}\n\n`;
+          if (!s.includes('async function seedGraphEntities(')) s = s.replace(marker, helpers + marker);
+          s = s.replace(/  private async searchGraph\([\s\S]*?\n  private async upsertClaim\(/, `  private async searchGraph(\n    request: RetrievalCandidateRequest,\n  ): Promise<readonly RetrievalCandidate[]> {\n    const seedClaimIds = request.seedClaimIds ?? [];\n    const hops = Math.max(0, request.hops ?? 0);\n    if (seedClaimIds.length === 0 || hops === 0) {\n      return [];\n    }\n    const seenClaims = new Set<ClaimId>(seedClaimIds);\n    let frontier = await seedGraphEntities(this.sql, seedClaimIds);\n    const candidates = new Map<ClaimId, RetrievalCandidate>();\n\n    for (let hop = 1; hop <= hops && frontier.size > 0; hop += 1) {\n      const next = new Set<string>();\n      for (const entityId of frontier) {\n        const rows = await graphRowsForEntity(this.sql, request, entityId);\n        for (const value of collectGraphRows({ rows, entityId, hop, seenClaims, candidates })) {\n          next.add(value);\n        }\n      }\n      frontier = next;\n      if (candidates.size >= request.limit) {\n        break;\n      }\n    }\n    return [...candidates.values()].slice(0, request.limit);\n  }\n\n  private async upsertClaim(`);
+          fs.writeFileSync(path, s);
+          NODE
+      - name: Format and validate
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec prettier --write packages/adapter-postgres/src/retrieval-projection.ts packages/adapter-postgres/src/retrieval-projection.test.ts
+          pnpm build
+          pnpm --filter @kotowari/adapter-postgres test
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/adapter-postgres/src/retrieval-projection.ts packages/adapter-postgres/src/retrieval-projection.test.ts
+          git commit -m 'fix(postgres): satisfy retrieval projection checks'
+          git push origin HEAD:feat/enterprise-retrieval-projection-v1
