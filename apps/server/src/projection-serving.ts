@@ -55,9 +55,7 @@ function cosine(left: readonly number[], right: readonly number[]): number {
 }
 
 function connectedEntityIds(claim: Claim): readonly string[] {
-  return claim.object.kind === 'entity'
-    ? [claim.subject, claim.object.entityId]
-    : [claim.subject];
+  return claim.object.kind === 'entity' ? [claim.subject, claim.object.entityId] : [claim.subject];
 }
 
 async function canonicalGraphSearch(
@@ -66,9 +64,7 @@ async function canonicalGraphSearch(
 ): Promise<readonly RetrievalCandidate[]> {
   const claims = await store.listClaims({
     tenantId: request.tenantId,
-    ...(request.namespaceId === undefined
-      ? {}
-      : { namespaceId: request.namespaceId }),
+    ...(request.namespaceId === undefined ? {} : { namespaceId: request.namespaceId }),
     ...(request.temporal === undefined ? {} : { temporal: request.temporal }),
   });
   const byId = new Map(claims.map((claim) => [claim.id, claim]));
@@ -106,9 +102,7 @@ async function canonicalSearch(
 ): Promise<readonly RetrievalCandidate[]> {
   const filter = {
     tenantId: request.tenantId,
-    ...(request.namespaceId === undefined
-      ? {}
-      : { namespaceId: request.namespaceId }),
+    ...(request.namespaceId === undefined ? {} : { namespaceId: request.namespaceId }),
     ...(request.temporal === undefined ? {} : { temporal: request.temporal }),
   };
   if (request.strategy === 'lexical') {
@@ -120,9 +114,7 @@ async function canonicalSearch(
     });
     return claims.map((claim) => ({
       claimId: claim.id,
-      score: queryTokens.filter((token) =>
-        claimText(claim).toLowerCase().includes(token),
-      ).length,
+      score: queryTokens.filter((token) => claimText(claim).toLowerCase().includes(token)).length,
     }));
   }
   if (request.strategy === 'graph') {
@@ -133,9 +125,7 @@ async function canonicalSearch(
     store.listEmbeddings(),
   ]);
   const vector =
-    request.queryVector ??
-    (await embeddings.embed({ texts: [request.query] })).vectors[0] ??
-    [];
+    request.queryVector ?? (await embeddings.embed({ texts: [request.query] })).vectors[0] ?? [];
   const byClaim = new Map(storedEmbeddings.map((row) => [row.claimId, row.vector]));
   return claims
     .map((claim) => ({
