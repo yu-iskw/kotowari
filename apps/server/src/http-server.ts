@@ -388,7 +388,9 @@ function profileRuntimeHandler(input: {
 }): McpRuntimeHandler {
   const authorization = input.security?.authorization;
   const resourceServerUrl =
-    authorization === undefined ? undefined : publicMcpUrl(authorization.publicBaseUrl, input.profile);
+    authorization === undefined
+      ? undefined
+      : publicMcpUrl(authorization.publicBaseUrl, input.profile);
   const handler = createMcpHttpHandler({
     profile: input.profile,
     app: input.app,
@@ -444,7 +446,12 @@ function createRuntimeHandlers(input: {
   for (const profile of MCP_PROFILES) {
     handlers.set(
       `/mcp/${profile}`,
-      profileRuntimeHandler({ profile, app: input.app, audit: input.audit, security: input.security }),
+      profileRuntimeHandler({
+        profile,
+        app: input.app,
+        audit: input.audit,
+        security: input.security,
+      }),
     );
   }
   return handlers;
