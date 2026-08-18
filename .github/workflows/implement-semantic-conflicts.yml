@@ -1,0 +1,1006 @@
+name: Implement semantic conflicts
+
+on:
+  push:
+    branches: [feat/semantic-conflict-detection-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: feat/semantic-conflict-detection-v1
+      - name: Implement semantic conflict detection
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int | None = None) -> None:
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              expected = 1 if count is None else count
+              if actual != expected:
+                  raise SystemExit(f'{path}: expected {expected} occurrences, found {actual}: {old!r}')
+              p.write_text(text.replace(old, new))
+
+          # Authorization: detection is a distinct write action.
+          replace(
+              'packages/kernel/src/authorization.ts',
+              "  'conflict.resolve',",
+              "  'conflict.detect',\n  'conflict.resolve',",
+              2,
+          )
+
+          # Bitemporal validity intervals are half-open: [validFrom, validTo).
+          replace(
+              'packages/kernel/src/claim.ts',
+              '  return left.validFrom <= rightEnd && right.validFrom <= leftEnd;',
+              '  return left.validFrom < rightEnd && right.validFrom < leftEnd;',
+          )
+
+          # Add an immutable conflict-detected event before resolution.
+          replace(
+              'packages/kernel/src/events.ts',
+              "  | {\n      kind: 'conflict.resolved';",
+              "  | {\n      kind: 'conflict.detected';\n      eventId: EventId;\n      tenantId: TenantId;\n      conflictId: ConflictId;\n      provenance: Provenance;\n      occurredAt: IsoTimestamp;\n    }\n  | {\n      kind: 'conflict.resolved';",
+          )
+
+          replace(
+              'packages/kernel/src/public.ts',
+              "export type { Conflict, ConflictKind, ConflictResolution, ResolutionStrategy } from './conflict.js';",
+              "export type {\n  CardinalityConflictRule,\n  Conflict,\n  ConflictCause,\n  ConflictKind,\n  ConflictResolution,\n  ResolutionStrategy,\n} from './conflict.js';",
+          )
+
+          # Knowledge conflict lifecycle and deterministic detector.
+          Path('packages/capability-knowledge/src/conflicts.ts').write_text(r'''import {
+            allow,
+            asClaimId,
+            asConflictId,
+            assertAllowed,
+            buildConflictResolved,
+            classificationRank,
+            claimObjectsEqual,
+            compactProvenance,
+            createEventId,
+            newId,
+            nowIso,
+          } from '@kotowari/kernel';
+
+          import { canonicalEntityIdFromEvents } from './entity-resolution-store.js';
+          import { CapabilityKnowledgeError } from './errors.js';
+
+          import type {
+            CardinalityConflictRule,
+            Claim,
+            ClaimId,
+            Classification,
+            Conflict,
+            ConflictCause,
+            ConflictResolution,
+            DomainEvent,
+            EntityId,
+            Principal,
+            ScopedMetadata,
+            Visibility,
+          } from '@kotowari/kernel';
+          import type { CanonicalStore } from '@kotowari/plugin-sdk';
+
+          const CONFLICT_DETECTION_PURPOSE = 'semantic-conflict-detection' as const;
+          const CONFLICT_DETECT_ACTION = 'conflict.detect' as const;
+          const KNOWLEDGE_READ_ACTION = 'knowledge.read' as const;
+          const CONFLICT_RESOLVE_ACTION = 'conflict.resolve' as const;
+          const MAX_TIMESTAMP = '9999-12-31T23:59:59.999Z' as const;
+
+          const VISIBILITY_RANK: Record<Visibility, number> = {
+            public: 0,
+            workspace: 1,
+            private: 2,
+          };
+
+          type ClaimGroup = {
+            subject: EntityId;
+            rule: CardinalityConflictRule;
+            claims: Claim[];
+          };
+
+          function claimSetKey(claimIds: readonly ClaimId[]): string {
+            return [...claimIds].sort((left, right) => left.localeCompare(right)).join('\u0000');
+          }
+
+          function conflictIdentity(
+            claimIds: readonly ClaimId[],
+            cause: ConflictCause | undefined,
+          ): string {
+            const causeKey =
+              cause === undefined
+                ? 'legacy'
+                : `${cause.kind}:${cause.subject}:${cause.predicate}:${String(cause.max)}:${cause.ruleSource ?? ''}`;
+            return `${causeKey}\u0001${claimSetKey(claimIds)}`;
+          }
+
+          function activeForDetection(claim: Claim): boolean {
+            return claim.status === 'asserted' || claim.status === 'conflicted';
+          }
+
+          function activeAt(claim: Claim, at: string): boolean {
+            const end = claim.bitemporal.validTo ?? MAX_TIMESTAMP;
+            return activeForDetection(claim) && claim.bitemporal.validFrom <= at && at < end;
+          }
+
+          function readable(principal: Principal, claim: Claim): boolean {
+            return (
+              allow(
+                principal,
+                KNOWLEDGE_READ_ACTION,
+                { kind: 'claim', id: claim.id, metadata: claim },
+                { tenantId: principal.tenantId, purpose: CONFLICT_DETECTION_PURPOSE },
+              ).effect === 'allow'
+            );
+          }
+
+          function ruleTermIndex(
+            rules: readonly CardinalityConflictRule[],
+          ): ReadonlyMap<string, CardinalityConflictRule> {
+            const index = new Map<string, CardinalityConflictRule>();
+            for (const rule of rules) {
+              if (!Number.isInteger(rule.max) || rule.max < 1) {
+                throw new CapabilityKnowledgeError(
+                  `Conflict cardinality max must be a positive integer: ${rule.predicate}`,
+                );
+              }
+              for (const term of new Set([rule.predicate, ...rule.terms])) {
+                const existing = index.get(term);
+                if (
+                  existing !== undefined &&
+                  (existing.predicate !== rule.predicate ||
+                    existing.max !== rule.max ||
+                    existing.source !== rule.source)
+                ) {
+                  throw new CapabilityKnowledgeError(`Ambiguous conflict-rule term: ${term}`);
+                }
+                index.set(term, rule);
+              }
+            }
+            return index;
+          }
+
+          function strictestClassification(claims: readonly Claim[]): Classification {
+            return claims.reduce<Classification>(
+              (current, claim) =>
+                classificationRank(claim.classification) > classificationRank(current)
+                  ? claim.classification
+                  : current,
+              'public',
+            );
+          }
+
+          function strictestVisibility(claims: readonly Claim[]): Visibility {
+            return claims.reduce<Visibility>(
+              (current, claim) =>
+                VISIBILITY_RANK[claim.visibility] > VISIBILITY_RANK[current]
+                  ? claim.visibility
+                  : current,
+              'public',
+            );
+          }
+
+          function metadataForClaims(principal: Principal, claims: readonly Claim[]): ScopedMetadata {
+            const first = claims[0];
+            if (first === undefined) {
+              throw new CapabilityKnowledgeError('Conflict requires at least one claim');
+            }
+            if (
+              claims.some(
+                (claim) =>
+                  claim.tenantId !== first.tenantId || claim.namespaceId !== first.namespaceId,
+              )
+            ) {
+              throw new CapabilityKnowledgeError('A conflict cannot cross tenant or namespace scope');
+            }
+            return {
+              tenantId: first.tenantId,
+              namespaceId: first.namespaceId,
+              principalId: principal.id,
+              classification: strictestClassification(claims),
+              visibility: strictestVisibility(claims),
+              policyTags: [...new Set(claims.flatMap((claim) => claim.policyTags))].sort((left, right) =>
+                left.localeCompare(right),
+              ),
+            };
+          }
+
+          function canonicalObjectKey(
+            events: readonly DomainEvent[],
+            claim: Claim,
+          ): string {
+            if (claim.object.kind === 'entity') {
+              return `entity:${canonicalEntityIdFromEvents(events, claim.object.entityId)}`;
+            }
+            return `literal:${claim.object.datatype ?? ''}:${claim.object.value}`;
+          }
+
+          function semanticObjectsEqual(
+            events: readonly DomainEvent[],
+            left: Claim,
+            right: Claim,
+          ): boolean {
+            if (left.object.kind === 'entity' && right.object.kind === 'entity') {
+              return (
+                canonicalEntityIdFromEvents(events, left.object.entityId) ===
+                canonicalEntityIdFromEvents(events, right.object.entityId)
+              );
+            }
+            return claimObjectsEqual(left.object, right.object);
+          }
+
+          function maximalViolatingSets(
+            group: ClaimGroup,
+            events: readonly DomainEvent[],
+          ): readonly (readonly Claim[])[] {
+            const candidateSets = new Map<string, readonly Claim[]>();
+            const startTimes = [...new Set(group.claims.map((claim) => claim.bitemporal.validFrom))].sort(
+              (left, right) => left.localeCompare(right),
+            );
+
+            for (const at of startTimes) {
+              const active = group.claims.filter((claim) => activeAt(claim, at));
+              const representatives = new Map<string, Claim>();
+              for (const claim of [...active].sort((left, right) => left.id.localeCompare(right.id))) {
+                const key = canonicalObjectKey(events, claim);
+                if (!representatives.has(key)) {
+                  representatives.set(key, claim);
+                }
+              }
+              if (representatives.size <= group.rule.max) {
+                continue;
+              }
+              const conflicting = [...representatives.values()].sort((left, right) =>
+                left.id.localeCompare(right.id),
+              );
+              candidateSets.set(claimSetKey(conflicting.map((claim) => claim.id)), conflicting);
+            }
+
+            const candidates = [...candidateSets.values()];
+            return candidates.filter(
+              (candidate) =>
+                !candidates.some(
+                  (other) =>
+                    other.length > candidate.length &&
+                    candidate.every((claim) => other.some((item) => item.id === claim.id)),
+                ),
+            );
+          }
+
+          function groupsForClaims(input: {
+            claims: readonly Claim[];
+            rules: readonly CardinalityConflictRule[];
+            events: readonly DomainEvent[];
+          }): readonly ClaimGroup[] {
+            const terms = ruleTermIndex(input.rules);
+            const groups = new Map<string, ClaimGroup>();
+            for (const claim of input.claims) {
+              const rule = terms.get(claim.predicate);
+              if (rule === undefined || !activeForDetection(claim)) {
+                continue;
+              }
+              const subject = canonicalEntityIdFromEvents(input.events, claim.subject);
+              const key = `${claim.namespaceId}\u0000${subject}\u0000${rule.predicate}`;
+              const group = groups.get(key);
+              if (group === undefined) {
+                groups.set(key, { subject, rule, claims: [claim] });
+              } else {
+                group.claims.push(claim);
+              }
+            }
+            return [...groups.values()];
+          }
+
+          export async function detectClaimConflicts(input: {
+            store: CanonicalStore;
+            principal: Principal;
+            rules: readonly CardinalityConflictRule[];
+          }): Promise<readonly Conflict[]> {
+            if (input.rules.length === 0) {
+              return [];
+            }
+            const events = await input.store.listEvents();
+            const existing = await input.store.listConflicts({ tenantId: input.principal.tenantId });
+            const identities = new Set(
+              existing.map((conflict) => conflictIdentity(conflict.claimIds, conflict.cause)),
+            );
+            const detected: Conflict[] = [];
+
+            for (const namespaceId of input.principal.namespaceIds) {
+              const claims = (
+                await input.store.listClaims({ tenantId: input.principal.tenantId, namespaceId })
+              ).filter((claim) => readable(input.principal, claim));
+
+              for (const group of groupsForClaims({ claims, rules: input.rules, events })) {
+                for (const conflictingClaims of maximalViolatingSets(group, events)) {
+                  if (conflictingClaims.length < 2) {
+                    continue;
+                  }
+                  if (
+                    conflictingClaims.every((claim, index) =>
+                      conflictingClaims
+                        .slice(index + 1)
+                        .every((other) => semanticObjectsEqual(events, claim, other)),
+                    )
+                  ) {
+                    continue;
+                  }
+
+                  const metadata = metadataForClaims(input.principal, conflictingClaims);
+                  assertAllowed(
+                    input.principal,
+                    CONFLICT_DETECT_ACTION,
+                    {
+                      kind: 'conflict',
+                      id: `${group.subject}:${group.rule.predicate}`,
+                      metadata,
+                    },
+                    { tenantId: input.principal.tenantId, purpose: CONFLICT_DETECTION_PURPOSE },
+                  );
+                  const cause: ConflictCause = {
+                    kind: 'max-cardinality',
+                    subject: group.subject,
+                    predicate: group.rule.predicate,
+                    max: group.rule.max,
+                    ...(group.rule.source === undefined ? {} : { ruleSource: group.rule.source }),
+                  };
+                  const claimIds = conflictingClaims.map((claim) => claim.id);
+                  const identity = conflictIdentity(claimIds, cause);
+                  if (identities.has(identity)) {
+                    continue;
+                  }
+
+                  const provenance = compactProvenance({
+                    source: 'semantic-conflict-detector',
+                    actor: input.principal.id,
+                    process: CONFLICT_DETECT_ACTION,
+                  });
+                  const recordedAt = nowIso();
+                  const conflict: Conflict = {
+                    ...metadata,
+                    id: newId('ConflictId'),
+                    kind: 'value',
+                    claimIds,
+                    cause,
+                    provenance,
+                    recordedAt,
+                  };
+                  const event: DomainEvent = {
+                    kind: 'conflict.detected',
+                    eventId: createEventId(),
+                    tenantId: conflict.tenantId,
+                    conflictId: conflict.id,
+                    provenance,
+                    occurredAt: recordedAt,
+                  };
+                  await input.store.withTransaction(async (tx) => {
+                    await tx.putConflict(conflict);
+                    await tx.appendEvent(event);
+                    await tx.appendOutbox(event);
+                  });
+                  identities.add(identity);
+                  detected.push(conflict);
+                }
+              }
+            }
+
+            return detected;
+          }
+
+          function sameClaimSet(left: readonly ClaimId[], right: readonly ClaimId[]): boolean {
+            return claimSetKey(left) === claimSetKey(right);
+          }
+
+          async function requireClaims(
+            store: CanonicalStore,
+            principal: Principal,
+            claimIds: readonly ClaimId[],
+          ): Promise<readonly Claim[]> {
+            const claims = await Promise.all(claimIds.map((id) => store.getClaim(id)));
+            if (claims.some((claim) => claim === undefined)) {
+              throw new CapabilityKnowledgeError('One or more conflicting claims were not found');
+            }
+            const resolved = claims.filter((claim): claim is Claim => claim !== undefined);
+            for (const claim of resolved) {
+              assertAllowed(
+                principal,
+                KNOWLEDGE_READ_ACTION,
+                { kind: 'claim', id: claim.id, metadata: claim },
+                { tenantId: principal.tenantId },
+              );
+            }
+            return resolved;
+          }
+
+          export async function resolveClaimConflict(input: {
+            store: CanonicalStore;
+            principal: Principal;
+            conflictId?: string;
+            claimIds: readonly [string, string, ...string[]];
+            preferredClaimId: string;
+            reason: string;
+          }): Promise<ConflictResolution> {
+            if (input.reason.trim().length === 0) {
+              throw new CapabilityKnowledgeError('A conflict resolution requires a reason');
+            }
+            const claimIds = input.claimIds.map((id) => asClaimId(id));
+            const conflicts = await input.store.listConflicts({ tenantId: input.principal.tenantId });
+            const conflictId = input.conflictId === undefined ? undefined : asConflictId(input.conflictId);
+            const existing =
+              conflictId === undefined
+                ? conflicts.find((conflict) => sameClaimSet(conflict.claimIds, claimIds))
+                : conflicts.find((conflict) => conflict.id === conflictId);
+
+            if (conflictId !== undefined && existing === undefined) {
+              throw new CapabilityKnowledgeError(`Conflict not found: ${conflictId}`);
+            }
+
+            if (existing !== undefined) {
+              if (!sameClaimSet(existing.claimIds, claimIds)) {
+                throw new CapabilityKnowledgeError('Resolution claim ids do not match the detected conflict');
+              }
+              const preferredClaimId = asClaimId(input.preferredClaimId);
+              if (!existing.claimIds.includes(preferredClaimId)) {
+                throw new CapabilityKnowledgeError(
+                  'preferredClaimId must be one of the conflicting claims',
+                );
+              }
+              assertAllowed(
+                input.principal,
+                CONFLICT_RESOLVE_ACTION,
+                { kind: 'conflict', id: existing.id, metadata: existing },
+                { tenantId: input.principal.tenantId },
+              );
+              const prior = await input.store.listResolutions({ tenantId: input.principal.tenantId });
+              if (prior.some((resolution) => resolution.id === existing.id)) {
+                throw new CapabilityKnowledgeError(`Conflict is already resolved: ${existing.id}`);
+              }
+              await requireClaims(input.store, input.principal, existing.claimIds);
+              const provenance = compactProvenance({
+                source: 'curator',
+                actor: input.principal.id,
+                process: CONFLICT_RESOLVE_ACTION,
+              });
+              const recordedAt = nowIso();
+              const resolution: ConflictResolution = {
+                tenantId: existing.tenantId,
+                namespaceId: existing.namespaceId,
+                principalId: input.principal.id,
+                classification: existing.classification,
+                visibility: existing.visibility,
+                policyTags: existing.policyTags,
+                id: existing.id,
+                claimIds: existing.claimIds,
+                strategy: 'human_review',
+                preferredClaimId,
+                reason: input.reason.trim(),
+                provenance,
+                recordedAt,
+              };
+              const event: DomainEvent = {
+                kind: 'conflict.resolved',
+                eventId: createEventId(),
+                tenantId: existing.tenantId,
+                conflictId: existing.id,
+                provenance,
+                occurredAt: recordedAt,
+              };
+              await input.store.withTransaction(async (tx) => {
+                await tx.putResolution(resolution);
+                await tx.appendEvent(event);
+                await tx.appendOutbox(event);
+              });
+              return resolution;
+            }
+
+            const claims = await requireClaims(input.store, input.principal, claimIds);
+            const metadata = metadataForClaims(input.principal, claims);
+            assertAllowed(
+              input.principal,
+              CONFLICT_RESOLVE_ACTION,
+              { kind: 'conflict', id: claimSetKey(claimIds), metadata },
+              { tenantId: input.principal.tenantId },
+            );
+            const { conflict, resolution, event } = buildConflictResolved({
+              metadata,
+              kind: 'value',
+              claimIds,
+              strategy: 'human_review',
+              preferredClaimId: asClaimId(input.preferredClaimId),
+              reason: input.reason.trim(),
+              provenance: compactProvenance({
+                source: 'curator',
+                actor: input.principal.id,
+                process: CONFLICT_RESOLVE_ACTION,
+              }),
+            });
+            await input.store.withTransaction(async (tx) => {
+              await tx.putConflict(conflict);
+              await tx.putResolution(resolution);
+              await tx.appendEvent(event);
+              await tx.appendOutbox(event);
+            });
+            return resolution;
+          }
+          '''.lstrip())
+
+          replace(
+              'packages/capability-knowledge/src/public.ts',
+              "export { resolveClaimConflict } from './conflicts.js';",
+              "export { detectClaimConflicts, resolveClaimConflict } from './conflicts.js';",
+          )
+
+          # Semantic contracts translate to generic kernel conflict rules.
+          Path('packages/capability-ontology/src/conflict-rules.ts').write_text(r'''import type { CardinalityConflictRule } from '@kotowari/kernel';
+
+          import { CapabilityOntologyError } from './errors.js';
+          import { validateSemanticContract } from './semantic-contract.js';
+
+          import type { SemanticContract } from './semantic-contract.js';
+
+          export function semanticContractConflictRules(
+            contract: SemanticContract,
+          ): readonly CardinalityConflictRule[] {
+            if (contract.status !== 'active') {
+              return [];
+            }
+            const issues = validateSemanticContract(contract);
+            if (issues.length > 0) {
+              throw new CapabilityOntologyError(
+                `Invalid semantic contract: ${issues.map((issue) => issue.code).join(', ')}`,
+              );
+            }
+            const source = `semantic-contract:${contract.id}@${String(contract.version)}`;
+            return contract.predicates.flatMap((predicate) => {
+              const max = predicate.cardinality?.max;
+              if (max === undefined || max < 1) {
+                return [];
+              }
+              const terms = [...new Set([predicate.id, predicate.iri, ...(predicate.aliases ?? [])])]
+                .filter((term): term is string => term !== undefined)
+                .sort((left, right) => left.localeCompare(right));
+              return [
+                {
+                  kind: 'max-cardinality' as const,
+                  predicate: predicate.id,
+                  terms,
+                  max,
+                  source,
+                },
+              ];
+            });
+          }
+          '''.lstrip())
+
+          replace(
+              'packages/capability-ontology/src/public.ts',
+              "export { CapabilityOntologyError } from './errors.js';",
+              "export { semanticContractConflictRules } from './conflict-rules.js';\nexport { CapabilityOntologyError } from './errors.js';",
+          )
+
+          # Compose ontology and knowledge at the application layer.
+          replace(
+              'packages/application/src/create-app.ts',
+              "  findEntityResolutionCandidates,\n  resolveClaimConflict,",
+              "  detectClaimConflicts,\n  findEntityResolutionCandidates,\n  resolveClaimConflict,",
+          )
+          replace(
+              'packages/application/src/create-app.ts',
+              "import { uniquePredicates } from '@kotowari/capability-ontology';",
+              "import { semanticContractConflictRules, uniquePredicates } from '@kotowari/capability-ontology';",
+          )
+          replace(
+              'packages/application/src/create-app.ts',
+              "import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';",
+              "import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';\nimport type { SemanticContract } from '@kotowari/capability-ontology';",
+          )
+          replace(
+              'packages/application/src/create-app.ts',
+              "  ConflictResolution,\n  ContextSnapshot,",
+              "  Conflict,\n  ConflictResolution,\n  ContextSnapshot,",
+          )
+          replace(
+              'packages/application/src/create-app.ts',
+              "  resolveConflict: (input: {\n    claimIds: readonly [string, string, ...string[]];",
+              "  detectSemanticConflicts?: (contract: SemanticContract) => Promise<readonly Conflict[]>;\n  resolveConflict: (input: {\n    conflictId?: string;\n    claimIds: readonly [string, string, ...string[]];",
+          )
+          replace(
+              'packages/application/src/create-app.ts',
+              "    async resolveConflict(input) {\n      const actor = await current();",
+              "    async detectSemanticConflicts(contract) {\n      return detectClaimConflicts({\n        store: ports.store,\n        principal: await current(),\n        rules: semanticContractConflictRules(contract),\n      });\n    },\n\n    async resolveConflict(input) {\n      const actor = await current();",
+          )
+
+          # Focused regression tests.
+          Path('packages/kernel/src/claim.test.ts').write_text(r'''import { asIsoTimestamp, validityOverlaps } from './public.js';
+          import { describe, expect, it } from 'vitest';
+
+          describe('validityOverlaps', () => {
+            it('treats adjacent validity intervals as non-overlapping', () => {
+              const left = {
+                validFrom: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+                validTo: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+                recordedAt: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+                assertedAt: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+              };
+              const right = {
+                validFrom: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+                validTo: asIsoTimestamp('2026-03-01T00:00:00.000Z'),
+                recordedAt: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+                assertedAt: asIsoTimestamp('2026-02-01T00:00:00.000Z'),
+              };
+
+              expect(validityOverlaps(left, right)).toBe(false);
+            });
+          });
+          '''.lstrip())
+
+          Path('packages/capability-ontology/src/conflict-rules.test.ts').write_text(r'''import { describe, expect, it } from 'vitest';
+
+          import { semanticContractConflictRules } from './conflict-rules.js';
+
+          import type { SemanticContract } from './semantic-contract.js';
+
+          function contract(status: SemanticContract['status'] = 'active'): SemanticContract {
+            return {
+              id: 'crm',
+              name: 'CRM',
+              version: 3,
+              status,
+              baseIri: 'https://example.com/',
+              entityTypes: [],
+              predicates: [
+                {
+                  id: 'legalName',
+                  iri: 'https://example.com/legal-name',
+                  aliases: ['name'],
+                  range: { kind: 'literal', datatype: 'string' },
+                  cardinality: { max: 1 },
+                },
+                {
+                  id: 'director',
+                  range: { kind: 'entity' },
+                  cardinality: { max: 3 },
+                },
+                {
+                  id: 'tag',
+                  range: { kind: 'literal', datatype: 'string' },
+                },
+              ],
+            };
+          }
+
+          describe('semanticContractConflictRules', () => {
+            it('translates active max-cardinality constraints with all semantic terms', () => {
+              const rules = semanticContractConflictRules(contract());
+
+              expect(rules).toHaveLength(2);
+              expect(rules[0]).toEqual({
+                kind: 'max-cardinality',
+                predicate: 'legalName',
+                terms: ['https://example.com/legal-name', 'legalName', 'name'],
+                max: 1,
+                source: 'semantic-contract:crm@3',
+              });
+              expect(rules[1]?.max).toBe(3);
+            });
+
+            it('does not enforce draft contracts', () => {
+              expect(semanticContractConflictRules(contract('draft'))).toEqual([]);
+            });
+          });
+          '''.lstrip())
+
+          Path('packages/capability-knowledge/src/conflicts.test.ts').write_text(r'''import {
+            asIsoTimestamp,
+            asPrincipalId,
+            buildClaimAsserted,
+            buildEntity,
+            buildEntityMerged,
+            compactProvenance,
+            localStandaloneMetadata,
+            localStandalonePrincipal,
+            newId,
+          } from '@kotowari/kernel';
+          import { createMemoryCanonicalStore } from '@kotowari/plugin-sdk';
+          import { describe, expect, it } from 'vitest';
+
+          import { detectClaimConflicts, resolveClaimConflict } from './conflicts.js';
+
+          import type {
+            CardinalityConflictRule,
+            Claim,
+            Entity,
+            Principal,
+            ScopedMetadata,
+          } from '@kotowari/kernel';
+          import type { CanonicalStore } from '@kotowari/plugin-sdk';
+
+          const SINGLE_NAME_RULE: CardinalityConflictRule = {
+            kind: 'max-cardinality',
+            predicate: 'legalName',
+            terms: ['legalName', 'name'],
+            max: 1,
+            source: 'semantic-contract:crm@1',
+          };
+
+          function provenance(principal: Principal, process: string) {
+            return compactProvenance({ source: 'test', actor: principal.id, process });
+          }
+
+          async function putEntity(
+            store: CanonicalStore,
+            principal: Principal,
+            label: string,
+          ): Promise<Entity> {
+            const entity = buildEntity({
+              metadata: localStandaloneMetadata(principal.id),
+              labels: [label],
+              aliases: [],
+              provenance: provenance(principal, 'entity'),
+            });
+            await store.putEntity(entity);
+            return entity;
+          }
+
+          async function putClaim(input: {
+            store: CanonicalStore;
+            principal: Principal;
+            subject: Entity;
+            predicate?: string;
+            value?: string;
+            objectEntity?: Entity;
+            validFrom?: string;
+            validTo?: string;
+            metadata?: ScopedMetadata;
+          }): Promise<Claim> {
+            const { claim } = buildClaimAsserted({
+              metadata: input.metadata ?? localStandaloneMetadata(input.principal.id),
+              subject: input.subject.id,
+              predicate: input.predicate ?? 'legalName',
+              object:
+                input.objectEntity === undefined
+                  ? { kind: 'literal', value: input.value ?? 'Acme' }
+                  : { kind: 'entity', entityId: input.objectEntity.id },
+              validFrom: asIsoTimestamp(input.validFrom ?? '2026-01-01T00:00:00.000Z'),
+              ...(input.validTo === undefined ? {} : { validTo: asIsoTimestamp(input.validTo) }),
+              assertedAt: asIsoTimestamp('2026-01-01T00:00:00.000Z'),
+              confidence: 1,
+              evidenceIds: [newId('EvidenceId')],
+              provenance: provenance(input.principal, 'claim'),
+            });
+            await input.store.assertClaim(claim);
+            return claim;
+          }
+
+          describe('semantic conflict detection v1', () => {
+            it('detects, persists, and idempotently reuses a max-cardinality conflict', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              const first = await putClaim({ store, principal, subject: company, value: 'Acme Inc.' });
+              const second = await putClaim({ store, principal, subject: company, value: 'ACME Ltd.' });
+
+              const conflicts = await detectClaimConflicts({
+                store,
+                principal,
+                rules: [SINGLE_NAME_RULE],
+              });
+
+              expect(conflicts).toHaveLength(1);
+              expect(conflicts[0]?.claimIds).toEqual([first.id, second.id].sort());
+              expect(conflicts[0]?.cause).toMatchObject({
+                kind: 'max-cardinality',
+                subject: company.id,
+                predicate: 'legalName',
+                max: 1,
+                ruleSource: 'semantic-contract:crm@1',
+              });
+              expect((await store.listEvents()).map((event) => event.kind)).toContain(
+                'conflict.detected',
+              );
+              expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
+                [],
+              );
+            });
+
+            it('uses half-open validity intervals and ignores equal values', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              await putClaim({
+                store,
+                principal,
+                subject: company,
+                value: 'Acme',
+                validTo: '2026-02-01T00:00:00.000Z',
+              });
+              await putClaim({
+                store,
+                principal,
+                subject: company,
+                value: 'Different Later Name',
+                validFrom: '2026-02-01T00:00:00.000Z',
+              });
+              await putClaim({ store, principal, subject: company, value: 'Different Later Name' });
+
+              expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
+                [],
+              );
+            });
+
+            it('supports cardinalities greater than one', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              const rule: CardinalityConflictRule = {
+                kind: 'max-cardinality',
+                predicate: 'director',
+                terms: ['director'],
+                max: 2,
+              };
+              await putClaim({ store, principal, subject: company, predicate: 'director', value: 'A' });
+              await putClaim({ store, principal, subject: company, predicate: 'director', value: 'B' });
+              await putClaim({ store, principal, subject: company, predicate: 'director', value: 'C' });
+
+              const conflicts = await detectClaimConflicts({ store, principal, rules: [rule] });
+              expect(conflicts).toHaveLength(1);
+              expect(conflicts[0]?.claimIds).toHaveLength(3);
+            });
+
+            it('canonicalizes merged subjects before detecting conflicts', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const survivor = await putEntity(store, principal, 'Acme Corporation');
+              const absorbed = await putEntity(store, principal, 'ACME Corp');
+              const { event } = buildEntityMerged(
+                {
+                  metadata: localStandaloneMetadata(principal.id),
+                  survivingEntityId: survivor.id,
+                  absorbedEntityIds: [absorbed.id],
+                  provenance: provenance(principal, 'merge'),
+                },
+                survivor,
+              );
+              await store.appendEvent(event);
+              await putClaim({ store, principal, subject: survivor, value: 'Acme Corporation' });
+              await putClaim({ store, principal, subject: absorbed, value: 'ACME Holdings' });
+
+              const conflicts = await detectClaimConflicts({
+                store,
+                principal,
+                rules: [SINGLE_NAME_RULE],
+              });
+              expect(conflicts).toHaveLength(1);
+              expect(conflicts[0]?.cause?.subject).toBe(survivor.id);
+            });
+
+            it('canonicalizes entity-valued objects so aliases do not become false conflicts', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              const survivor = await putEntity(store, principal, 'Tokyo');
+              const absorbed = await putEntity(store, principal, 'Tokyo-to');
+              const { event } = buildEntityMerged(
+                {
+                  metadata: localStandaloneMetadata(principal.id),
+                  survivingEntityId: survivor.id,
+                  absorbedEntityIds: [absorbed.id],
+                  provenance: provenance(principal, 'merge-object'),
+                },
+                survivor,
+              );
+              await store.appendEvent(event);
+              await putClaim({
+                store,
+                principal,
+                subject: company,
+                predicate: 'headquarters',
+                objectEntity: survivor,
+              });
+              await putClaim({
+                store,
+                principal,
+                subject: company,
+                predicate: 'headquarters',
+                objectEntity: absorbed,
+              });
+              const rule: CardinalityConflictRule = {
+                kind: 'max-cardinality',
+                predicate: 'headquarters',
+                terms: ['headquarters'],
+                max: 1,
+              };
+
+              expect(await detectClaimConflicts({ store, principal, rules: [rule] })).toEqual([]);
+            });
+
+            it('does not disclose unreadable claims and prevents viewers from recording conflicts', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              await putClaim({ store, principal, subject: company, value: 'Visible' });
+              await putClaim({
+                store,
+                principal,
+                subject: company,
+                value: 'Secret',
+                metadata: {
+                  ...localStandaloneMetadata(asPrincipalId('other-user')),
+                  visibility: 'private',
+                },
+              });
+              expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
+                [],
+              );
+
+              await putClaim({ store, principal, subject: company, value: 'Visible conflict' });
+              const viewer: Principal = { ...principal, roles: ['viewer'] };
+              await expect(
+                detectClaimConflicts({ store, principal: viewer, rules: [SINGLE_NAME_RULE] }),
+              ).rejects.toThrow('Denied conflict.detect');
+            });
+
+            it('resolves a detected conflict under the same immutable conflict id', async () => {
+              const store = createMemoryCanonicalStore();
+              const principal = localStandalonePrincipal();
+              const company = await putEntity(store, principal, 'Acme');
+              const first = await putClaim({ store, principal, subject: company, value: 'Acme Inc.' });
+              const second = await putClaim({ store, principal, subject: company, value: 'ACME Ltd.' });
+              const [conflict] = await detectClaimConflicts({
+                store,
+                principal,
+                rules: [SINGLE_NAME_RULE],
+              });
+              if (conflict === undefined) {
+                throw new Error('Expected detected conflict');
+              }
+
+              const resolution = await resolveClaimConflict({
+                store,
+                principal,
+                conflictId: conflict.id,
+                claimIds: [first.id, second.id],
+                preferredClaimId: first.id,
+                reason: 'Verified against the corporate registry',
+              });
+
+              expect(resolution.id).toBe(conflict.id);
+              expect((await store.listResolutions({ tenantId: principal.tenantId }))[0]?.id).toBe(
+                conflict.id,
+              );
+              await expect(
+                resolveClaimConflict({
+                  store,
+                  principal,
+                  conflictId: conflict.id,
+                  claimIds: [first.id, second.id],
+                  preferredClaimId: first.id,
+                  reason: 'Duplicate review',
+                }),
+              ).rejects.toThrow('already resolved');
+            });
+          });
+          '''.lstrip())
+          PY
+      - name: Commit implementation
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages
+          git commit -m 'feat: add semantic conflict detection v1'
+          git push origin HEAD:feat/semantic-conflict-detection-v1
