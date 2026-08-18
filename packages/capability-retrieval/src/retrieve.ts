@@ -1,4 +1,13 @@
-import { allow, claimText } from '@kotowari/kernel';
+import { createHash } from 'node:crypto';
+
+import {
+  allow,
+  claimText,
+  compactProvenance,
+  newId,
+  normalizeTemporalPerspective,
+  nowIso,
+} from '@kotowari/kernel';
 
 import type {
   AuthContext,
@@ -6,6 +15,8 @@ import type {
   ConflictResolution,
   EvidenceId,
   Principal,
+  RetrievalReceipt,
+  TemporalPerspective,
 } from '@kotowari/kernel';
 import type { CanonicalStore, EmbeddingProvider, RerankerProvider } from '@kotowari/plugin-sdk';
 
@@ -31,6 +42,8 @@ export const DEFAULT_RETRIEVAL_PLAN: RetrievalPlan = {
   explain: true,
 };
 
+export const RETRIEVAL_PLAN_VERSION = 'retrieval-v1' as const;
+
 export type RetrievalHit = {
   claimId: string;
   score: number;
@@ -52,6 +65,7 @@ export type RetrievalResult = {
   hits: readonly RetrievalHit[];
   omitted: readonly RetrievalOmission[];
   plan: RetrievalPlan;
+  receipt: RetrievalReceipt;
 };
 
 type GraphCandidate = Extract<RetrievalPlan['candidates'][number], { strategy: 'graph' }>;
@@ -248,14 +262,18 @@ export async function retrieve(input: {
   principal: Principal;
   authz: AuthContext;
   query: string;
+  purpose?: string;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
   asOf?: string;
   plan?: RetrievalPlan;
 }): Promise<RetrievalResult> {
   const plan = input.plan ?? DEFAULT_RETRIEVAL_PLAN;
+  const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
   const filter = {
     tenantId: input.principal.tenantId,
     namespaceId: input.principal.namespaceIds[0],
-    asOf: input.asOf,
+    temporal,
   };
   const [claims, embeddings, queryEmbedding, resolutions, lexicalClaims] = await Promise.all([
     input.store.listClaims(filter),
@@ -324,6 +342,37 @@ export async function retrieve(input: {
       count,
     }),
   );
+  const namespaceId = input.principal.namespaceIds[0];
+  if (namespaceId === undefined) {
+    throw new Error('Principal has no namespace');
+  }
+  const receipt: RetrievalReceipt = {
+    id: newId('RetrievalReceiptId'),
+    tenantId: input.principal.tenantId,
+    namespaceId,
+    principalId: input.principal.id,
+    classification: 'internal',
+    visibility: 'workspace',
+    policyTags: input.purpose === undefined ? [] : [input.purpose],
+    queryHash: createHash('sha256').update(input.query).digest('hex'),
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+    temporal,
+    planVersion: RETRIEVAL_PLAN_VERSION,
+    selected: hits.map((hit) => ({
+      claimId: hit.claim.id,
+      evidenceIds: hit.evidenceIds,
+      score: hit.score,
+      scoreComponents: hit.scoreComponents,
+    })),
+    omissions: omitted,
+    executedAt: nowIso(),
+    provenance: compactProvenance({
+      source: 'retrieval',
+      actor: input.principal.id,
+      process: 'knowledge.retrieve',
+    }),
+  };
+  await input.store.putRetrievalReceipt(receipt);
 
-  return { hits, omitted, plan };
+  return { hits, omitted, plan, receipt };
 }
