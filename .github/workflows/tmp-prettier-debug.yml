@@ -1,9 +1,7 @@
 name: Tmp Prettier Debug
 
 on:
-  push:
-    branches:
-      - feat/mcp-v2-enterprise-hardening
+  pull_request:
 
 permissions:
   contents: read
