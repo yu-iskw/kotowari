@@ -5,9 +5,11 @@ import type {
   IsoTimestamp,
   NamespaceId,
   PolicyId,
+  RetrievalReceiptId,
 } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { Classification, ScopedMetadata } from './scoped-metadata.js';
+import type { TemporalPerspective } from './temporal.js';
 
 export type ContextSliceItem = {
   claimId: ClaimId;
@@ -18,6 +20,8 @@ export type ContextSnapshot = ScopedMetadata & {
   id: ContextId;
   capturedAt: IsoTimestamp;
   purpose: string;
+  temporal: TemporalPerspective;
+  retrievalReceiptId?: RetrievalReceiptId;
   namespaceIds: readonly NamespaceId[];
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
