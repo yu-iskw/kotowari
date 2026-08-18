@@ -15,6 +15,9 @@ export function parseMcpStandalonePresetFlag(
   argv: readonly string[],
   fallback: McpStandalonePreset = DEFAULT_MCP_STANDALONE_PRESET,
 ): McpStandalonePreset {
+  if (argv.includes('--profile')) {
+    throw new Error('Standalone MCP uses --preset; enterprise profiles are HTTP endpoints');
+  }
   const flagIndex = argv.indexOf('--preset');
   const value = flagIndex >= 0 ? argv[flagIndex + 1] : undefined;
   if (value === undefined) {
