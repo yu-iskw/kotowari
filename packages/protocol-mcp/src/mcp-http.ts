@@ -6,10 +6,7 @@ import {
   requireBearerAuth,
 } from '@modelcontextprotocol/server';
 
-import {
-  MCP_STANDALONE_PRESET_TOOLS,
-  type McpStandalonePreset,
-} from './mcp-presets.js';
+import { MCP_STANDALONE_PRESET_TOOLS, type McpStandalonePreset } from './mcp-presets.js';
 import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
 import { createKotowariMcpServer, type McpAuditSink } from './mcp-server.js';
 
@@ -53,10 +50,7 @@ function verifierForSdk(verifier: McpTokenVerifier) {
       try {
         return verifier.verifyAccessToken(token);
       } catch {
-        throw new OAuthError(
-          OAuthErrorCode.InvalidToken,
-          'Invalid access token',
-        );
+        throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid access token');
       }
     },
   };
@@ -70,9 +64,7 @@ export function protectedResourceMetadata(input: {
   return {
     resource: input.resourceServerUrl.href,
     authorization_servers: [...input.authorizationServers],
-    scopes_supported: [
-      ...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes,
-    ],
+    scopes_supported: [...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes],
     bearer_methods_supported: ['header'],
   };
 }
@@ -95,9 +87,7 @@ export function createStandaloneMcpHttpHandler(input: {
 
   return {
     fetch: (request) =>
-      input.app.runAsRequest(requestHeaders(request), () =>
-        handler.fetch(request),
-      ),
+      input.app.runAsRequest(requestHeaders(request), () => handler.fetch(request)),
     close: () => handler.close(),
   };
 }
@@ -112,9 +102,7 @@ export function createMcpHttpHandler(input: {
   const resourceMetadataUrlValue =
     input.authorization === undefined
       ? undefined
-      : getOAuthProtectedResourceMetadataUrl(
-          input.authorization.resourceServerUrl,
-        );
+      : getOAuthProtectedResourceMetadataUrl(input.authorization.resourceServerUrl);
   const gate =
     input.authorization === undefined
       ? undefined
@@ -152,9 +140,7 @@ export function createMcpHttpHandler(input: {
         authInfo = gated;
       }
       return input.app.runAsRequest(requestHeaders(request), () =>
-        authInfo === undefined
-          ? handler.fetch(request)
-          : handler.fetch(request, { authInfo }),
+        authInfo === undefined ? handler.fetch(request) : handler.fetch(request, { authInfo }),
       );
     },
     close: () => handler.close(),
