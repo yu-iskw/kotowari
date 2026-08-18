@@ -5,6 +5,8 @@ description: Record an explicit decision with selectedOutcome, rationale, and a 
 
 # Record decision
 
+`record_decision` is intentionally exposed by the dedicated `decision-write` MCP profile, not the read-only `retrieve` profile. The Cursor pack connects both capability-scoped servers; enterprise deployments can grant their OAuth scopes independently.
+
 ## When to record
 
 Call `record_decision` when:
@@ -29,7 +31,7 @@ Do **not** call this tool for exploratory reasoning, tentative suggestions, or i
 1. Search knowledge (`search_knowledge`) to gather sourced facts.
 2. Optionally search memory (`search_memory`) for prior agent context.
 3. Present options to the user when the choice is not already explicit.
-4. After confirmation, call `record_decision` with `selectedOutcome`.
+4. After confirmation, call `record_decision` with `selectedOutcome` and all relevant alternatives.
 5. Tell the user the decision was recorded.
 
 Never persist hidden chain-of-thought.

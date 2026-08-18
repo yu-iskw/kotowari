@@ -6,6 +6,8 @@ export { PACKAGE_EVENTS } from './events.js';
 
 export {
   cursorPluginManifest,
+  decisionToolNames,
+  decisionToolsDocument,
   retrieveToolNames,
   retrieveToolsDocument,
   type CursorPluginManifest,

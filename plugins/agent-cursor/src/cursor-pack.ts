@@ -43,6 +43,14 @@ export const retrieveToolsDocument: McpToolsDocument = readJson(
   join(packageRoot, 'src/generated/tools.json'),
 );
 
+export const decisionToolsDocument: McpToolsDocument = readJson(
+  join(packageRoot, 'src/generated/decision-tools.json'),
+);
+
 export const retrieveToolNames: readonly string[] = retrieveToolsDocument.tools.map(
+  (tool) => tool.name,
+);
+
+export const decisionToolNames: readonly string[] = decisionToolsDocument.tools.map(
   (tool) => tool.name,
 );

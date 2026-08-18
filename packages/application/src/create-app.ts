@@ -288,7 +288,18 @@ export function createKotowariApp(
     },
 
     async getDecision(id) {
-      return ports.store.getDecision(asDecisionId(id));
+      const actor = await current();
+      const decision = await ports.store.getDecision(asDecisionId(id));
+      if (decision === undefined) {
+        return undefined;
+      }
+      assertAllowed(
+        actor,
+        'decision.read',
+        { kind: 'decision', id: decision.id, metadata: decision },
+        { tenantId: actor.tenantId },
+      );
+      return decision;
     },
 
     async listDecisions() {
@@ -378,12 +389,19 @@ export function createKotowariApp(
     },
 
     async exportProvO(decisionId) {
+      const actor = await current();
       const decision = await ports.store.getDecision(asDecisionId(decisionId));
       if (decision === undefined) {
         return undefined;
       }
+      assertAllowed(
+        actor,
+        'audit.read',
+        { kind: 'decision', id: decision.id, metadata: decision },
+        { tenantId: actor.tenantId },
+      );
       const evidence = (
-        await Promise.all(decision.consideredEvidenceIds.map((id) => ports.store.getEvidence(id)))
+        await Promise.all(decision.consideredEvidenceIds.map((id) => app.getEvidence(id)))
       ).filter((item): item is Evidence => item !== undefined);
       return decisionToProvO(decision, evidence);
     },
@@ -399,6 +417,9 @@ export function createKotowariApp(
 
     async listPolicies() {
       const actor = await current();
+      assertAllowed(actor, 'policy.evaluate', scopeResource(actor, 'policy'), {
+        tenantId: actor.tenantId,
+      });
       return (await ports.store.listPolicies({ tenantId: actor.tenantId })).filter(
         (policy) => policy.namespaceId === actor.namespaceIds[0],
       );

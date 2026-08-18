@@ -1,91 +1,120 @@
-import { handleMcpRpc, MCP_PROTOCOL_VERSION } from './mcp-rpc.js';
+import {
+  createMcpHandler,
+  getOAuthProtectedResourceMetadataUrl,
+  OAuthError,
+  OAuthErrorCode,
+  requireBearerAuth,
+} from '@modelcontextprotocol/server';
 
-import type { McpProfile } from './mcp-profiles.js';
-import type { McpRpcResult } from './mcp-rpc.js';
+import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
+import { createKotowariMcpServer, type McpAuditSink } from './mcp-server.js';
+
+import type { AuthInfo } from '@modelcontextprotocol/server';
 import type { KotowariApp } from '@kotowari/application';
 
-export const MCP_ERROR_HEADER_MISMATCH = -32020;
+export type McpVerifiedToken = {
+  token: string;
+  clientId: string;
+  scopes: string[];
+  expiresAt: number;
+};
 
-export type McpHttpInput = {
+export type McpTokenVerifier = {
+  verifyAccessToken: (token: string) => Promise<McpVerifiedToken>;
+};
+
+export type McpAuthorization = {
+  verifier: McpTokenVerifier;
+  resourceServerUrl: URL;
+  authorizationServers: readonly string[];
+};
+
+export type McpFetchHandler = {
+  fetch: (request: Request) => Promise<Response>;
+  close: () => Promise<void>;
+  resourceMetadataUrl?: URL;
+};
+
+function requestHeaders(request: Request): Record<string, string | undefined> {
+  const headers: Record<string, string | undefined> = {};
+  request.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  return headers;
+}
+
+function verifierForSdk(verifier: McpTokenVerifier) {
+  return {
+    async verifyAccessToken(token: string): Promise<AuthInfo> {
+      try {
+        return (await verifier.verifyAccessToken(token)) as AuthInfo;
+      } catch {
+        throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid access token');
+      }
+    },
+  };
+}
+
+export function protectedResourceMetadata(input: {
   profile: McpProfile;
-  headers: Record<string, string | undefined>;
-  body: unknown;
+  resourceServerUrl: URL;
+  authorizationServers: readonly string[];
+}): Record<string, unknown> {
+  return {
+    resource: input.resourceServerUrl.href,
+    authorization_servers: [...input.authorizationServers],
+    scopes_supported: [...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes],
+    bearer_methods_supported: ['header'],
+  };
+}
+
+export function createMcpHttpHandler(input: {
+  profile: McpProfile;
   app: KotowariApp;
-};
+  authorization?: McpAuthorization;
+  audit?: McpAuditSink;
+}): McpFetchHandler {
+  const resourceMetadataUrl =
+    input.authorization === undefined
+      ? undefined
+      : getOAuthProtectedResourceMetadataUrl(input.authorization.resourceServerUrl);
+  const gate =
+    input.authorization === undefined
+      ? undefined
+      : requireBearerAuth({
+          verifier: verifierForSdk(input.authorization.verifier),
+          requiredScopes: [...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes],
+          resourceMetadataUrl,
+        });
 
-export type McpHttpOutput = {
-  status: number;
-  json: unknown;
-};
-
-function header(headers: Record<string, string | undefined>, name: string): string | undefined {
-  const lower = name.toLowerCase();
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === lower) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function asObject(value: unknown): {
-  jsonrpc?: string;
-  id?: string | number | null;
-  method?: string;
-  params?: { name?: string };
-} {
-  if (value !== null && typeof value === 'object') {
-    return value;
-  }
-  return {};
-}
-
-function rpcToHttp(rpc: McpRpcResult): McpHttpOutput {
-  if (rpc.error !== undefined) {
-    const status = rpc.error.code === -32001 ? 403 : 400;
-    return { status, json: rpc };
-  }
-  return { status: 200, json: rpc };
-}
-
-export async function handleMcpHttp(input: McpHttpInput): Promise<McpHttpOutput> {
-  const version = header(input.headers, 'MCP-Protocol-Version');
-  const methodHeader = header(input.headers, 'Mcp-Method');
-  const nameHeader = header(input.headers, 'Mcp-Name');
-  const body = asObject(input.body);
-  const rpcMethod = body.method;
-  const rpcName = body.params?.name;
-
-  if (version !== MCP_PROTOCOL_VERSION || methodHeader === undefined || nameHeader === undefined) {
-    return {
-      status: 400,
-      json: {
-        jsonrpc: '2.0',
-        id: body.id ?? null,
-        error: {
-          code: MCP_ERROR_HEADER_MISMATCH,
-          message: 'MCP-Protocol-Version, Mcp-Method, and Mcp-Name are required',
-        },
-      },
-    };
-  }
-
-  if (methodHeader !== rpcMethod || nameHeader !== rpcName) {
-    return {
-      status: 400,
-      json: {
-        jsonrpc: '2.0',
-        id: body.id ?? null,
-        error: {
-          code: MCP_ERROR_HEADER_MISMATCH,
-          message: 'Header/body MCP method or name mismatch',
-        },
-      },
-    };
-  }
-
-  const rpc = await input.app.runAsRequest(input.headers, () =>
-    handleMcpRpc({ profile: input.profile, app: input.app, body: input.body }),
+  const handler = createMcpHandler(
+    (context) =>
+      createKotowariMcpServer({
+        app: input.app,
+        profile: input.profile,
+        enforceScopes: gate !== undefined,
+        scopes: context.authInfo?.scopes,
+        clientId: context.authInfo?.clientId,
+        audit: input.audit,
+      }),
+    { legacy: 'reject' },
   );
-  return rpcToHttp(rpc);
+
+  return {
+    resourceMetadataUrl,
+    async fetch(request) {
+      let authInfo: AuthInfo | undefined;
+      if (gate !== undefined) {
+        const gated = await gate(request);
+        if (gated instanceof Response) {
+          return gated;
+        }
+        authInfo = gated;
+      }
+      return input.app.runAsRequest(requestHeaders(request), () =>
+        authInfo === undefined ? handler.fetch(request) : handler.fetch(request, { authInfo }),
+      );
+    },
+    close: () => handler.close(),
+  };
 }

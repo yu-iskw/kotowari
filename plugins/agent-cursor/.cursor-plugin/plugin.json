@@ -2,12 +2,16 @@
   "name": "kotowari",
   "displayName": "Kotowari",
   "version": "0.1.0",
-  "description": "Kotowari knowledge, memory, retrieval, and decision recording for coding agents via MCP.",
+  "description": "Kotowari knowledge, memory, retrieval, and decision recording for coding agents via capability-scoped MCP servers.",
   "skills": "./skills/",
   "mcpServers": {
-    "kotowari": {
+    "kotowari-retrieve": {
       "command": "kotowari",
       "args": ["mcp", "--profile", "retrieve"]
+    },
+    "kotowari-decision": {
+      "command": "kotowari",
+      "args": ["mcp", "--profile", "decision-write"]
     }
   }
 }

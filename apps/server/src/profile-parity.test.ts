@@ -10,14 +10,20 @@ import { createInProcessComposeApp, startComposeServer } from './compose.js';
 import { collectParitySnapshot, semanticParityEqual } from './parity.js';
 import { createStandaloneApp, runKotowariMcpStdio, startKotowariServer } from './public.js';
 
+const MCP_META = {
+  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+  'io.modelcontextprotocol/clientInfo': { name: 'kotowari-test', version: '1.0.0' },
+  'io.modelcontextprotocol/clientCapabilities': {},
+} as const;
+
 function tempDocs(): string {
   const docs = mkdtempSync(join(tmpdir(), 'docs-'));
   writeFileSync(join(docs, 'note.md'), 'Alice Chen is CEO of Vendor X as of 2024.\n');
   return docs;
 }
 
-describe('S1 S4 MCP stdio', () => {
-  it('S12 kotowari mcp --profile retrieve lists tools without admin', async () => {
+describe('S1 S4 MCP 2026-07-28 stdio', () => {
+  it('S12 retrieve profile is modern-only and strictly read-only', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
     const stdin = new PassThrough();
     const stdout = new PassThrough();
@@ -31,15 +37,37 @@ describe('S1 S4 MCP stdio', () => {
       stdin,
       stdout,
     });
-    stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })}\n`);
+    stdin.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'discover',
+        method: 'server/discover',
+        params: { _meta: MCP_META },
+      })}\n`,
+    );
+    stdin.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'tools',
+        method: 'tools/list',
+        params: { _meta: MCP_META },
+      })}\n`,
+    );
     stdin.end();
     await running;
-    const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-      result: { tools: { name: string }[] };
-    };
-    const names = payload.result.tools.map((tool) => tool.name);
-    expect(names).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
-    expect(names).not.toContain('list_policies');
+
+    const messages = Buffer.concat(chunks)
+      .toString('utf8')
+      .trim()
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as { id?: string; result?: Record<string, unknown> });
+    const discover = messages.find((message) => message.id === 'discover');
+    expect(discover?.result?.['supportedVersions']).toContain('2026-07-28');
+
+    const toolsMessage = messages.find((message) => message.id === 'tools');
+    const tools = (toolsMessage?.result?.['tools'] ?? []) as { name: string }[];
+    expect(tools.map((tool) => tool.name)).toEqual(['search_knowledge', 'search_memory']);
   });
 });
 

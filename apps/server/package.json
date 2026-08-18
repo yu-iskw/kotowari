@@ -27,6 +27,7 @@
     "@kotowari/plugin-sdk": "workspace:*",
     "@kotowari/model-fake": "workspace:*",
     "@kotowari/protocol-rest": "workspace:*",
-    "@kotowari/protocol-mcp": "workspace:*"
+    "@kotowari/protocol-mcp": "workspace:*",
+    "@modelcontextprotocol/node": "2.0.0"
   }
 }

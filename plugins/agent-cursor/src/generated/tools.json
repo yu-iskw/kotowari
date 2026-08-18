@@ -6,14 +6,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": {
-            "type": "string",
-            "description": "Natural language question or keywords to search knowledge."
-          },
-          "purpose": {
-            "type": "string",
-            "description": "Retrieval purpose used for policy filtering and context assembly."
-          }
+          "query": { "type": "string" },
+          "purpose": { "type": "string" }
         },
         "required": ["query"],
         "additionalProperties": false
@@ -25,50 +19,9 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": {
-            "type": "string",
-            "description": "Natural language query for memory recall."
-          }
+          "query": { "type": "string" }
         },
         "required": ["query"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "record_decision",
-      "description": "Record a decision with context snapshot, considered evidence, and selected outcome.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "purpose": {
-            "type": "string",
-            "description": "Why this decision is being recorded."
-          },
-          "query": {
-            "type": "string",
-            "description": "Question used to assemble the context snapshot."
-          },
-          "selectedOutcome": {
-            "type": "string",
-            "description": "The selected decision outcome label."
-          },
-          "rationale": {
-            "type": "string",
-            "description": "Brief rationale for the decision (not hidden chain-of-thought)."
-          },
-          "alternatives": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Alternative outcomes that were considered."
-          },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Confidence in the selected outcome."
-          }
-        },
-        "required": ["selectedOutcome"],
         "additionalProperties": false
       }
     }
