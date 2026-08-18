@@ -135,6 +135,21 @@ describe('ADR-0010 allow()', () => {
     );
   });
 
+  it('treats decision lifecycle mutations as writes', () => {
+    const viewer = human({ roles: ['viewer'] });
+    for (const action of [
+      'decision.relate',
+      'decision.observe',
+      'decision.approve',
+      'policy.exception',
+    ] as const) {
+      expect(allow(viewer, action, resource(), { tenantId: tenantA })).toEqual({
+        effect: 'deny',
+        reason: 'ACTION_DENIED',
+      });
+    }
+  });
+
   it('ADR-0010 property: cross-tenant never allows', () => {
     fc.assert(
       fc.property(

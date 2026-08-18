@@ -11,7 +11,11 @@ export {
   createOutcomeObservation,
   createPolicyException,
   findDecisionPrecedentsCapability,
+  observeDecisionOutcomeCapability,
+  recordDecisionApprovalCapability,
   recordDecisionCapability,
+  recordPolicyExceptionCapability,
+  relateDecisionCapability,
   replayDecisionCapability,
 } from '@kotowari/capability-decision';
 export type {

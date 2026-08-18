@@ -6,8 +6,14 @@ export type { PluginSdkErrorCode } from './errors.js';
 export * from './contracts.js';
 export * from './events.js';
 export * from './ports.js';
+export {
+  createEventBackedDecisionLifecycleStore,
+  type DecisionLifecycleFilter,
+  type DecisionLifecycleStore,
+} from './decision-lifecycle-store.js';
 
 export { canonicalStoreComplianceTests } from './compliance/canonical-store.js';
+export { decisionLifecycleStoreComplianceTests } from './compliance/decision-lifecycle-store.js';
 export { blobStoreComplianceTests } from './compliance/blob-store.js';
 export {
   embeddingProviderComplianceTests,

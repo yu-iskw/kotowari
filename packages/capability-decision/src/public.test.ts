@@ -7,7 +7,11 @@ import {
   createOutcomeObservation,
   createPolicyException,
   findDecisionPrecedentsCapability,
+  observeDecisionOutcomeCapability,
+  recordDecisionApprovalCapability,
   recordDecisionCapability,
+  recordPolicyExceptionCapability,
+  relateDecisionCapability,
   replayDecisionCapability,
 } from './public.js';
 
@@ -21,5 +25,9 @@ describe('public', () => {
     expect(createOutcomeObservation).toBeTypeOf('function');
     expect(createPolicyException).toBeTypeOf('function');
     expect(createApprovalRecord).toBeTypeOf('function');
+    expect(relateDecisionCapability).toBeTypeOf('function');
+    expect(observeDecisionOutcomeCapability).toBeTypeOf('function');
+    expect(recordPolicyExceptionCapability).toBeTypeOf('function');
+    expect(recordDecisionApprovalCapability).toBeTypeOf('function');
   });
 });

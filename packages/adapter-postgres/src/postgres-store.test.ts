@@ -1,5 +1,11 @@
-import { canonicalStoreComplianceTests } from '@kotowari/plugin-sdk';
+import {
+  canonicalStoreComplianceTests,
+  decisionLifecycleStoreComplianceTests,
+} from '@kotowari/plugin-sdk';
 
 import { createPgliteCanonicalStore } from './postgres-store.js';
 
-canonicalStoreComplianceTests(() => createPgliteCanonicalStore());
+const factory = () => createPgliteCanonicalStore();
+
+canonicalStoreComplianceTests(factory);
+decisionLifecycleStoreComplianceTests(factory);

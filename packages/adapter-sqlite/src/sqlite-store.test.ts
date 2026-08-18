@@ -1,5 +1,11 @@
-import { canonicalStoreComplianceTests } from '@kotowari/plugin-sdk';
+import {
+  canonicalStoreComplianceTests,
+  decisionLifecycleStoreComplianceTests,
+} from '@kotowari/plugin-sdk';
 
 import { createSqliteCanonicalStore } from './sqlite-store.js';
 
-canonicalStoreComplianceTests(() => createSqliteCanonicalStore(':memory:'));
+const factory = () => createSqliteCanonicalStore(':memory:');
+
+canonicalStoreComplianceTests(factory);
+decisionLifecycleStoreComplianceTests(factory);
