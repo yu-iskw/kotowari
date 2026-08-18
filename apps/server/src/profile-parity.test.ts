@@ -16,10 +16,47 @@ const MCP_META = {
   'io.modelcontextprotocol/clientCapabilities': {},
 } as const;
 
+const PERSONAL_TOOLS = [
+  'search_knowledge',
+  'search_memory',
+  'record_memory',
+  'record_decision',
+  'replay_decision',
+  'audit_decision',
+] as const;
+
 function tempDocs(): string {
   const docs = mkdtempSync(join(tmpdir(), 'docs-'));
   writeFileSync(join(docs, 'note.md'), 'Alice Chen is CEO of Vendor X as of 2024.\n');
   return docs;
+}
+
+async function listMcpTools(endpoint: string): Promise<{ status: number; tools: string[] }> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'MCP-Protocol-Version': '2026-07-28',
+      'Mcp-Method': 'tools/list',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'tools',
+      method: 'tools/list',
+      params: { _meta: MCP_META },
+    }),
+  });
+  if (!response.ok) {
+    return { status: response.status, tools: [] };
+  }
+  const message = (await response.json()) as {
+    result?: { tools?: { name: string }[] };
+  };
+  return {
+    status: response.status,
+    tools: (message.result?.tools ?? []).map((tool) => tool.name),
+  };
 }
 
 describe('S1 S4 MCP 2026-07-28 stdio', () => {
@@ -67,14 +104,38 @@ describe('S1 S4 MCP 2026-07-28 stdio', () => {
 
     const toolsMessage = messages.find((message) => message.id === 'tools');
     const tools = (toolsMessage?.result?.['tools'] ?? []) as { name: string }[];
-    expect(tools.map((tool) => tool.name)).toEqual([
-      'search_knowledge',
-      'search_memory',
-      'record_memory',
-      'record_decision',
-      'replay_decision',
-      'audit_decision',
-    ]);
+    expect(tools.map((tool) => tool.name)).toEqual(PERSONAL_TOOLS);
+  });
+});
+
+describe('MCP HTTP exposure modes', () => {
+  it('standalone exposes one /mcp personal surface instead of enterprise profile routes', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
+    const started = await startKotowariServer({ dataDir, port: 0 });
+    try {
+      const standalone = await listMcpTools(`${started.url}/mcp`);
+      expect(standalone.status).toBe(200);
+      expect(standalone.tools).toEqual(PERSONAL_TOOLS);
+
+      const enterprisePath = await listMcpTools(`${started.url}/mcp/retrieve`);
+      expect(enterprisePath.status).not.toBe(200);
+    } finally {
+      await started.close();
+    }
+  });
+
+  it('Compose preserves enterprise-style profile routes', async () => {
+    const started = await startComposeServer({ port: 0 });
+    try {
+      const retrieve = await listMcpTools(`${started.url}/mcp/retrieve`);
+      expect(retrieve.status).toBe(200);
+      expect(retrieve.tools).toEqual(['search_knowledge', 'search_memory']);
+
+      const standalonePath = await listMcpTools(`${started.url}/mcp`);
+      expect(standalonePath.status).not.toBe(200);
+    } finally {
+      await started.close();
+    }
   });
 });
 
