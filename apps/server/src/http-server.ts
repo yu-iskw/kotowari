@@ -57,6 +57,12 @@ export type McpHttpSecurityOptions = {
   audit?: (event: ServerMcpAuditEvent) => void | Promise<void>;
 };
 
+export type ServerObservability = {
+  health: () => Promise<Record<string, unknown>>;
+  ready: () => Promise<{ ready: boolean } & Record<string, unknown>>;
+  metrics: () => Promise<string>;
+};
+
 function chunkToBuffer(chunk: unknown): Buffer {
   if (typeof chunk === 'string') {
     return Buffer.from(chunk);
@@ -219,6 +225,7 @@ type McpRuntimeHandler = {
 
 type RequestRouterInput = {
   app: KotowariApp;
+  observability?: ServerObservability;
   indexHtml: string;
   handlers: ReadonlyMap<string, McpRuntimeHandler>;
   metadataRoutes: ReadonlyMap<string, Record<string, unknown>>;
@@ -335,6 +342,44 @@ async function handleMcpRoute(
   return true;
 }
 
+async function handleObservabilityRoute(
+  input: RequestRouterInput,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  if (input.observability === undefined) {
+    return false;
+  }
+  if (url.pathname === '/healthz') {
+    if (request.method !== 'GET') {
+      writeJson(response, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      return true;
+    }
+    writeJson(response, 200, await input.observability.health());
+    return true;
+  }
+  if (url.pathname === '/readyz') {
+    if (request.method !== 'GET') {
+      writeJson(response, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      return true;
+    }
+    const ready = await input.observability.ready();
+    writeJson(response, ready.ready ? 200 : 503, ready);
+    return true;
+  }
+  if (url.pathname === '/metrics') {
+    if (request.method !== 'GET') {
+      writeJson(response, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      return true;
+    }
+    response.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' });
+    response.end(await input.observability.metrics());
+    return true;
+  }
+  return false;
+}
+
 async function handleRestRoute(
   input: RequestRouterInput,
   request: IncomingMessage,
@@ -364,6 +409,9 @@ async function routeRequest(
     return;
   }
   if (handleIndexRoute(request, response, url, input.indexHtml)) {
+    return;
+  }
+  if (await handleObservabilityRoute(input, request, response, url)) {
     return;
   }
   if (await handleMcpRoute(input, request, response, url)) {
@@ -464,6 +512,7 @@ export function listenKotowariHttp(options: {
   webRoot?: string;
   mcpSecurity?: McpHttpSecurityOptions;
   mcpStandalonePreset?: McpStandalonePreset;
+  observability?: ServerObservability;
 }): Promise<{
   url: string;
   close: () => Promise<void>;
@@ -506,6 +555,7 @@ export function listenKotowariHttp(options: {
 
   const router: RequestRouterInput = {
     app,
+    ...(options.observability === undefined ? {} : { observability: options.observability }),
     indexHtml,
     handlers,
     metadataRoutes,

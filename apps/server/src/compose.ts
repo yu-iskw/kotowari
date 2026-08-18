@@ -7,6 +7,7 @@ import {
   createPgliteClient,
   createPostgresCanonicalStore,
   createPostgresQueue,
+  createPostgresRetrievalProjection,
 } from '@kotowari/adapter-postgres';
 import { createS3BlobStore, startInProcessS3 } from '@kotowari/adapter-s3';
 import { createKotowariApp } from '@kotowari/application';
@@ -14,18 +15,25 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
+import { createProjectionServingGate } from './projection-serving.js';
 
 import type { OAuthIntrospectionIdentityProvider } from '@kotowari/adapter-fs';
 import type { SqlClient } from '@kotowari/adapter-postgres';
 import type { S3BlobStoreOptions } from '@kotowari/adapter-s3';
 import type { KotowariApp } from '@kotowari/application';
-import type { BlobStore, IdentityProvider, Queue } from '@kotowari/plugin-sdk';
+import type {
+  BlobStore,
+  IdentityProvider,
+  Queue,
+  RetrievalCandidateSource,
+} from '@kotowari/plugin-sdk';
 
 type ComposeBindings = {
   sql: SqlClient;
   blobs: BlobStore;
   identity?: IdentityProvider;
   queue?: Queue;
+  retrievalCandidateSource?: RetrievalCandidateSource;
 };
 
 export function createComposeApp(bindings: ComposeBindings): KotowariApp {
@@ -37,6 +45,9 @@ export function createComposeApp(bindings: ComposeBindings): KotowariApp {
       queue: bindings.queue ?? createPostgresQueue(bindings.sql),
       extraction: createFakeExtractionProvider(),
       embeddings: createFakeEmbeddingProvider(),
+      ...(bindings.retrievalCandidateSource === undefined
+        ? {}
+        : { retrievalCandidateSource: bindings.retrievalCandidateSource }),
     },
     { profile: 'compose' },
   );
@@ -143,11 +154,34 @@ export async function startComposeServer(options: {
       .split(',')
       .map((value) => value.trim())
       .filter((value) => value.length > 0);
+    const databaseUrl = requiredEnv(env, 'DATABASE_URL');
+    const sql = createPgPoolClient(databaseUrl);
+    const store = createPostgresCanonicalStore(sql);
+    const embeddings = createFakeEmbeddingProvider();
+    const projection = createPostgresRetrievalProjection({ sql, store, embeddings });
+    const projectionServing = createProjectionServingGate({ projection, store, embeddings });
+    const app = createComposeApp({
+      sql,
+      blobs: createS3BlobStore(s3OptionsFromEnv(env)),
+      identity,
+      retrievalCandidateSource: projectionServing.candidateSource,
+    });
     return listenKotowariHttp({
-      app: createComposeAppFromEnv(env, identity),
+      app,
       port: options.port,
       host: env['KOTOWARI_HOST'] ?? '0.0.0.0',
       webRoot: options.webRoot,
+      observability: {
+        health: async () => ({ ok: true, projection: await projectionServing.status() }),
+        ready: async () => {
+          const projectionStatus = await projectionServing.status();
+          return {
+            ready: projectionStatus.ready && projectionStatus.healthy,
+            projection: projectionStatus,
+          };
+        },
+        metrics: () => projectionServing.metrics(),
+      },
       mcpSecurity: {
         authorization: {
           verifier: identity,
