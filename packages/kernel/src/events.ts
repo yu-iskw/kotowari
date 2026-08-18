@@ -17,7 +17,12 @@ import type {
   PolicyVersionId,
   TenantId,
 } from './branded-ids.js';
-import type { ApprovalRecord, DecisionRelation, OutcomeObservation, PolicyException } from './decision.js';
+import type {
+  ApprovalRecord,
+  DecisionRelation,
+  OutcomeObservation,
+  PolicyException,
+} from './decision.js';
 import type { Provenance } from './provenance.js';
 
 export type DomainEvent =

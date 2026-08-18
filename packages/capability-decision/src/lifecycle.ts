@@ -35,10 +35,7 @@ import type { CanonicalStore } from '@kotowari/plugin-sdk';
 const POLICY_EXCEPTION_ACTION = 'policy.exception' as const;
 
 type LifecycleAction =
-  | 'decision.relate'
-  | 'decision.observe'
-  | 'decision.approve'
-  | typeof POLICY_EXCEPTION_ACTION;
+  'decision.relate' | 'decision.observe' | 'decision.approve' | typeof POLICY_EXCEPTION_ACTION;
 
 async function decisionForLifecycle(input: {
   store: CanonicalStore;
@@ -62,7 +59,9 @@ async function decisionForLifecycle(input: {
 
 async function persistLifecycleEvent(
   store: CanonicalStore,
-  write: (lifecycle: ReturnType<typeof createEventBackedDecisionLifecycleStore>) => Promise<DomainEvent>,
+  write: (
+    lifecycle: ReturnType<typeof createEventBackedDecisionLifecycleStore>,
+  ) => Promise<DomainEvent>,
 ): Promise<void> {
   await store.withTransaction(async (tx) => {
     const event = await write(createEventBackedDecisionLifecycleStore(tx));
@@ -108,9 +107,7 @@ export async function relateDecisionCapability(input: {
       process: 'decision.relate',
     }),
   });
-  await persistLifecycleEvent(input.store, (lifecycle) =>
-    lifecycle.putDecisionRelation(relation),
-  );
+  await persistLifecycleEvent(input.store, (lifecycle) => lifecycle.putDecisionRelation(relation));
   return relation;
 }
 

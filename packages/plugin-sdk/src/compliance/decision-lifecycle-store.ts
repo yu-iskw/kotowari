@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  asIsoTimestamp,
-  asPrincipalId,
-  localStandaloneMetadata,
-  newId,
-} from '../contracts.js';
+import { asIsoTimestamp, asPrincipalId, localStandaloneMetadata, newId } from '../contracts.js';
 import { createEventBackedDecisionLifecycleStore } from '../decision-lifecycle-store.js';
 
 import type { CanonicalStore } from '../ports.js';
