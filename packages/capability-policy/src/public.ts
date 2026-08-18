@@ -6,7 +6,6 @@ export { PACKAGE_EVENTS } from './events.js';
 export {
   evaluateDecisionAgainstPolicy,
   isPolicyApplicable,
-  policyClock,
   policyVersionKey,
   policyVersionRef,
   putPolicy,
