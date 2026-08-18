@@ -19,6 +19,12 @@ function generatedRetrieveTools(): {
   };
 }
 
+function embeddedInputSchema(schema: z.ZodType): Record<string, unknown> {
+  const generated = z.toJSONSchema(schema, { io: 'input' });
+  const { $schema: _schemaDeclaration, ...embedded } = generated;
+  return embedded;
+}
+
 describe('ADR-0009 generated Cursor pack matches canonical MCP operations', () => {
   it('retrieve tools.json is generated from the retrieve operation contracts', () => {
     const generated = generatedRetrieveTools();
@@ -29,7 +35,7 @@ describe('ADR-0009 generated Cursor pack matches canonical MCP operations', () =
       expect(operation).toBeDefined();
       expect(tool.description).toBe(operation?.description);
       expect(tool.inputSchema).toEqual(
-        z.toJSONSchema(operation?.inputSchema ?? z.never(), { io: 'input' }),
+        embeddedInputSchema(operation?.inputSchema ?? z.never()),
       );
     }
   });
