@@ -24,23 +24,25 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
+permissions: read-all
 
 jobs:
   build:
-    if: github.actor != 'github-actions[bot]'
-    name: Apply MCP Quality Fixes
+    name: Run Build Process
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Enable Corepack
         run: corepack enable
+
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -56,48 +58,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Make handler matcher index-based
-        run: |
-          python <<'PY'
-          from pathlib import Path
+      - name: Find unused code (Knip)
+        run: pnpm knip
 
-          path = Path('.github/scripts/fix-mcp-quality.py')
-          text = path.read_text()
-          start = text.index('old_map = dedent(')
-          end = text.index('\n\nstart = http.index(', start)
-          replacement = r'''map_start = http.index("  const handlers = new Map<")
-          map_end = http.index("\n  for (const profile of MCP_PROFILES)", map_start)
-          http = (
-              http[:map_start]
-              + "  const handlers = new Map<McpProfile, McpRuntimeHandler>();"
-              + http[map_end:]
-          )'''
-          path.write_text(text[:start] + replacement + text[end:])
-          PY
-
-      - name: Refactor lint findings
-        run: python .github/scripts/fix-mcp-quality.py
-
-      - name: Format changed files
-        run: >-
-          pnpm exec prettier --write
-          apps/server/src/compose.ts
-          apps/server/src/http-server.ts
-          docs/adr/0004-mcp-v2-transport.md
-          packages/adapter-fs/src/adapter-fs.test.ts
-          packages/adapter-fs/src/oauth-introspection-identity-provider.ts
-          packages/application/src/create-app.ts
-          packages/protocol-mcp/src/mcp-http.test.ts
-          packages/protocol-mcp/src/mcp-http.ts
-          packages/protocol-mcp/src/mcp-server.ts
-          packages/protocol-mcp/src/operation-registry.ts
-          packages/protocol-mcp/src/public.ts
-          packages/protocol-mcp/src/tool-schemas.test.ts
-
-      - name: Commit fixes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps docs packages
-          git commit -m "fix(mcp): satisfy quality gates"
-          git push origin HEAD:${{ github.head_ref }}
+      - name: Run build
+        run: pnpm build
