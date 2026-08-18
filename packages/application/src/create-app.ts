@@ -244,6 +244,18 @@ async function captureContext(
   });
 }
 
+async function detectSemanticConflictsFor(
+  store: CanonicalStore,
+  principal: Principal,
+  contract: SemanticContract,
+): Promise<readonly Conflict[]> {
+  return detectClaimConflicts({
+    store,
+    principal,
+    rules: semanticContractConflictRules(contract),
+  });
+}
+
 export function createKotowariApp(
   ports: KotowariPorts,
   options: KotowariAppOptions = {},
@@ -385,11 +397,7 @@ export function createKotowariApp(
     },
 
     async detectSemanticConflicts(contract) {
-      return detectClaimConflicts({
-        store: ports.store,
-        principal: await current(),
-        rules: semanticContractConflictRules(contract),
-      });
+      return detectSemanticConflictsFor(ports.store, await current(), contract);
     },
 
     async resolveConflict(input) {
