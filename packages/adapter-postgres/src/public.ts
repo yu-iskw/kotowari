@@ -9,5 +9,10 @@ export {
   createPostgresCanonicalStore,
 } from './postgres-store.js';
 export { createPostgresQueue } from './postgres-queue.js';
+export { createPostgresRetrievalProjection } from './retrieval-projection.js';
+export type {
+  PostgresRetrievalProjection,
+  RetrievalProjectionStatus,
+} from './retrieval-projection.js';
 export { createPgPoolClient, createPgliteClient } from './sql-client.js';
 export type { SqlClient } from './sql-client.js';
