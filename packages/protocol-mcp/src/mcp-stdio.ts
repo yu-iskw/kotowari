@@ -7,8 +7,8 @@ import {
 } from './mcp-presets.js';
 import { createKotowariMcpServer } from './mcp-server.js';
 
-import type { KotowariApp } from '@kotowari/application';
 import type { McpOperationName } from './operation-registry.js';
+import type { KotowariApp } from '@kotowari/application';
 import type { Readable, Writable } from 'node:stream';
 
 export function parseMcpStandalonePresetFlag(
