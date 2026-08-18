@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { isPolicyApplicable, putPolicyVersion } from './policy.js';
 
 describe('policy versions', () => {
-  it('keeps a stable logical policy id across immutable versions and respects applicability', async () => {
+  it('keeps stable logical identity, unique version identity, and respects applicability', async () => {
     const store = createMemoryCanonicalStore();
     const principal = localStandalonePrincipal();
     const first = await putPolicyVersion({
@@ -15,7 +15,7 @@ describe('policy versions', () => {
       version: 1,
       rules: { allowedOutcomes: ['approve'] },
       status: 'active',
-      applicability: { purposes: ['release'] },
+      applicability: { purposes: ['release'], classifications: ['internal'] },
     });
     const second = await putPolicyVersion({
       store,
@@ -25,12 +25,20 @@ describe('policy versions', () => {
       version: 2,
       rules: { minConfidence: 0.8 },
       status: 'active',
-      applicability: { purposes: ['release'] },
+      applicability: { purposes: ['release'], classifications: ['internal'] },
     });
 
     expect(second.policyId).toBe(first.policyId);
-    expect(second.id).not.toBe(first.id);
-    expect(isPolicyApplicable(second, { purpose: 'release' })).toBe(true);
-    expect(isPolicyApplicable(second, { purpose: 'underwriting' })).toBe(false);
+    expect(second.versionId).not.toBe(first.versionId);
+    expect(second.id).toBe(second.versionId);
+    expect(isPolicyApplicable(second, { purpose: 'release', classification: 'internal' })).toBe(
+      true,
+    );
+    expect(
+      isPolicyApplicable(second, { purpose: 'release', classification: 'confidential' }),
+    ).toBe(false);
+    expect(isPolicyApplicable(second, { purpose: 'underwriting', classification: 'internal' })).toBe(
+      false,
+    );
   });
 });
