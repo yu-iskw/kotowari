@@ -67,8 +67,12 @@ function registerCoreCompliance(factory: StoreFactory): void {
 
     expect((await store.getClaim(claim.id))?.id).toBe(claim.id);
     expect((await store.getEvidence(evidence.id))?.id).toBe(evidence.id);
-    expect((await store.listEvents()).some((event) => event.eventId === claimEvent.eventId)).toBe(true);
-    expect((await store.listOutbox()).some((event) => event.eventId === claimEvent.eventId)).toBe(true);
+    expect((await store.listEvents()).some((event) => event.eventId === claimEvent.eventId)).toBe(
+      true,
+    );
+    expect((await store.listOutbox()).some((event) => event.eventId === claimEvent.eventId)).toBe(
+      true,
+    );
   });
 
   it('persists valid kernel records without rejecting at the store layer', async () => {
@@ -268,9 +272,7 @@ function registerProjectionCompliance(factory: StoreFactory): void {
 
     await store.putEmbedding({ claimId: claim.id, vector: [0.4, 0.5, 0.6] });
     expect((await store.getClaim(claim.id))?.id).toBe(claim.id);
-    expect(await store.listEmbeddings()).toEqual([
-      { claimId: claim.id, vector: [0.4, 0.5, 0.6] },
-    ]);
+    expect(await store.listEmbeddings()).toEqual([{ claimId: claim.id, vector: [0.4, 0.5, 0.6] }]);
   });
 
   it('ADR-0002: rebuilding lexical projection does not change claim ids', async () => {

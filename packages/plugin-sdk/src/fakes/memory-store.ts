@@ -28,10 +28,7 @@ import type { BlobStore, CanonicalStore, ClaimReadFilter } from '../ports.js';
 
 type EmbeddingRow = { claimId: ClaimId; vector: readonly number[] };
 
-function matchesTenant<T extends { tenantId: TenantId }>(
-  record: T,
-  tenantId: TenantId,
-): boolean {
+function matchesTenant<T extends { tenantId: TenantId }>(record: T, tenantId: TenantId): boolean {
   return record.tenantId === tenantId;
 }
 

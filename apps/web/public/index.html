@@ -84,7 +84,8 @@
     <header>
       <h1>Kotowari Accountability Workbench</h1>
       <p class="muted">
-        Inspect what was known, what was authorized, which policy applied, and why a decision happened.
+        Inspect what was known, what was authorized, which policy applied, and why a decision
+        happened.
       </p>
     </header>
     <main>
@@ -160,7 +161,11 @@
         const data = await json('/v1/knowledge/search', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ query: value('query'), purpose: value('purpose'), temporal: temporal() }),
+          body: JSON.stringify({
+            query: value('query'),
+            purpose: value('purpose'),
+            temporal: temporal(),
+          }),
         });
         show('Knowledge + retrieval receipt', data);
       };
@@ -175,10 +180,14 @@
       document.getElementById('decisions').onclick = async () => {
         const data = await json('/v1/decisions');
         show('Decision timeline', data);
-        if (Array.isArray(data) && data[0]?.id) document.getElementById('decisionId').value = data[0].id;
+        if (Array.isArray(data) && data[0]?.id)
+          document.getElementById('decisionId').value = data[0].id;
       };
       document.getElementById('replay').onclick = async () => {
-        show('Deterministic decision replay', await json(`/v1/decisions/${value('decisionId')}/replay`));
+        show(
+          'Deterministic decision replay',
+          await json(`/v1/decisions/${value('decisionId')}/replay`),
+        );
       };
       document.getElementById('precedents').onclick = async () => {
         show('Decision precedents', await json(`/v1/decisions/${value('decisionId')}/precedents`));
@@ -189,7 +198,9 @@
       document.getElementById('policies').onclick = async () => {
         show('Policy versions', await json('/v1/policies'));
       };
-      window.addEventListener('unhandledrejection', (event) => show('Request failed', { error: String(event.reason) }));
+      window.addEventListener('unhandledrejection', (event) =>
+        show('Request failed', { error: String(event.reason) }),
+      );
     </script>
   </body>
 </html>

@@ -119,6 +119,8 @@ export async function findEntityResolutionCandidates(input: {
   }
 
   return candidates
-    .sort((left, right) => right.score - left.score || left.entity.id.localeCompare(right.entity.id))
+    .sort(
+      (left, right) => right.score - left.score || left.entity.id.localeCompare(right.entity.id),
+    )
     .slice(0, input.limit ?? 5);
 }

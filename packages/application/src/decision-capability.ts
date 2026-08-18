@@ -70,7 +70,10 @@ function decisionScope(principal: Principal) {
   };
 }
 
-async function ensurePolicies(store: CanonicalStore, principal: Principal): Promise<readonly PolicyRecord[]> {
+async function ensurePolicies(
+  store: CanonicalStore,
+  principal: Principal,
+): Promise<readonly PolicyRecord[]> {
   const policies = await store.listPolicies({ tenantId: principal.tenantId });
   if (policies.length > 0) {
     return policies;

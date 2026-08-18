@@ -21,11 +21,7 @@ import {
 } from '@kotowari/capability-policy';
 import { decisionToProvO } from '@kotowari/capability-provenance';
 import { DEFAULT_RETRIEVAL_PLAN, retrieve } from '@kotowari/capability-retrieval';
-import {
-  asDecisionId,
-  asEvidenceId,
-  assertAllowed,
-} from '@kotowari/kernel';
+import { asDecisionId, asEvidenceId, assertAllowed } from '@kotowari/kernel';
 
 import {
   findDecisionPrecedentsCapability,
@@ -117,10 +113,7 @@ export type KotowariApp = {
   getDecision: (id: string) => Promise<Decision | undefined>;
   listDecisions: () => Promise<readonly Decision[]>;
   replayDecision?: (id: string) => Promise<DecisionReplay | undefined>;
-  findDecisionPrecedents?: (
-    id: string,
-    limit?: number,
-  ) => Promise<readonly DecisionPrecedent[]>;
+  findDecisionPrecedents?: (id: string, limit?: number) => Promise<readonly DecisionPrecedent[]>;
   recordMemory: (input: { body: string; kind?: MemoryRecord['kind'] }) => Promise<MemoryRecord>;
   searchMemory: (input: { query: string }) => Promise<readonly MemoryRecord[]>;
   putPolicy: (input: {
@@ -302,7 +295,11 @@ export function createKotowariApp(
     },
 
     async replayDecision(id) {
-      return replayDecisionCapability({ store: ports.store, principal: await current(), decisionId: id });
+      return replayDecisionCapability({
+        store: ports.store,
+        principal: await current(),
+        decisionId: id,
+      });
     },
 
     async findDecisionPrecedents(id, limit) {

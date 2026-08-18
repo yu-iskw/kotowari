@@ -330,10 +330,12 @@ class SqliteCanonicalStore implements CanonicalStore {
     this.db.exec('DELETE FROM embeddings');
   }
 
-  async searchLexical(input: ClaimReadFilter & {
-    query: string;
-    limit: number;
-  }): Promise<readonly Claim[]> {
+  async searchLexical(
+    input: ClaimReadFilter & {
+      query: string;
+      limit: number;
+    },
+  ): Promise<readonly Claim[]> {
     const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
     const match = ftsMatchQuery(input.query);
     if (match.length === 0) {
@@ -362,7 +364,9 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async rebuildLexicalProjection(): Promise<void> {
     this.db.exec('DELETE FROM claim_fts');
-    const rows = this.stmt("SELECT payload FROM records WHERE collection = 'claims'").all() as PayloadRow[];
+    const rows = this.stmt(
+      "SELECT payload FROM records WHERE collection = 'claims'",
+    ).all() as PayloadRow[];
     for (const row of rows) {
       this.upsertFts(JSON.parse(row.payload) as Claim);
     }

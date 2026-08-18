@@ -312,10 +312,12 @@ class PostgresCanonicalStore implements CanonicalStore {
     await this.sql.exec('DELETE FROM embeddings');
   }
 
-  async searchLexical(input: ClaimReadFilter & {
-    query: string;
-    limit: number;
-  }): Promise<readonly Claim[]> {
+  async searchLexical(
+    input: ClaimReadFilter & {
+      query: string;
+      limit: number;
+    },
+  ): Promise<readonly Claim[]> {
     const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
     const ftsQuery = postgresFtsQuery(input.query);
     if (ftsQuery.length === 0) {
