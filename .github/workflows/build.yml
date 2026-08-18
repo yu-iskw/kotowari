@@ -24,19 +24,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
+permissions: read-all
 
 jobs:
   build:
     name: Run Build Process
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Enable Corepack
         run: corepack enable
@@ -57,20 +55,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
 
-      - name: Install dependencies and refresh lockfile
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Commit refreshed lockfile
-        if: github.actor != 'github-actions[bot]'
-        run: |
-          if git diff --quiet -- pnpm-lock.yaml; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml
-          git commit -m "chore: refresh MCP dependencies lockfile"
-          git push origin HEAD:${{ github.head_ref }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Find unused code (Knip)
         run: pnpm knip
