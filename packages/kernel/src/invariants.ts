@@ -4,7 +4,7 @@ import { createEventId } from './events.js';
 import { assertNoChainOfThought, assertProvenance, nowIso } from './provenance.js';
 import { classificationRank } from './scoped-metadata.js';
 
-import type { ClaimId, EvidenceId } from './branded-ids.js';
+import type { ClaimId, EvidenceId, RetrievalReceiptId } from './branded-ids.js';
 import type { Claim, ClaimStatus } from './claim.js';
 import type { Conflict, ConflictResolution } from './conflict.js';
 import type { ContextSnapshot, PolicyEvaluation } from './context.js';
@@ -25,6 +25,7 @@ import type { DomainEvent } from './events.js';
 import type { Evidence } from './evidence.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
+import type { TemporalPerspective } from './temporal.js';
 
 function assertConfidence(confidence: number): void {
   if (confidence < 0 || confidence > 1 || Number.isNaN(confidence)) {
@@ -128,7 +129,12 @@ export function buildClaimRetracted(
   }
   const occurredAt = nowIso();
   return {
-    claim: { ...existing, status: 'retracted', provenance: input.provenance },
+    claim: {
+      ...existing,
+      status: 'retracted',
+      bitemporal: { ...existing.bitemporal, recordedAt: occurredAt },
+      provenance: input.provenance,
+    },
     event: {
       kind: 'claim.retracted',
       eventId: createEventId(),
@@ -329,6 +335,8 @@ export function buildConflictResolved(input: ResolveConflictInput): {
 export function buildContextSnapshot(input: {
   metadata: ScopedMetadata;
   purpose: string;
+  temporal?: TemporalPerspective;
+  retrievalReceiptId?: RetrievalReceiptId;
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
   policyVersionIds: readonly string[];
@@ -340,6 +348,10 @@ export function buildContextSnapshot(input: {
     id: newId('ContextId'),
     capturedAt: nowIso(),
     purpose: input.purpose,
+    temporal: input.temporal ?? {},
+    ...(input.retrievalReceiptId === undefined
+      ? {}
+      : { retrievalReceiptId: input.retrievalReceiptId }),
     namespaceIds: [input.metadata.namespaceId],
     claimIds: input.claimIds,
     evidenceIds: input.evidenceIds,

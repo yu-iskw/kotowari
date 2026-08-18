@@ -14,6 +14,7 @@ export type ConflictId = Brand<string, 'ConflictId'>;
 export type EventId = Brand<string, 'EventId'>;
 export type ProvenanceId = Brand<string, 'ProvenanceId'>;
 export type ContextId = Brand<string, 'ContextId'>;
+export type RetrievalReceiptId = Brand<string, 'RetrievalReceiptId'>;
 export type MemoryId = Brand<string, 'MemoryId'>;
 export type IsoTimestamp = Brand<string, 'IsoTimestamp'>;
 
@@ -70,6 +71,10 @@ export function asProvenanceId(value: string): ProvenanceId {
 
 export function asContextId(value: string): ContextId {
   return asBranded(value, 'ContextId') as ContextId;
+}
+
+export function asRetrievalReceiptId(value: string): RetrievalReceiptId {
+  return asBranded(value, 'RetrievalReceiptId') as RetrievalReceiptId;
 }
 
 export function asMemoryId(value: string): MemoryId {

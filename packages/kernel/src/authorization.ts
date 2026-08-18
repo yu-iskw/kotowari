@@ -14,6 +14,9 @@ export const ACTIONS = [
   'decision.record',
   'ingestion.write',
   'policy.evaluate',
+  'policy.manage',
+  'conflict.resolve',
+  'audit.read',
   'admin',
 ] as const;
 
@@ -74,12 +77,27 @@ export type AuthDecision = {
   reason: KernelErrorCode;
 };
 
+export type AuthorizationReceipt = {
+  principalId: PrincipalId;
+  actingFor?: PrincipalId;
+  action: Action;
+  resourceKind: ResourceKind;
+  resourceId: string;
+  effect: AuthDecision['effect'];
+  reason: KernelErrorCode;
+  purpose?: string;
+  delegation?: Delegation;
+  evaluatedAt: IsoTimestamp;
+};
+
 const WRITE_ACTIONS: ReadonlySet<Action> = new Set([
   'knowledge.write',
   'memory.write',
   'decision.record',
   'ingestion.write',
   'policy.evaluate',
+  'policy.manage',
+  'conflict.resolve',
   'admin',
 ]);
 
@@ -209,6 +227,30 @@ export function allow(
   }
 
   return { effect: 'allow', reason: 'ALLOW' };
+}
+
+export function allowWithReceipt(
+  principal: Principal,
+  action: Action,
+  resource: Resource,
+  context: AuthContext,
+): { decision: AuthDecision; receipt: AuthorizationReceipt } {
+  const decision = allow(principal, action, resource, context);
+  const receipt: AuthorizationReceipt = {
+    principalId: principal.id,
+    ...(principal.kind === 'agent' && principal.actingFor !== undefined
+      ? { actingFor: principal.actingFor }
+      : {}),
+    action,
+    resourceKind: resource.kind,
+    resourceId: resource.id,
+    effect: decision.effect,
+    reason: decision.reason,
+    ...(context.purpose === undefined ? {} : { purpose: context.purpose }),
+    ...(context.delegation === undefined ? {} : { delegation: context.delegation }),
+    evaluatedAt: (context.now ?? new Date().toISOString()) as IsoTimestamp,
+  };
+  return { decision, receipt };
 }
 
 export function assertAllowed(

@@ -16,6 +16,7 @@ function capturingApp(): KotowariApp {
       hits: [],
       omitted: [],
       plan: { candidates: [], rerank: 'none' as const, budget: 20, explain: true },
+      receipt: {} as never,
     }),
     buildContext: async () => ({}) as never,
     recordDecision: async () => ({ id: 'd1' }) as never,

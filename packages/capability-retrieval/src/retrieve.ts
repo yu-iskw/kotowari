@@ -1,11 +1,23 @@
-import { allow, claimText } from '@kotowari/kernel';
+import { createHash } from 'node:crypto';
+
+import {
+  allowWithReceipt,
+  claimText,
+  compactProvenance,
+  newId,
+  normalizeTemporalPerspective,
+  nowIso,
+} from '@kotowari/kernel';
 
 import type {
   AuthContext,
+  AuthorizationReceipt,
   Claim,
   ConflictResolution,
   EvidenceId,
   Principal,
+  RetrievalReceipt,
+  TemporalPerspective,
 } from '@kotowari/kernel';
 import type { CanonicalStore, EmbeddingProvider, RerankerProvider } from '@kotowari/plugin-sdk';
 
@@ -31,6 +43,8 @@ export const DEFAULT_RETRIEVAL_PLAN: RetrievalPlan = {
   explain: true,
 };
 
+export const RETRIEVAL_PLAN_VERSION = 'retrieval-v1' as const;
+
 export type RetrievalHit = {
   claimId: string;
   score: number;
@@ -52,6 +66,7 @@ export type RetrievalResult = {
   hits: readonly RetrievalHit[];
   omitted: readonly RetrievalOmission[];
   plan: RetrievalPlan;
+  receipt: RetrievalReceipt;
 };
 
 type GraphCandidate = Extract<RetrievalPlan['candidates'][number], { strategy: 'graph' }>;
@@ -90,7 +105,7 @@ function explainHit(components: RetrievalHit['scoreComponents']): string {
   const parts = [
     components.lexical === undefined ? undefined : `lexical ${String(components.lexical)}`,
     components.vector === undefined ? undefined : `vector ${components.vector.toFixed(2)}`,
-    components.graph === undefined ? undefined : `graph neighborhood`,
+    components.graph === undefined ? undefined : 'graph neighborhood',
   ].filter((part) => part !== undefined);
   return parts.length > 0 ? parts.join('; ') : 'metadata match';
 }
@@ -189,19 +204,25 @@ function authorizeHits(input: {
   suppressed: Set<string>;
   principal: Principal;
   authz: AuthContext;
-}): { allowed: RetrievalHit[]; omittedByClass: Map<string, number> } {
+}): {
+  allowed: RetrievalHit[];
+  omittedByClass: Map<string, number>;
+  receipts: AuthorizationReceipt[];
+} {
   const omittedByClass = new Map<string, number>();
   const allowed: RetrievalHit[] = [];
+  const receipts: AuthorizationReceipt[] = [];
   for (const hit of input.scored.values()) {
     if (input.suppressed.has(hit.claimId)) {
       continue;
     }
-    const decision = allow(
+    const { decision, receipt } = allowWithReceipt(
       input.principal,
       'knowledge.read',
       { kind: 'claim', id: hit.claimId, metadata: hit.claim },
       input.authz,
     );
+    receipts.push(receipt);
     if (decision.effect === 'deny') {
       const classification = hit.claim.classification;
       omittedByClass.set(classification, (omittedByClass.get(classification) ?? 0) + 1);
@@ -209,7 +230,7 @@ function authorizeHits(input: {
     }
     allowed.push(hit);
   }
-  return { allowed, omittedByClass };
+  return { allowed, omittedByClass, receipts };
 }
 
 async function maybeRerank(input: {
@@ -248,14 +269,18 @@ export async function retrieve(input: {
   principal: Principal;
   authz: AuthContext;
   query: string;
+  purpose?: string;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
   asOf?: string;
   plan?: RetrievalPlan;
 }): Promise<RetrievalResult> {
   const plan = input.plan ?? DEFAULT_RETRIEVAL_PLAN;
+  const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
   const filter = {
     tenantId: input.principal.tenantId,
     namespaceId: input.principal.namespaceIds[0],
-    asOf: input.asOf,
+    temporal,
   };
   const [claims, embeddings, queryEmbedding, resolutions, lexicalClaims] = await Promise.all([
     input.store.listClaims(filter),
@@ -301,7 +326,7 @@ export async function retrieve(input: {
     expandGraphNeighborhood(claims, scored, hops);
   }
 
-  const { allowed, omittedByClass } = authorizeHits({
+  const { allowed, omittedByClass, receipts } = authorizeHits({
     scored,
     suppressed: suppressedClaimIds(resolutions),
     principal: input.principal,
@@ -324,6 +349,38 @@ export async function retrieve(input: {
       count,
     }),
   );
+  const namespaceId = input.principal.namespaceIds[0];
+  if (namespaceId === undefined) {
+    throw new Error('Principal has no namespace');
+  }
+  const receipt: RetrievalReceipt = {
+    id: newId('RetrievalReceiptId'),
+    tenantId: input.principal.tenantId,
+    namespaceId,
+    principalId: input.principal.id,
+    classification: 'internal',
+    visibility: 'workspace',
+    policyTags: input.purpose === undefined ? [] : [input.purpose],
+    queryHash: createHash('sha256').update(input.query).digest('hex'),
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+    temporal,
+    planVersion: RETRIEVAL_PLAN_VERSION,
+    selected: hits.map((hit) => ({
+      claimId: hit.claim.id,
+      evidenceIds: hit.evidenceIds,
+      score: hit.score,
+      scoreComponents: hit.scoreComponents,
+    })),
+    omissions: omitted,
+    authorizationReceipts: receipts,
+    executedAt: nowIso(),
+    provenance: compactProvenance({
+      source: 'retrieval',
+      actor: input.principal.id,
+      process: 'knowledge.retrieve',
+    }),
+  };
+  await input.store.putRetrievalReceipt(receipt);
 
-  return { hits, omitted, plan };
+  return { hits, omitted, plan, receipt };
 }
