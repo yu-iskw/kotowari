@@ -160,8 +160,6 @@ export function createOAuthIntrospectionIdentityProvider(
       throw new Error(`OAuth token introspection failed with HTTP ${String(response.status)}`);
     }
     const payload = (await response.json()) as IntrospectionPayload;
-    // The OAuth introspection `active` flag is public metadata, not secret material.
-    // eslint-disable-next-line security/detect-possible-timing-attacks
     if (payload['active'] !== true) {
       throw new Error('OAuth access token is inactive');
     }
@@ -197,7 +195,7 @@ export function createOAuthIntrospectionIdentityProvider(
     },
     async authenticate(headers) {
       const token = bearerTokenFromHeaders(headers);
-      if (token === undefined) {
+      if (!token) {
         throw new Error('Bearer token is required');
       }
       return principalFrom(await introspect(token));
