@@ -62,6 +62,10 @@ export interface CanonicalStore {
   withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T>;
   putEntity(entity: Entity): Promise<void>;
   getEntity(id: EntityId): Promise<Entity | undefined>;
+  listEntities(filter: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+  }): Promise<readonly Entity[]>;
   putEvidence(evidence: Evidence): Promise<void>;
   getEvidence(id: EvidenceId): Promise<Evidence | undefined>;
   assertClaim(claim: Claim): Promise<void>;
