@@ -16,10 +16,7 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
 import { createProjectionServingGate } from './projection-serving.js';
-import {
-  embeddingDimensionsFromEnv,
-  vectorAccelerationFromEnv,
-} from './vector-acceleration.js';
+import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
 
 import type { OAuthIntrospectionIdentityProvider } from '@kotowari/adapter-fs';
 import type { SqlClient } from '@kotowari/adapter-postgres';

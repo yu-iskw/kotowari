@@ -321,56 +321,6 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     this.ready = this.initialize();
   }
 
-  private async initialize(): Promise<void> {
-    await this.sql.exec(SCHEMA);
-    if (this.vectorAcceleration !== undefined) {
-      await this.initializeVectorAcceleration();
-    }
-  }
-
-  private async initializeVectorAcceleration(): Promise<void> {
-    const acceleration = this.vectorAcceleration;
-    if (acceleration === undefined) {
-      return;
-    }
-    await this.sql.exec('CREATE EXTENSION IF NOT EXISTS vector');
-    await this.sql.exec(
-      'ALTER TABLE retrieval_projection ADD COLUMN IF NOT EXISTS vector_embedding vector',
-    );
-    const invalidRows = await this.sql.query<CountRow>(
-      `SELECT COUNT(*) AS count
-       FROM retrieval_projection
-       WHERE jsonb_typeof(vector::jsonb) <> 'array'
-          OR jsonb_array_length(vector::jsonb) <> $1`,
-      [acceleration.dimensions],
-    );
-    if (Number(invalidRows[0]?.count ?? 0) > 0) {
-      throw new AdapterPostgresError(
-        `Existing projection vectors do not match configured pgvector dimension ${String(acceleration.dimensions)}; rebuild the projection with the matching embedding provider before enabling HNSW`,
-      );
-    }
-    await this.sql.exec(
-      `UPDATE retrieval_projection
-       SET vector_embedding = vector::vector
-       WHERE vector_embedding IS NULL`,
-    );
-    await this.createVectorIndex();
-  }
-
-  private async createVectorIndex(): Promise<void> {
-    const acceleration = this.vectorAcceleration;
-    if (acceleration === undefined) {
-      return;
-    }
-    await this.sql.exec(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${VECTOR_INDEX_NAME}
-       ON retrieval_projection
-       USING hnsw ((vector_embedding::vector(${String(acceleration.dimensions)})) vector_cosine_ops)
-       WITH (m = ${String(acceleration.m)}, ef_construction = ${String(acceleration.efConstruction)})
-       WHERE vector_embedding IS NOT NULL`,
-    );
-  }
-
   async rebuildVectorIndex(): Promise<void> {
     await this.ready;
     if (this.vectorAcceleration === undefined) {
@@ -530,6 +480,56 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       return this.searchVector(request);
     }
     return this.searchGraph(request);
+  }
+
+  private async initialize(): Promise<void> {
+    await this.sql.exec(SCHEMA);
+    if (this.vectorAcceleration !== undefined) {
+      await this.initializeVectorAcceleration();
+    }
+  }
+
+  private async initializeVectorAcceleration(): Promise<void> {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      return;
+    }
+    await this.sql.exec('CREATE EXTENSION IF NOT EXISTS vector');
+    await this.sql.exec(
+      'ALTER TABLE retrieval_projection ADD COLUMN IF NOT EXISTS vector_embedding vector',
+    );
+    const invalidRows = await this.sql.query<CountRow>(
+      `SELECT COUNT(*) AS count
+       FROM retrieval_projection
+       WHERE jsonb_typeof(vector::jsonb) <> 'array'
+          OR jsonb_array_length(vector::jsonb) <> $1`,
+      [acceleration.dimensions],
+    );
+    if (Number(invalidRows[0]?.count ?? 0) > 0) {
+      throw new AdapterPostgresError(
+        `Existing projection vectors do not match configured pgvector dimension ${String(acceleration.dimensions)}; rebuild the projection with the matching embedding provider before enabling HNSW`,
+      );
+    }
+    await this.sql.exec(
+      `UPDATE retrieval_projection
+       SET vector_embedding = vector::vector
+       WHERE vector_embedding IS NULL`,
+    );
+    await this.createVectorIndex();
+  }
+
+  private async createVectorIndex(): Promise<void> {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      return;
+    }
+    await this.sql.exec(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${VECTOR_INDEX_NAME}
+       ON retrieval_projection
+       USING hnsw ((vector_embedding::vector(${String(acceleration.dimensions)})) vector_cosine_ops)
+       WITH (m = ${String(acceleration.m)}, ef_construction = ${String(acceleration.efConstruction)})
+       WHERE vector_embedding IS NOT NULL`,
+    );
   }
 
   private async searchLexical(

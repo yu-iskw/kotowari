@@ -5,10 +5,7 @@ import {
 } from '@kotowari/adapter-postgres';
 import { createFakeEmbeddingProvider } from '@kotowari/model-fake';
 
-import {
-  embeddingDimensionsFromEnv,
-  vectorAccelerationFromEnv,
-} from './vector-acceleration.js';
+import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
 
 import type {
   PostgresRetrievalProjection,

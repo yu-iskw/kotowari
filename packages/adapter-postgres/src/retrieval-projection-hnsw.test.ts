@@ -75,9 +75,9 @@ describe('Postgres retrieval projection pgvector HNSW acceleration', () => {
 
     const status = await subject.status();
 
-    expect(sql.calls.some((call) => call.sql.includes('CREATE EXTENSION IF NOT EXISTS vector'))).toBe(
-      true,
-    );
+    expect(
+      sql.calls.some((call) => call.sql.includes('CREATE EXTENSION IF NOT EXISTS vector')),
+    ).toBe(true);
     expect(
       sql.calls.some(
         (call) =>
@@ -110,9 +110,9 @@ describe('Postgres retrieval projection pgvector HNSW acceleration', () => {
 
     expect(candidates).toEqual([{ claimId: 'claim-alpha', score: 0.99 }]);
     expect(sql.calls.some((call) => call.sql === 'SET LOCAL hnsw.ef_search = 80')).toBe(true);
-    expect(sql.calls.some((call) => call.sql === 'SET LOCAL hnsw.iterative_scan = strict_order')).toBe(
-      true,
-    );
+    expect(
+      sql.calls.some((call) => call.sql === 'SET LOCAL hnsw.iterative_scan = strict_order'),
+    ).toBe(true);
     const search = sql.calls.find((call) => call.sql.includes('1 - (vector_embedding'));
     expect(search?.sql).toContain('tenant_id = $2');
     expect(search?.sql).toContain('namespace_id = $3');
@@ -148,8 +148,8 @@ describe('Postgres retrieval projection pgvector HNSW acceleration', () => {
         (call) => call.sql === 'DROP INDEX CONCURRENTLY IF EXISTS retrieval_projection_vector_hnsw',
       ),
     ).toBe(true);
-    expect(sql.calls.some((call) => call.sql.includes('CREATE INDEX CONCURRENTLY IF NOT EXISTS'))).toBe(
-      true,
-    );
+    expect(
+      sql.calls.some((call) => call.sql.includes('CREATE INDEX CONCURRENTLY IF NOT EXISTS')),
+    ).toBe(true);
   });
 });
