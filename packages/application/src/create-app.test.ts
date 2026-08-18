@@ -238,3 +238,31 @@ describe('S18 re-extract and queued jobs', () => {
     expect(await app.processQueuedJobs()).toBe(0);
   });
 });
+
+describe('retrieval candidate source port', () => {
+  it('routes application retrieval through the configured candidate source', async () => {
+    const base = ports();
+    const bootstrap = createKotowariApp(base);
+    const ingested = await bootstrap.ingestDocuments([
+      {
+        relativePath: 'indexed.md',
+        bytes: new TextEncoder().encode('Vendor X is the indexed payment processor.'),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const app = createKotowariApp({
+      ...base,
+      retrievalCandidateSource: {
+        id: 'application-test-index',
+        async search() {
+          return ingested.claimIds.map((claimId) => ({ claimId: claimId as never }));
+        },
+      },
+    });
+
+    const result = await app.searchKnowledge({ query: 'Vendor X', purpose: 'search' });
+
+    expect(result.hits.length).toBeGreaterThan(0);
+    expect(result.receipt.provenance.source).toBe('application-test-index');
+  });
+});
