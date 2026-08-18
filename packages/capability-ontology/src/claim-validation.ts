@@ -1,12 +1,12 @@
 import { resolvePredicate } from './semantic-contract.js';
 
-import type { Claim } from '@kotowari/kernel';
 import type {
   LiteralDatatype,
   PredicateDefinition,
   SemanticContract,
   ValidationRule,
 } from './semantic-contract.js';
+import type { Claim } from '@kotowari/kernel';
 
 export type ClaimContractIssueCode =
   | 'UNKNOWN_PREDICATE'
