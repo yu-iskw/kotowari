@@ -109,7 +109,7 @@ function lexicalSignal(
   if (normalizedQuery === normalizedCandidate) {
     return {
       kind: source === 'label' ? 'label-exact' : 'alias-exact',
-      score: source === 'label' ? 0.96 : 0.92,
+      score: source === 'label' ? 1 : 0.92,
       source,
       candidate,
       detail: `${source}: normalized exact match`,
