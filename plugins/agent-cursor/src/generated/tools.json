@@ -6,8 +6,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": { "type": "string" },
-          "purpose": { "type": "string" }
+          "query": { "type": "string", "minLength": 1 },
+          "purpose": { "type": "string", "minLength": 1 }
         },
         "required": ["query"],
         "additionalProperties": false
@@ -19,7 +19,7 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": { "type": "string" }
+          "query": { "type": "string", "minLength": 1 }
         },
         "required": ["query"],
         "additionalProperties": false
