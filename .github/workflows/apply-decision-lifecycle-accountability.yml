@@ -1,0 +1,675 @@
+name: Apply decision lifecycle accountability
+
+on:
+  push:
+    branches: [feat/p0-decision-lifecycle-accountability]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: feat/p0-decision-lifecycle-accountability
+      - run: corepack enable
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.0.5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply lifecycle implementation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing replacement in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Authorization actions are explicit so delegated agents and viewers are handled consistently.
+          replace('packages/kernel/src/authorization.ts',
+              "  'decision.read',\n  'decision.record',\n  'ingestion.write',",
+              "  'decision.read',\n  'decision.record',\n  'decision.relate',\n  'decision.observe',\n  'decision.approve',\n  'ingestion.write',")
+          replace('packages/kernel/src/authorization.ts',
+              "  'policy.evaluate',\n  'policy.manage',",
+              "  'policy.evaluate',\n  'policy.manage',\n  'policy.exception',")
+          replace('packages/kernel/src/authorization.ts',
+              "  'decision.record',\n  'ingestion.write',\n  'policy.evaluate',\n  'policy.manage',",
+              "  'decision.record',\n  'decision.relate',\n  'decision.observe',\n  'decision.approve',\n  'ingestion.write',\n  'policy.evaluate',\n  'policy.manage',\n  'policy.exception',")
+          replace('packages/kernel/src/authorization.test.ts',
+              "  it('ADR-0010 property: cross-tenant never allows', () => {",
+              "  it('treats decision lifecycle mutations as writes', () => {\n    const viewer = human({ roles: ['viewer'] });\n    for (const action of [\n      'decision.relate',\n      'decision.observe',\n      'decision.approve',\n      'policy.exception',\n    ] as const) {\n      expect(allow(viewer, action, resource(), { tenantId: tenantA })).toEqual({\n        effect: 'deny',\n        reason: 'ACTION_DENIED',\n      });\n    }\n  });\n\n  it('ADR-0010 property: cross-tenant never allows', () => {")
+
+          # Lifecycle domain events are first-class outbox/audit facts.
+          replace('packages/kernel/src/events.ts',
+              "  ClaimId,\n  ConflictId,\n  ContextId,\n  DecisionId,\n  EntityId,",
+              "  ApprovalRecordId,\n  ClaimId,\n  ConflictId,\n  ContextId,\n  DecisionId,\n  DecisionRelationId,\n  EntityId,")
+          replace('packages/kernel/src/events.ts',
+              "  IsoTimestamp,\n  PolicyId,\n  TenantId,",
+              "  IsoTimestamp,\n  OutcomeObservationId,\n  PolicyExceptionId,\n  PolicyId,\n  PolicyVersionId,\n  TenantId,")
+          replace('packages/kernel/src/events.ts',
+              "  | {\n      kind: 'policy.evaluated';",
+              "  | {\n      kind: 'decision.related';\n      eventId: EventId;\n      tenantId: TenantId;\n      decisionId: DecisionId;\n      relatedDecisionId: DecisionId;\n      relationId: DecisionRelationId;\n      provenance: Provenance;\n      occurredAt: IsoTimestamp;\n    }\n  | {\n      kind: 'decision.outcome_observed';\n      eventId: EventId;\n      tenantId: TenantId;\n      decisionId: DecisionId;\n      outcomeObservationId: OutcomeObservationId;\n      provenance: Provenance;\n      occurredAt: IsoTimestamp;\n    }\n  | {\n      kind: 'decision.approval_recorded';\n      eventId: EventId;\n      tenantId: TenantId;\n      decisionId: DecisionId;\n      approvalRecordId: ApprovalRecordId;\n      provenance: Provenance;\n      occurredAt: IsoTimestamp;\n    }\n  | {\n      kind: 'policy.exception_recorded';\n      eventId: EventId;\n      tenantId: TenantId;\n      decisionId: DecisionId;\n      policyExceptionId: PolicyExceptionId;\n      policyVersionId: PolicyVersionId;\n      provenance: Provenance;\n      occurredAt: IsoTimestamp;\n    }\n  | {\n      kind: 'policy.evaluated';")
+
+          # Re-export lifecycle contracts through plugin-sdk and introduce a focused store port.
+          replace('packages/plugin-sdk/src/contracts.ts',
+              "  Action,\n  AssertClaimInput,",
+              "  Action,\n  ApprovalRecord,\n  AssertClaimInput,")
+          replace('packages/plugin-sdk/src/contracts.ts',
+              "  Decision,\n  DecisionId,",
+              "  Decision,\n  DecisionId,\n  DecisionRelation,")
+          replace('packages/plugin-sdk/src/contracts.ts',
+              "  NamespaceId,\n  PolicyEvaluation,",
+              "  NamespaceId,\n  OutcomeObservation,\n  PolicyEvaluation,")
+          replace('packages/plugin-sdk/src/contracts.ts',
+              "  PolicyId,\n  PolicyRecord,",
+              "  PolicyException,\n  PolicyId,\n  PolicyRecord,")
+
+          replace('packages/plugin-sdk/src/ports.ts',
+              "  Claim,\n  ClaimId,",
+              "  ApprovalRecord,\n  Claim,\n  ClaimId,")
+          replace('packages/plugin-sdk/src/ports.ts',
+              "  Decision,\n  DecisionId,",
+              "  Decision,\n  DecisionId,\n  DecisionRelation,")
+          replace('packages/plugin-sdk/src/ports.ts',
+              "  NamespaceId,\n  PolicyId,",
+              "  NamespaceId,\n  OutcomeObservation,\n  PolicyException,\n  PolicyId,")
+          replace('packages/plugin-sdk/src/ports.ts',
+              "export interface CanonicalStore {",
+              "export type DecisionLifecycleFilter = {\n  tenantId: TenantId;\n  namespaceId?: NamespaceId;\n  decisionId?: DecisionId;\n};\n\nexport interface DecisionLifecycleStore {\n  putDecisionRelation(relation: DecisionRelation): Promise<void>;\n  listDecisionRelations(filter: DecisionLifecycleFilter): Promise<readonly DecisionRelation[]>;\n  putOutcomeObservation(observation: OutcomeObservation): Promise<void>;\n  listOutcomeObservations(filter: DecisionLifecycleFilter): Promise<readonly OutcomeObservation[]>;\n  putPolicyException(exception: PolicyException): Promise<void>;\n  listPolicyExceptions(filter: DecisionLifecycleFilter): Promise<readonly PolicyException[]>;\n  putApprovalRecord(approval: ApprovalRecord): Promise<void>;\n  listApprovalRecords(filter: DecisionLifecycleFilter): Promise<readonly ApprovalRecord[]>;\n}\n\nexport interface CanonicalStore extends DecisionLifecycleStore {")
+
+          # In-memory adapter.
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "  Claim,\n  ClaimId,",
+              "  ApprovalRecord,\n  Claim,\n  ClaimId,")
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "  Decision,\n  DecisionId,",
+              "  Decision,\n  DecisionId,\n  DecisionRelation,")
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "  NamespaceId,\n  PolicyId,",
+              "  NamespaceId,\n  OutcomeObservation,\n  PolicyException,\n  PolicyId,")
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "import type { BlobStore, CanonicalStore, ClaimReadFilter } from '../ports.js';",
+              "import type {\n  BlobStore,\n  CanonicalStore,\n  ClaimReadFilter,\n  DecisionLifecycleFilter,\n} from '../ports.js';")
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "  readonly decisions = new Map<DecisionId, Decision>();\n  readonly snapshots",
+              "  readonly decisions = new Map<DecisionId, Decision>();\n  readonly decisionRelations = new Map<string, DecisionRelation>();\n  readonly outcomeObservations = new Map<string, OutcomeObservation>();\n  readonly policyExceptions = new Map<string, PolicyException>();\n  readonly approvalRecords = new Map<string, ApprovalRecord>();\n  readonly snapshots")
+          replace('packages/plugin-sdk/src/fakes/memory-store.ts',
+              "  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {",
+              "  async putDecisionRelation(relation: DecisionRelation): Promise<void> {\n    this.decisionRelations.set(relation.id, relation);\n  }\n\n  async listDecisionRelations(filter: DecisionLifecycleFilter): Promise<readonly DecisionRelation[]> {\n    return [...this.decisionRelations.values()].filter(\n      (relation) =>\n        matchesTenant(relation, filter.tenantId) &&\n        matchesNamespace(relation, filter.namespaceId) &&\n        (filter.decisionId === undefined ||\n          relation.fromDecisionId === filter.decisionId ||\n          relation.toDecisionId === filter.decisionId),\n    );\n  }\n\n  async putOutcomeObservation(observation: OutcomeObservation): Promise<void> {\n    this.outcomeObservations.set(observation.id, observation);\n  }\n\n  async listOutcomeObservations(\n    filter: DecisionLifecycleFilter,\n  ): Promise<readonly OutcomeObservation[]> {\n    return [...this.outcomeObservations.values()].filter(\n      (observation) =>\n        matchesTenant(observation, filter.tenantId) &&\n        matchesNamespace(observation, filter.namespaceId) &&\n        (filter.decisionId === undefined || observation.decisionId === filter.decisionId),\n    );\n  }\n\n  async putPolicyException(exception: PolicyException): Promise<void> {\n    this.policyExceptions.set(exception.id, exception);\n  }\n\n  async listPolicyExceptions(filter: DecisionLifecycleFilter): Promise<readonly PolicyException[]> {\n    return [...this.policyExceptions.values()].filter(\n      (exception) =>\n        matchesTenant(exception, filter.tenantId) &&\n        matchesNamespace(exception, filter.namespaceId) &&\n        (filter.decisionId === undefined || exception.decisionId === filter.decisionId),\n    );\n  }\n\n  async putApprovalRecord(approval: ApprovalRecord): Promise<void> {\n    this.approvalRecords.set(approval.id, approval);\n  }\n\n  async listApprovalRecords(filter: DecisionLifecycleFilter): Promise<readonly ApprovalRecord[]> {\n    return [...this.approvalRecords.values()].filter(\n      (approval) =>\n        matchesTenant(approval, filter.tenantId) &&\n        matchesNamespace(approval, filter.namespaceId) &&\n        (filter.decisionId === undefined || approval.decisionId === filter.decisionId),\n    );\n  }\n\n  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {")
+
+          # SQLite adapter uses the same collection abstraction as other canonical records.
+          replace('packages/adapter-sqlite/src/sqlite-store.ts',
+              "  CanonicalStore,\n  Claim,",
+              "  ApprovalRecord,\n  CanonicalStore,\n  Claim,")
+          replace('packages/adapter-sqlite/src/sqlite-store.ts',
+              "  Decision,\n  DecisionId,",
+              "  Decision,\n  DecisionId,\n  DecisionLifecycleFilter,\n  DecisionRelation,")
+          replace('packages/adapter-sqlite/src/sqlite-store.ts',
+              "  NamespaceId,\n  PolicyId,",
+              "  NamespaceId,\n  OutcomeObservation,\n  PolicyException,\n  PolicyId,")
+          replace('packages/adapter-sqlite/src/sqlite-store.ts',
+              "  decisions: 'decisions',\n  snapshots: 'snapshots',",
+              "  decisions: 'decisions',\n  decisionRelations: 'decision_relations',\n  outcomeObservations: 'outcome_observations',\n  policyExceptions: 'policy_exceptions',\n  approvalRecords: 'approval_records',\n  snapshots: 'snapshots',")
+          replace('packages/adapter-sqlite/src/sqlite-store.ts',
+              "  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {",
+              "  async putDecisionRelation(relation: DecisionRelation): Promise<void> {\n    this.putRecord(COLLECTIONS.decisionRelations, relation);\n  }\n\n  async listDecisionRelations(filter: DecisionLifecycleFilter): Promise<readonly DecisionRelation[]> {\n    const relations = this.listRecords<DecisionRelation>(COLLECTIONS.decisionRelations, filter);\n    return relations.filter(\n      (relation) =>\n        filter.decisionId === undefined ||\n        relation.fromDecisionId === filter.decisionId ||\n        relation.toDecisionId === filter.decisionId,\n    );\n  }\n\n  async putOutcomeObservation(observation: OutcomeObservation): Promise<void> {\n    this.putRecord(COLLECTIONS.outcomeObservations, observation);\n  }\n\n  async listOutcomeObservations(\n    filter: DecisionLifecycleFilter,\n  ): Promise<readonly OutcomeObservation[]> {\n    const records = this.listRecords<OutcomeObservation>(COLLECTIONS.outcomeObservations, filter);\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putPolicyException(exception: PolicyException): Promise<void> {\n    this.putRecord(COLLECTIONS.policyExceptions, exception);\n  }\n\n  async listPolicyExceptions(filter: DecisionLifecycleFilter): Promise<readonly PolicyException[]> {\n    const records = this.listRecords<PolicyException>(COLLECTIONS.policyExceptions, filter);\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putApprovalRecord(approval: ApprovalRecord): Promise<void> {\n    this.putRecord(COLLECTIONS.approvalRecords, approval);\n  }\n\n  async listApprovalRecords(filter: DecisionLifecycleFilter): Promise<readonly ApprovalRecord[]> {\n    const records = this.listRecords<ApprovalRecord>(COLLECTIONS.approvalRecords, filter);\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {")
+
+          # Postgres/PGlite adapter mirrors SQLite behavior.
+          replace('packages/adapter-postgres/src/postgres-store.ts',
+              "  CanonicalStore,\n  Claim,",
+              "  ApprovalRecord,\n  CanonicalStore,\n  Claim,")
+          replace('packages/adapter-postgres/src/postgres-store.ts',
+              "  Decision,\n  DecisionId,",
+              "  Decision,\n  DecisionId,\n  DecisionLifecycleFilter,\n  DecisionRelation,")
+          replace('packages/adapter-postgres/src/postgres-store.ts',
+              "  NamespaceId,\n  PolicyId,",
+              "  NamespaceId,\n  OutcomeObservation,\n  PolicyException,\n  PolicyId,")
+          replace('packages/adapter-postgres/src/postgres-store.ts',
+              "  decisions: 'decisions',\n  snapshots: 'snapshots',",
+              "  decisions: 'decisions',\n  decisionRelations: 'decision_relations',\n  outcomeObservations: 'outcome_observations',\n  policyExceptions: 'policy_exceptions',\n  approvalRecords: 'approval_records',\n  snapshots: 'snapshots',")
+          replace('packages/adapter-postgres/src/postgres-store.ts',
+              "  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {",
+              "  async putDecisionRelation(relation: DecisionRelation): Promise<void> {\n    await this.putRecord(COLLECTIONS.decisionRelations, relation);\n  }\n\n  async listDecisionRelations(filter: DecisionLifecycleFilter): Promise<readonly DecisionRelation[]> {\n    const relations = await this.listRecords<DecisionRelation>(COLLECTIONS.decisionRelations, filter);\n    return relations.filter(\n      (relation) =>\n        filter.decisionId === undefined ||\n        relation.fromDecisionId === filter.decisionId ||\n        relation.toDecisionId === filter.decisionId,\n    );\n  }\n\n  async putOutcomeObservation(observation: OutcomeObservation): Promise<void> {\n    await this.putRecord(COLLECTIONS.outcomeObservations, observation);\n  }\n\n  async listOutcomeObservations(\n    filter: DecisionLifecycleFilter,\n  ): Promise<readonly OutcomeObservation[]> {\n    const records = await this.listRecords<OutcomeObservation>(\n      COLLECTIONS.outcomeObservations,\n      filter,\n    );\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putPolicyException(exception: PolicyException): Promise<void> {\n    await this.putRecord(COLLECTIONS.policyExceptions, exception);\n  }\n\n  async listPolicyExceptions(filter: DecisionLifecycleFilter): Promise<readonly PolicyException[]> {\n    const records = await this.listRecords<PolicyException>(COLLECTIONS.policyExceptions, filter);\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putApprovalRecord(approval: ApprovalRecord): Promise<void> {\n    await this.putRecord(COLLECTIONS.approvalRecords, approval);\n  }\n\n  async listApprovalRecords(filter: DecisionLifecycleFilter): Promise<readonly ApprovalRecord[]> {\n    const records = await this.listRecords<ApprovalRecord>(COLLECTIONS.approvalRecords, filter);\n    return records.filter(\n      (record) => filter.decisionId === undefined || record.decisionId === filter.decisionId,\n    );\n  }\n\n  async putContextSnapshot(snapshot: ContextSnapshot): Promise<void> {")
+
+          # Shared adapter compliance now verifies all four lifecycle collections.
+          lifecycle_test = r'''
+function registerDecisionLifecycleCompliance(factory: StoreFactory): void {
+  it('round-trips immutable decision lifecycle records', async () => {
+    const store = await factory();
+    const metadata = localStandaloneMetadata();
+    const snapshot = buildContextSnapshot({
+      metadata,
+      purpose: 'lifecycle-compliance',
+      claimIds: [],
+      evidenceIds: [],
+      policyVersionIds: [],
+      items: [],
+      budget: 1,
+    });
+    const { decision } = buildDecisionRecorded({
+      metadata,
+      inputContextSnapshot: snapshot,
+      consideredEvidenceIds: [],
+      applicablePolicyIds: [],
+      selectedOutcome: 'approve',
+      alternatives: [],
+      confidence: 1,
+      actor: asPrincipalId('local-user'),
+      resultingActionIds: [],
+      policyEvaluations: [],
+      provenance: provenance(),
+    });
+    const relation = {
+      ...metadata,
+      id: newId('DecisionRelationId'),
+      fromDecisionId: decision.id,
+      toDecisionId: decision.id,
+      kind: 'depends_on' as const,
+      recordedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+      provenance: provenance(),
+    };
+    const outcome = {
+      ...metadata,
+      id: newId('OutcomeObservationId'),
+      decisionId: decision.id,
+      observedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+      outcome: 'worked',
+      metrics: { success: true },
+      evidenceIds: [],
+      provenance: provenance(),
+    };
+    const exception = {
+      ...metadata,
+      id: newId('PolicyExceptionId'),
+      decisionId: decision.id,
+      policyVersionId: newId('PolicyVersionId'),
+      reason: 'compliance fixture',
+      recordedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+      provenance: provenance(),
+    };
+    const approval = {
+      ...metadata,
+      id: newId('ApprovalRecordId'),
+      decisionId: decision.id,
+      approver: asPrincipalId('local-user'),
+      status: 'approved' as const,
+      recordedAt: asIsoTimestamp(COMPLIANCE_INSTANT),
+      provenance: provenance(),
+    };
+    const filter = {
+      tenantId: metadata.tenantId,
+      namespaceId: metadata.namespaceId,
+      decisionId: decision.id,
+    };
+
+    await store.putDecisionRelation(relation);
+    await store.putOutcomeObservation(outcome);
+    await store.putPolicyException(exception);
+    await store.putApprovalRecord(approval);
+
+    expect(await store.listDecisionRelations(filter)).toEqual([relation]);
+    expect(await store.listOutcomeObservations(filter)).toEqual([outcome]);
+    expect(await store.listPolicyExceptions(filter)).toEqual([exception]);
+    expect(await store.listApprovalRecords(filter)).toEqual([approval]);
+  });
+}
+
+'''
+          replace('packages/plugin-sdk/src/compliance/canonical-store.ts',
+              "function registerProjectionCompliance(factory: StoreFactory): void {",
+              lifecycle_test + "function registerProjectionCompliance(factory: StoreFactory): void {")
+          replace('packages/plugin-sdk/src/compliance/canonical-store.ts',
+              "    registerTemporalCompliance(factory);\n    registerProjectionCompliance(factory);",
+              "    registerTemporalCompliance(factory);\n    registerDecisionLifecycleCompliance(factory);\n    registerProjectionCompliance(factory);")
+
+          # Decision capability: authorized lifecycle commands + transactional events/outbox.
+          replace('packages/capability-decision/src/decision.ts',
+              "  allow,\n  asDecisionId,",
+              "  allow,\n  asDecisionId,\n  asEvidenceId,\n  asPolicyVersionId,")
+          replace('packages/capability-decision/src/decision.ts',
+              "  compactProvenance,\n  newId,",
+              "  compactProvenance,\n  createEventId,\n  newId,")
+
+          lifecycle_capabilities = r'''
+type LifecycleAction =
+  | 'decision.relate'
+  | 'decision.observe'
+  | 'decision.approve'
+  | 'policy.exception';
+
+async function decisionForLifecycle(input: {
+  store: CanonicalStore;
+  principal: Principal;
+  decisionId: string;
+  action: LifecycleAction;
+  purpose: string;
+}): Promise<Decision | undefined> {
+  const decision = await input.store.getDecision(asDecisionId(input.decisionId));
+  if (decision === undefined) {
+    return undefined;
+  }
+  assertAllowed(
+    input.principal,
+    input.action,
+    { kind: 'decision', id: decision.id, metadata: decision },
+    { tenantId: input.principal.tenantId, purpose: input.purpose },
+  );
+  return decision;
+}
+
+export async function relateDecisionCapability(input: {
+  store: CanonicalStore;
+  principal: Principal;
+  fromDecisionId: string;
+  toDecisionId: string;
+  kind: DecisionRelationKind;
+}): Promise<DecisionRelation | undefined> {
+  const from = await decisionForLifecycle({
+    ...input,
+    decisionId: input.fromDecisionId,
+    action: 'decision.relate',
+    purpose: 'decision-relate',
+  });
+  if (from === undefined) {
+    return undefined;
+  }
+  const to = await input.store.getDecision(asDecisionId(input.toDecisionId));
+  if (to === undefined) {
+    return undefined;
+  }
+  assertAllowed(
+    input.principal,
+    'decision.read',
+    { kind: 'decision', id: to.id, metadata: to },
+    { tenantId: input.principal.tenantId, purpose: 'decision-relate' },
+  );
+  const relation = createDecisionRelation({
+    from,
+    to,
+    kind: input.kind,
+    provenance: compactProvenance({
+      source: 'decision',
+      actor: input.principal.id,
+      process: 'decision.relate',
+    }),
+  });
+  const event = {
+    kind: 'decision.related' as const,
+    eventId: createEventId(),
+    tenantId: relation.tenantId,
+    decisionId: relation.fromDecisionId,
+    relatedDecisionId: relation.toDecisionId,
+    relationId: relation.id,
+    provenance: relation.provenance,
+    occurredAt: relation.recordedAt,
+  };
+  await input.store.withTransaction(async (tx) => {
+    await tx.putDecisionRelation(relation);
+    await tx.appendEvent(event);
+    await tx.appendOutbox(event);
+  });
+  return relation;
+}
+
+export async function observeDecisionOutcomeCapability(input: {
+  store: CanonicalStore;
+  principal: Principal;
+  decisionId: string;
+  outcome: string;
+  metrics?: Readonly<Record<string, OutcomeMetricValue>>;
+  evidenceIds?: readonly string[];
+}): Promise<OutcomeObservation | undefined> {
+  const decision = await decisionForLifecycle({
+    ...input,
+    action: 'decision.observe',
+    purpose: 'decision-observe',
+  });
+  if (decision === undefined) {
+    return undefined;
+  }
+  const evidenceIds = (input.evidenceIds ?? []).map(asEvidenceId);
+  for (const evidenceId of evidenceIds) {
+    const evidence = await input.store.getEvidence(evidenceId);
+    if (evidence === undefined) {
+      throw new Error(`Evidence not found: ${evidenceId}`);
+    }
+    assertAllowed(
+      input.principal,
+      'knowledge.read',
+      { kind: 'evidence', id: evidence.id, metadata: evidence },
+      { tenantId: input.principal.tenantId, purpose: 'decision-observe' },
+    );
+  }
+  const observation = createOutcomeObservation({
+    decision,
+    outcome: input.outcome,
+    ...(input.metrics === undefined ? {} : { metrics: input.metrics }),
+    evidenceIds,
+    provenance: compactProvenance({
+      source: 'decision',
+      actor: input.principal.id,
+      process: 'decision.observe',
+    }),
+  });
+  const event = {
+    kind: 'decision.outcome_observed' as const,
+    eventId: createEventId(),
+    tenantId: observation.tenantId,
+    decisionId: observation.decisionId,
+    outcomeObservationId: observation.id,
+    provenance: observation.provenance,
+    occurredAt: observation.observedAt,
+  };
+  await input.store.withTransaction(async (tx) => {
+    await tx.putOutcomeObservation(observation);
+    await tx.appendEvent(event);
+    await tx.appendOutbox(event);
+  });
+  return observation;
+}
+
+export async function recordPolicyExceptionCapability(input: {
+  store: CanonicalStore;
+  principal: Principal;
+  decisionId: string;
+  policyVersionId: string;
+  reason: string;
+}): Promise<PolicyException | undefined> {
+  const decision = await decisionForLifecycle({
+    ...input,
+    action: 'policy.exception',
+    purpose: 'policy-exception',
+  });
+  if (decision === undefined) {
+    return undefined;
+  }
+  const policyVersionId = asPolicyVersionId(input.policyVersionId);
+  const policies = await input.store.listPolicies({ tenantId: input.principal.tenantId });
+  const policy = policies.find(
+    (candidate) => policyVersionRef(candidate).policyVersionId === policyVersionId,
+  );
+  if (policy === undefined) {
+    throw new Error(`Policy version not found: ${policyVersionId}`);
+  }
+  assertAllowed(
+    input.principal,
+    'policy.exception',
+    { kind: 'policy', id: policy.id, metadata: policy },
+    { tenantId: input.principal.tenantId, purpose: 'policy-exception' },
+  );
+  const exception = createPolicyException({
+    decision,
+    policyVersionId,
+    reason: input.reason,
+    provenance: compactProvenance({
+      source: 'decision',
+      actor: input.principal.id,
+      process: 'policy.exception',
+    }),
+  });
+  const event = {
+    kind: 'policy.exception_recorded' as const,
+    eventId: createEventId(),
+    tenantId: exception.tenantId,
+    decisionId: exception.decisionId,
+    policyExceptionId: exception.id,
+    policyVersionId: exception.policyVersionId,
+    provenance: exception.provenance,
+    occurredAt: exception.recordedAt,
+  };
+  await input.store.withTransaction(async (tx) => {
+    await tx.putPolicyException(exception);
+    await tx.appendEvent(event);
+    await tx.appendOutbox(event);
+  });
+  return exception;
+}
+
+export async function recordDecisionApprovalCapability(input: {
+  store: CanonicalStore;
+  principal: Principal;
+  decisionId: string;
+  status: ApprovalRecord['status'];
+  method?: string;
+  context?: string;
+}): Promise<ApprovalRecord | undefined> {
+  const decision = await decisionForLifecycle({
+    ...input,
+    action: 'decision.approve',
+    purpose: 'decision-approve',
+  });
+  if (decision === undefined) {
+    return undefined;
+  }
+  const approval = createApprovalRecord({
+    decision,
+    approver: input.principal.id,
+    status: input.status,
+    ...(input.method === undefined ? {} : { method: input.method }),
+    ...(input.context === undefined ? {} : { context: input.context }),
+    provenance: compactProvenance({
+      source: 'decision',
+      actor: input.principal.id,
+      process: 'decision.approve',
+    }),
+  });
+  const event = {
+    kind: 'decision.approval_recorded' as const,
+    eventId: createEventId(),
+    tenantId: approval.tenantId,
+    decisionId: approval.decisionId,
+    approvalRecordId: approval.id,
+    provenance: approval.provenance,
+    occurredAt: approval.recordedAt,
+  };
+  await input.store.withTransaction(async (tx) => {
+    await tx.putApprovalRecord(approval);
+    await tx.appendEvent(event);
+    await tx.appendOutbox(event);
+  });
+  return approval;
+}
+
+'''
+          replace('packages/capability-decision/src/decision.ts',
+              "function hash(value: unknown): string {",
+              lifecycle_capabilities + "function hash(value: unknown): string {")
+          replace('packages/capability-decision/src/decision.ts',
+              "  const authorizationReceipts = retrievalReceipt?.authorizationReceipts ?? [];\n  const events =",
+              "  const authorizationReceipts = retrievalReceipt?.authorizationReceipts ?? [];\n  const lifecycleFilter = {\n    tenantId: decision.tenantId,\n    namespaceId: decision.namespaceId,\n    decisionId: decision.id,\n  };\n  const [relations, outcomes, exceptions, approvals] = await Promise.all([\n    input.store.listDecisionRelations(lifecycleFilter),\n    input.store.listOutcomeObservations(lifecycleFilter),\n    input.store.listPolicyExceptions(lifecycleFilter),\n    input.store.listApprovalRecords(lifecycleFilter),\n  ]);\n  const events =")
+          replace('packages/capability-decision/src/decision.ts',
+              "    relations: [],\n    outcomes: [],\n    exceptions: [],\n    approvals: [],",
+              "    relations,\n    outcomes,\n    exceptions,\n    approvals,")
+          replace('packages/capability-decision/src/decision.ts',
+              "        authorizationReceipts: hash(authorizationReceipts),\n        events: hash(events),",
+              "        authorizationReceipts: hash(authorizationReceipts),\n        relations: hash(relations),\n        outcomes: hash(outcomes),\n        exceptions: hash(exceptions),\n        approvals: hash(approvals),\n        events: hash(events),")
+
+          replace('packages/capability-decision/src/public.ts',
+              "  findDecisionPrecedentsCapability,\n  recordDecisionCapability,",
+              "  findDecisionPrecedentsCapability,\n  observeDecisionOutcomeCapability,\n  recordDecisionApprovalCapability,\n  recordDecisionCapability,\n  recordPolicyExceptionCapability,\n  relateDecisionCapability,")
+
+          # Application facade exposes the lifecycle without moving domain logic back into application.
+          replace('packages/application/src/create-app.ts',
+              "  findDecisionPrecedentsCapability,\n  recordDecisionCapability,\n  replayDecisionCapability,",
+              "  findDecisionPrecedentsCapability,\n  observeDecisionOutcomeCapability,\n  recordDecisionApprovalCapability,\n  recordDecisionCapability,\n  recordPolicyExceptionCapability,\n  relateDecisionCapability,\n  replayDecisionCapability,")
+          replace('packages/application/src/create-app.ts',
+              "  DecisionAuditBundle,\n  Evidence,",
+              "  DecisionAuditBundle,\n  DecisionRelation,\n  DecisionRelationKind,\n  Evidence,\n  OutcomeMetricValue,\n  OutcomeObservation,\n  PolicyException,\n  ApprovalRecord,")
+          replace('packages/application/src/create-app.ts',
+              "  getDecisionAuditBundle?: (id: string) => Promise<DecisionAuditBundle | undefined>;",
+              "  getDecisionAuditBundle?: (id: string) => Promise<DecisionAuditBundle | undefined>;\n  relateDecision?: (input: {\n    fromDecisionId: string;\n    toDecisionId: string;\n    kind: DecisionRelationKind;\n  }) => Promise<DecisionRelation | undefined>;\n  observeDecisionOutcome?: (input: {\n    decisionId: string;\n    outcome: string;\n    metrics?: Readonly<Record<string, OutcomeMetricValue>>;\n    evidenceIds?: readonly string[];\n  }) => Promise<OutcomeObservation | undefined>;\n  recordPolicyException?: (input: {\n    decisionId: string;\n    policyVersionId: string;\n    reason: string;\n  }) => Promise<PolicyException | undefined>;\n  recordDecisionApproval?: (input: {\n    decisionId: string;\n    status: ApprovalRecord['status'];\n    method?: string;\n    context?: string;\n  }) => Promise<ApprovalRecord | undefined>;")
+          replace('packages/application/src/create-app.ts',
+              "    async recordMemory(input) {",
+              "    async relateDecision(input) {\n      return relateDecisionCapability({\n        store: ports.store,\n        principal: await current(),\n        ...input,\n      });\n    },\n\n    async observeDecisionOutcome(input) {\n      return observeDecisionOutcomeCapability({\n        store: ports.store,\n        principal: await current(),\n        ...input,\n      });\n    },\n\n    async recordPolicyException(input) {\n      return recordPolicyExceptionCapability({\n        store: ports.store,\n        principal: await current(),\n        ...input,\n      });\n    },\n\n    async recordDecisionApproval(input) {\n      return recordDecisionApprovalCapability({\n        store: ports.store,\n        principal: await current(),\n        ...input,\n      });\n    },\n\n    async recordMemory(input) {")
+
+          replace('packages/application/src/public.ts',
+              "  findDecisionPrecedentsCapability,\n  recordDecisionCapability,",
+              "  findDecisionPrecedentsCapability,\n  observeDecisionOutcomeCapability,\n  recordDecisionApprovalCapability,\n  recordDecisionCapability,\n  recordPolicyExceptionCapability,\n  relateDecisionCapability,")
+
+          # Capability regression: lifecycle records are persisted, evented, and reconstructed in audit.
+          Path('packages/capability-decision/src/lifecycle.test.ts').write_text(r'''import { putPolicyVersion, policyVersionRef } from '@kotowari/capability-policy';
+import {
+  asPrincipalId,
+  buildContextSnapshot,
+  buildDecisionRecorded,
+  compactProvenance,
+  localStandaloneMetadata,
+  localStandalonePrincipal,
+} from '@kotowari/kernel';
+import { createMemoryCanonicalStore } from '@kotowari/plugin-sdk';
+import { describe, expect, it } from 'vitest';
+
+import {
+  buildDecisionAuditBundleCapability,
+  observeDecisionOutcomeCapability,
+  recordDecisionApprovalCapability,
+  recordPolicyExceptionCapability,
+  relateDecisionCapability,
+} from './public.js';
+
+async function fixture() {
+  const store = createMemoryCanonicalStore();
+  const principal = localStandalonePrincipal();
+  const metadata = localStandaloneMetadata(principal.id);
+  const snapshot = buildContextSnapshot({
+    metadata,
+    purpose: 'lifecycle-test',
+    claimIds: [],
+    evidenceIds: [],
+    policyVersionIds: [],
+    items: [],
+    budget: 1,
+  });
+  const provenance = compactProvenance({
+    source: 'test',
+    actor: principal.id,
+    process: 'fixture',
+  });
+  const makeDecision = (outcome: string) =>
+    buildDecisionRecorded({
+      metadata,
+      inputContextSnapshot: snapshot,
+      consideredEvidenceIds: [],
+      applicablePolicyIds: [],
+      selectedOutcome: outcome,
+      alternatives: [],
+      confidence: 1,
+      actor: asPrincipalId('local-user'),
+      resultingActionIds: [],
+      policyEvaluations: [],
+      provenance,
+    }).decision;
+  const first = makeDecision('first');
+  const second = makeDecision('second');
+  await store.putContextSnapshot(snapshot);
+  await store.putDecision(first);
+  await store.putDecision(second);
+  const policy = await putPolicyVersion({
+    store,
+    principal,
+    name: 'lifecycle-policy',
+    version: 1,
+    rules: {},
+  });
+  return { store, principal, first, second, policy };
+}
+
+describe('decision lifecycle accountability', () => {
+  it('persists lifecycle writes with events and reconstructs them in the audit bundle', async () => {
+    const { store, principal, first, second, policy } = await fixture();
+    const relation = await relateDecisionCapability({
+      store,
+      principal,
+      fromDecisionId: first.id,
+      toDecisionId: second.id,
+      kind: 'depends_on',
+    });
+    const outcome = await observeDecisionOutcomeCapability({
+      store,
+      principal,
+      decisionId: first.id,
+      outcome: 'successful',
+      metrics: { latencyMs: 42 },
+    });
+    const exception = await recordPolicyExceptionCapability({
+      store,
+      principal,
+      decisionId: first.id,
+      policyVersionId: policyVersionRef(policy).policyVersionId,
+      reason: 'approved migration window',
+    });
+    const approval = await recordDecisionApprovalCapability({
+      store,
+      principal,
+      decisionId: first.id,
+      status: 'approved',
+      method: 'human-review',
+    });
+
+    expect(relation).toBeDefined();
+    expect(outcome).toBeDefined();
+    expect(exception).toBeDefined();
+    expect(approval?.approver).toBe(principal.id);
+    expect((await store.listEvents()).map((event) => event.kind)).toEqual(
+      expect.arrayContaining([
+        'decision.related',
+        'decision.outcome_observed',
+        'policy.exception_recorded',
+        'decision.approval_recorded',
+      ]),
+    );
+    expect((await store.listOutbox()).length).toBe(4);
+
+    const bundle = await buildDecisionAuditBundleCapability({
+      store,
+      principal,
+      decisionId: first.id,
+    });
+    expect(bundle?.relations).toEqual([relation]);
+    expect(bundle?.outcomes).toEqual([outcome]);
+    expect(bundle?.exceptions).toEqual([exception]);
+    expect(bundle?.approvals).toEqual([approval]);
+    expect(bundle?.manifest.contentHashes['relations']).toBeDefined();
+    expect(bundle?.manifest.contentHashes['outcomes']).toBeDefined();
+    expect(bundle?.manifest.contentHashes['exceptions']).toBeDefined();
+    expect(bundle?.manifest.contentHashes['approvals']).toBeDefined();
+  });
+});
+''')
+          PY
+      - name: Format changed sources
+        run: |
+          pnpm exec prettier --write \
+            packages/kernel/src/authorization.ts \
+            packages/kernel/src/authorization.test.ts \
+            packages/kernel/src/events.ts \
+            packages/plugin-sdk/src/contracts.ts \
+            packages/plugin-sdk/src/ports.ts \
+            packages/plugin-sdk/src/fakes/memory-store.ts \
+            packages/plugin-sdk/src/compliance/canonical-store.ts \
+            packages/adapter-sqlite/src/sqlite-store.ts \
+            packages/adapter-postgres/src/postgres-store.ts \
+            packages/capability-decision/src/decision.ts \
+            packages/capability-decision/src/public.ts \
+            packages/capability-decision/src/lifecycle.test.ts \
+            packages/application/src/create-app.ts \
+            packages/application/src/public.ts
+      - name: Commit implementation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 4189826+github-actions[bot]@users.noreply.github.com
+          git add packages
+          git commit -m "feat: complete decision lifecycle accountability"
+          git push origin HEAD:feat/p0-decision-lifecycle-accountability
