@@ -16,6 +16,13 @@ export {
   createInProcessComposeApp,
   startComposeServer,
 } from './compose.js';
+export {
+  createComposeRetrievalProjectionFromEnv,
+} from './retrieval-projection-operations.js';
+export type {
+  RetrievalProjectionMaintenance,
+  RetrievalProjectionStatus,
+} from './retrieval-projection-operations.js';
 export { listenKotowariHttp } from './http-server.js';
 export type { McpHttpSecurityOptions, ServerMcpAuditEvent } from './http-server.js';
 export { collectParitySnapshot, semanticParityEqual } from './parity.js';
