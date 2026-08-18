@@ -1,11 +1,18 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import { claimText, claimValidAt, ftsMatchQuery, lexicalTokens } from '@kotowari/plugin-sdk';
+import {
+  claimText,
+  claimVisibleAt,
+  ftsMatchQuery,
+  lexicalTokens,
+  normalizeTemporalPerspective,
+} from '@kotowari/plugin-sdk';
 
 import type {
   CanonicalStore,
   Claim,
   ClaimId,
+  ClaimReadFilter,
   Conflict,
   ConflictResolution,
   ContextId,
@@ -22,6 +29,8 @@ import type {
   NamespaceId,
   PolicyId,
   PolicyRecord,
+  RetrievalReceipt,
+  RetrievalReceiptId,
   TenantId,
 } from '@kotowari/plugin-sdk';
 
@@ -31,6 +40,7 @@ const COLLECTIONS = {
   claims: 'claims',
   decisions: 'decisions',
   snapshots: 'snapshots',
+  retrievalReceipts: 'retrieval_receipts',
   memory: 'memory',
   policies: 'policies',
   conflicts: 'conflicts',
@@ -46,6 +56,16 @@ CREATE TABLE IF NOT EXISTS records (
   payload TEXT NOT NULL,
   PRIMARY KEY (collection, id)
 );
+CREATE TABLE IF NOT EXISTS record_history (
+  history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collection TEXT NOT NULL,
+  id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  namespace_id TEXT,
+  payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS record_history_lookup
+  ON record_history (collection, id, tenant_id, namespace_id);
 CREATE TABLE IF NOT EXISTS events (
   event_id TEXT PRIMARY KEY,
   payload TEXT NOT NULL
@@ -81,6 +101,8 @@ type ScopedRecord = {
 };
 
 type PreparedStatement = ReturnType<DatabaseSync['prepare']>;
+type PayloadRow = { payload: string };
+type VersionedPayloadRow = { id: string; payload: string };
 
 function openLexicalProjection(db: DatabaseSync): 'fts5' | 'table' {
   try {
@@ -90,6 +112,19 @@ function openLexicalProjection(db: DatabaseSync): 'fts5' | 'table' {
     db.exec(TABLE_FTS_SCHEMA);
     return 'table';
   }
+}
+
+function latestClaimKnownAt(
+  versions: readonly Claim[],
+  knownAt: string | undefined,
+): Claim | undefined {
+  if (knownAt === undefined) {
+    return versions.at(-1);
+  }
+  return versions
+    .filter((claim) => claim.bitemporal.recordedAt <= knownAt)
+    .sort((left, right) => left.bitemporal.recordedAt.localeCompare(right.bitemporal.recordedAt))
+    .at(-1);
 }
 
 class SqliteCanonicalStore implements CanonicalStore {
@@ -146,14 +181,28 @@ class SqliteCanonicalStore implements CanonicalStore {
     return this.getRecord<Claim>(COLLECTIONS.claims, id);
   }
 
-  async listClaims(filter: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
-    asOf?: string;
-  }): Promise<readonly Claim[]> {
-    return this.listRecords<Claim>(COLLECTIONS.claims, filter).filter((claim) =>
-      claimValidAt(claim, filter.asOf),
-    );
+  async listClaims(filter: ClaimReadFilter): Promise<readonly Claim[]> {
+    const temporal = normalizeTemporalPerspective(filter.temporal, filter.asOf);
+    const current = this.listRecords<Claim>(COLLECTIONS.claims, filter);
+    if (temporal.knownAt === undefined) {
+      return current.filter((claim) => claimVisibleAt(claim, temporal));
+    }
+
+    const history = this.listHistoricalRecords<Claim>(COLLECTIONS.claims, filter);
+    const versionsById = new Map<string, Claim[]>();
+    for (const claim of [...history, ...current]) {
+      const versions = versionsById.get(claim.id) ?? [];
+      versions.push(claim);
+      versionsById.set(claim.id, versions);
+    }
+    const claims: Claim[] = [];
+    for (const versions of versionsById.values()) {
+      const claim = latestClaimKnownAt(versions, temporal.knownAt);
+      if (claim !== undefined && claimVisibleAt(claim, temporal)) {
+        claims.push(claim);
+      }
+    }
+    return claims;
   }
 
   async retractClaim(claim: Claim): Promise<void> {
@@ -182,6 +231,14 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async getContextSnapshot(id: ContextId): Promise<ContextSnapshot | undefined> {
     return this.getRecord<ContextSnapshot>(COLLECTIONS.snapshots, id);
+  }
+
+  async putRetrievalReceipt(receipt: RetrievalReceipt): Promise<void> {
+    this.putRecord(COLLECTIONS.retrievalReceipts, receipt);
+  }
+
+  async getRetrievalReceipt(id: RetrievalReceiptId): Promise<RetrievalReceipt | undefined> {
+    return this.getRecord<RetrievalReceipt>(COLLECTIONS.retrievalReceipts, id);
   }
 
   async putMemory(record: MemoryRecord): Promise<void> {
@@ -231,7 +288,7 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   async listEvents(): Promise<readonly DomainEvent[]> {
-    const rows = this.stmt('SELECT payload FROM events').all() as { payload: string }[];
+    const rows = this.stmt('SELECT payload FROM events').all() as PayloadRow[];
     return rows.map((row) => JSON.parse(row.payload) as DomainEvent);
   }
 
@@ -243,7 +300,7 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   async listOutbox(): Promise<readonly DomainEvent[]> {
-    const rows = this.stmt('SELECT payload FROM outbox').all() as { payload: string }[];
+    const rows = this.stmt('SELECT payload FROM outbox').all() as PayloadRow[];
     return rows.map((row) => JSON.parse(row.payload) as DomainEvent);
   }
 
@@ -273,13 +330,11 @@ class SqliteCanonicalStore implements CanonicalStore {
     this.db.exec('DELETE FROM embeddings');
   }
 
-  async searchLexical(input: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
+  async searchLexical(input: ClaimReadFilter & {
     query: string;
     limit: number;
-    asOf?: string;
   }): Promise<readonly Claim[]> {
+    const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
     const match = ftsMatchQuery(input.query);
     if (match.length === 0) {
       const claims = await this.listClaims(input);
@@ -293,11 +348,11 @@ class SqliteCanonicalStore implements CanonicalStore {
         : this.searchLexicalTable(input);
     const claims: Claim[] = [];
     for (const row of rows) {
-      const claim = await this.getClaim(row.claim_id as ClaimId);
+      const claim = this.claimKnownAt(row.claim_id as ClaimId, temporal.knownAt);
       if (
         claim !== undefined &&
         (input.namespaceId === undefined || claim.namespaceId === input.namespaceId) &&
-        claimValidAt(claim, input.asOf)
+        claimVisibleAt(claim, temporal)
       ) {
         claims.push(claim);
       }
@@ -307,9 +362,7 @@ class SqliteCanonicalStore implements CanonicalStore {
 
   async rebuildLexicalProjection(): Promise<void> {
     this.db.exec('DELETE FROM claim_fts');
-    const rows = this.stmt("SELECT payload FROM records WHERE collection = 'claims'").all() as {
-      payload: string;
-    }[];
+    const rows = this.stmt("SELECT payload FROM records WHERE collection = 'claims'").all() as PayloadRow[];
     for (const row of rows) {
       this.upsertFts(JSON.parse(row.payload) as Claim);
     }
@@ -331,6 +384,21 @@ class SqliteCanonicalStore implements CanonicalStore {
     ).all(...params) as { claim_id: string }[];
   }
 
+  private claimKnownAt(id: ClaimId, knownAt: string | undefined): Claim | undefined {
+    const current = this.getRecord<Claim>(COLLECTIONS.claims, id);
+    if (current === undefined) {
+      return undefined;
+    }
+    if (knownAt === undefined) {
+      return current;
+    }
+    const rows = this.stmt(
+      'SELECT payload FROM record_history WHERE collection = ? AND id = ?',
+    ).all(COLLECTIONS.claims, id) as PayloadRow[];
+    const history = rows.map((row) => JSON.parse(row.payload) as Claim);
+    return latestClaimKnownAt([...history, current], knownAt);
+  }
+
   private upsertFts(claim: Claim): void {
     this.stmt('DELETE FROM claim_fts WHERE claim_id = ?').run(claim.id);
     this.stmt(
@@ -349,6 +417,16 @@ class SqliteCanonicalStore implements CanonicalStore {
   }
 
   private putRecord(collection: string, record: ScopedRecord): void {
+    const current = this.stmt(
+      'SELECT tenant_id, namespace_id, payload FROM records WHERE collection = ? AND id = ?',
+    ).get(collection, record.id) as
+      | { tenant_id: string; namespace_id: string | null; payload: string }
+      | undefined;
+    if (current !== undefined) {
+      this.stmt(
+        'INSERT INTO record_history (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
+      ).run(collection, record.id, current.tenant_id, current.namespace_id, current.payload);
+    }
     this.stmt(
       'INSERT OR REPLACE INTO records (collection, id, tenant_id, namespace_id, payload) VALUES (?, ?, ?, ?, ?)',
     ).run(collection, record.id, record.tenantId, record.namespaceId, JSON.stringify(record));
@@ -358,7 +436,7 @@ class SqliteCanonicalStore implements CanonicalStore {
     const row = this.stmt('SELECT payload FROM records WHERE collection = ? AND id = ?').get(
       collection,
       id,
-    ) as { payload: string } | undefined;
+    ) as PayloadRow | undefined;
     if (row === undefined) {
       return undefined;
     }
@@ -377,7 +455,23 @@ class SqliteCanonicalStore implements CanonicalStore {
       filter.namespaceId === undefined
         ? [collection, filter.tenantId]
         : [collection, filter.tenantId, filter.namespaceId];
-    const rows = this.stmt(sql).all(...params) as { payload: string }[];
+    const rows = this.stmt(sql).all(...params) as PayloadRow[];
+    return rows.map((row) => JSON.parse(row.payload) as T);
+  }
+
+  private listHistoricalRecords<T extends ScopedRecord>(
+    collection: string,
+    filter: { tenantId: TenantId; namespaceId?: NamespaceId },
+  ): T[] {
+    const sql =
+      filter.namespaceId === undefined
+        ? 'SELECT id, payload FROM record_history WHERE collection = ? AND tenant_id = ?'
+        : 'SELECT id, payload FROM record_history WHERE collection = ? AND tenant_id = ? AND namespace_id = ?';
+    const params =
+      filter.namespaceId === undefined
+        ? [collection, filter.tenantId]
+        : [collection, filter.tenantId, filter.namespaceId];
+    const rows = this.stmt(sql).all(...params) as VersionedPayloadRow[];
     return rows.map((row) => JSON.parse(row.payload) as T);
   }
 }
