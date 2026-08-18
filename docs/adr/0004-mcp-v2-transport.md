@@ -36,13 +36,9 @@ Standalone and enterprise deployments also optimize for different outcomes. An i
   | `admin`          | privileged | `list_policies`, `what_if_policy`   |
 
 - Treat **standalone presets** as local UX/safety choices rather than OAuth boundaries. `kotowari mcp` defaults to `personal`; standalone HTTP exposes the same preset at `/mcp`:
-
-  | Preset     | Purpose | Operations |
-  | ---------- | ------- | ---------- |
-  | `readonly` | Conservative local access | `search_knowledge`, `search_memory`, `replay_decision`, `audit_decision` |
-  | `personal` | Everyday individual use (default) | `search_knowledge`, `search_memory`, `record_memory`, `record_decision`, `replay_decision`, `audit_decision` |
-  | `advanced` | Explicit power-user access | all registered MCP operations |
-
+  - `readonly`: conservative local access through `search_knowledge`, `search_memory`, `replay_decision`, and `audit_decision`.
+  - `personal` (default): everyday individual access through `search_knowledge`, `search_memory`, `record_memory`, `record_decision`, `replay_decision`, and `audit_decision`.
+  - `advanced`: all registered MCP operations as an explicit power-user choice.
 - Do not expose filesystem ingestion, conflict curation, policy administration, or PROV export in the default `personal` preset. These remain explicit CLI or advanced/enterprise capabilities.
 - The standalone CLI uses `--preset`, not `--profile`; enterprise profiles are an HTTP deployment concern. The default Cursor pack launches a single `kotowari mcp` process and inherits the `personal` preset.
 - Treat enterprise profile/scope authorization and resource authorization as two distinct layers:
