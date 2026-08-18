@@ -9,7 +9,13 @@ export type EntityId = Brand<string, 'EntityId'>;
 export type ClaimId = Brand<string, 'ClaimId'>;
 export type EvidenceId = Brand<string, 'EvidenceId'>;
 export type DecisionId = Brand<string, 'DecisionId'>;
+export type DecisionRelationId = Brand<string, 'DecisionRelationId'>;
+export type OutcomeObservationId = Brand<string, 'OutcomeObservationId'>;
 export type PolicyId = Brand<string, 'PolicyId'>;
+export type PolicyVersionId = Brand<string, 'PolicyVersionId'>;
+export type PolicyExceptionId = Brand<string, 'PolicyExceptionId'>;
+export type ApprovalRecordId = Brand<string, 'ApprovalRecordId'>;
+export type AuditBundleId = Brand<string, 'AuditBundleId'>;
 export type ConflictId = Brand<string, 'ConflictId'>;
 export type EventId = Brand<string, 'EventId'>;
 export type ProvenanceId = Brand<string, 'ProvenanceId'>;
@@ -53,8 +59,32 @@ export function asDecisionId(value: string): DecisionId {
   return asBranded(value, 'DecisionId') as DecisionId;
 }
 
+export function asDecisionRelationId(value: string): DecisionRelationId {
+  return asBranded(value, 'DecisionRelationId') as DecisionRelationId;
+}
+
+export function asOutcomeObservationId(value: string): OutcomeObservationId {
+  return asBranded(value, 'OutcomeObservationId') as OutcomeObservationId;
+}
+
 export function asPolicyId(value: string): PolicyId {
   return asBranded(value, 'PolicyId') as PolicyId;
+}
+
+export function asPolicyVersionId(value: string): PolicyVersionId {
+  return asBranded(value, 'PolicyVersionId') as PolicyVersionId;
+}
+
+export function asPolicyExceptionId(value: string): PolicyExceptionId {
+  return asBranded(value, 'PolicyExceptionId') as PolicyExceptionId;
+}
+
+export function asApprovalRecordId(value: string): ApprovalRecordId {
+  return asBranded(value, 'ApprovalRecordId') as ApprovalRecordId;
+}
+
+export function asAuditBundleId(value: string): AuditBundleId {
+  return asBranded(value, 'AuditBundleId') as AuditBundleId;
 }
 
 export function asConflictId(value: string): ConflictId {
