@@ -1,8 +1,8 @@
 name: Fix conflict app lines
 
 on:
-  push:
-    branches: [feat/semantic-conflict-detection-v1]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
