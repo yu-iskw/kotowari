@@ -16,12 +16,21 @@ export {
   createInProcessComposeApp,
   startComposeServer,
 } from './compose.js';
-export { createComposeRetrievalProjectionFromEnv } from './retrieval-projection-operations.js';
+export {
+  createComposeRetrievalProjectionFromEnv,
+  createComposeRetrievalProjectionRuntimeFromEnv,
+} from './retrieval-projection-operations.js';
 export type {
   RetrievalProjectionMaintenance,
   RetrievalProjectionStatus,
 } from './retrieval-projection-operations.js';
+export { createProjectionServingGate } from './projection-serving.js';
+export type { ProjectionServingGate, ProjectionServingSnapshot } from './projection-serving.js';
 export { listenKotowariHttp } from './http-server.js';
-export type { McpHttpSecurityOptions, ServerMcpAuditEvent } from './http-server.js';
+export type {
+  McpHttpSecurityOptions,
+  ServerMcpAuditEvent,
+  ServerObservability,
+} from './http-server.js';
 export { collectParitySnapshot, semanticParityEqual } from './parity.js';
 export type { ParitySnapshot } from './parity.js';
