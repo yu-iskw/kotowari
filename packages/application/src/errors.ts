@@ -1,6 +1,9 @@
 export class ApplicationError extends Error {
-  constructor(message: string) {
+  readonly status: number;
+
+  constructor(message: string, status = 400) {
     super(message);
     this.name = 'ApplicationError';
+    this.status = status;
   }
 }

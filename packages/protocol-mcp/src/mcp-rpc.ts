@@ -89,6 +89,10 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
       }),
   ],
   ['search_memory', async (app, args) => app.searchMemory({ query: asString(args['query']) })],
+  [
+    'search_decisions',
+    async (app, args) => app.searchDecisions({ query: asString(args['query']) }),
+  ],
   ['record_memory', async (app, args) => app.recordMemory({ body: asString(args['body']) })],
   [
     'record_decision',
@@ -134,6 +138,8 @@ export function spyApplicationCommandName(toolName: string): string {
       return 'searchKnowledge';
     case 'search_memory':
       return 'searchMemory';
+    case 'search_decisions':
+      return 'searchDecisions';
     case 'record_decision':
       return 'recordDecision';
     case 'record_memory':

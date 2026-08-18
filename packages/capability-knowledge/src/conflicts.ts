@@ -14,7 +14,7 @@ export async function resolveClaimConflict(input: {
   if (namespaceId === undefined) {
     throw new Error('Principal has no namespace');
   }
-  const { resolution, event } = buildConflictResolved({
+  const { conflict, resolution, event } = buildConflictResolved({
     metadata: {
       tenantId: input.principal.tenantId,
       namespaceId,
@@ -35,6 +35,7 @@ export async function resolveClaimConflict(input: {
     }),
   });
   await input.store.withTransaction(async (tx) => {
+    await tx.putConflict(conflict);
     await tx.putResolution(resolution);
     await tx.appendEvent(event);
     await tx.appendOutbox(event);

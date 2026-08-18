@@ -30,6 +30,9 @@ function capturingApp(): {
     recordDecision: async () => ({ id: 'd1' }) as never,
     getDecision: async () => undefined,
     listDecisions: async () => [],
+    searchDecisions: async () => [],
+    listConflicts: async () => [],
+    listJobs: async () => [],
     recordMemory: async () => ({ id: 'm1' }) as never,
     searchMemory: async () => [],
     putPolicy: async () => ({}) as never,
@@ -77,5 +80,37 @@ describe('S2 REST ingest', () => {
     });
     expect(result.status).toBe(202);
     expect(result.json).toEqual({ evidenceIds: ['path:/tmp/corpus'], claimIds: [], entityIds: [] });
+  });
+});
+
+describe('S17 S3 S5 REST surfaces', () => {
+  it('GET /v1/conflicts and POST resolve go through the app', async () => {
+    const { app } = capturingApp();
+    const listed = await handleRest(app, { method: 'GET', pathname: '/v1/conflicts', body: {} });
+    expect(listed.status).toBe(200);
+    const resolved = await handleRest(app, {
+      method: 'POST',
+      pathname: '/v1/conflicts',
+      body: { claimIds: ['c1', 'c2'], preferredClaimId: 'c1', reason: 'later filing' },
+    });
+    expect(resolved.status).toBe(201);
+  });
+
+  it('GET /v1/decisions?query uses searchDecisions', async () => {
+    const { app } = capturingApp();
+    const result = await handleRest(app, {
+      method: 'GET',
+      pathname: '/v1/decisions',
+      body: { query: 'vendor X' },
+    });
+    expect(result.status).toBe(200);
+    expect(result.json).toEqual([]);
+  });
+
+  it('GET /v1/jobs lists pending work', async () => {
+    const { app } = capturingApp();
+    const result = await handleRest(app, { method: 'GET', pathname: '/v1/jobs', body: {} });
+    expect(result.status).toBe(200);
+    expect(result.json).toEqual([]);
   });
 });

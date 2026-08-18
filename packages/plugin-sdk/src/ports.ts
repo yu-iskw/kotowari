@@ -104,9 +104,12 @@ export interface BlobStore {
   get(key: string): Promise<{ bytes: Uint8Array; contentType: string } | undefined>;
 }
 
+export type QueuedJob = { kind: string; payload: Record<string, unknown> };
+
 export interface Queue {
-  enqueue(job: { kind: string; payload: Record<string, unknown> }): Promise<void>;
-  drain(): Promise<readonly { kind: string; payload: Record<string, unknown> }[]>;
+  enqueue(job: QueuedJob): Promise<void>;
+  drain(): Promise<readonly QueuedJob[]>;
+  listPending(): Promise<readonly QueuedJob[]>;
 }
 
 export interface IdentityProvider {

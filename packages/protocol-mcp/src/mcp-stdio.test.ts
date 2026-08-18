@@ -27,6 +27,9 @@ function fakeApp(): KotowariApp {
     recordDecision: async () => ({ id: 'd1' }) as never,
     getDecision: async () => undefined,
     listDecisions: async () => [],
+    searchDecisions: async () => [],
+    listConflicts: async () => [],
+    listJobs: async () => [],
     recordMemory: async () => ({ id: 'm1' }) as never,
     searchMemory: async () => [],
     putPolicy: async () => ({}) as never,
@@ -88,6 +91,7 @@ describe('S1 S4 S12 MCP stdio', () => {
       'search_knowledge',
       'search_memory',
       'record_decision',
+      'search_decisions',
     ]);
   });
 });

@@ -71,6 +71,21 @@
         "required": ["selectedOutcome"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "search_decisions",
+      "description": "Search recorded decisions as precedents by outcome, purpose, or rationale.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keywords matching decision outcome, purpose, query, or rationale."
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
     }
   ]
 }

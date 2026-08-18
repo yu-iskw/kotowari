@@ -17,8 +17,11 @@ async function main(): Promise<void> {
       standalone.claimCount > 0 &&
       standalone.evidenceLinked &&
       standalone.whySelectedPresent &&
+      standalone.claimHasProvenance &&
       standalone.decisionHasSnapshot &&
       standalone.decisionHasPolicyIds &&
+      standalone.decisionHasProvenance &&
+      standalone.decisionRoundTrip &&
       standalone.evidenceHasBytes;
     process.exitCode = ok ? 0 : 1;
     return;

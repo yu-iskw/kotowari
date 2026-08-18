@@ -45,10 +45,15 @@ class DevOidcIdentityProvider implements IdentityProvider {
 
   async authenticate(headers: Record<string, string | undefined>): Promise<Principal> {
     const token = bearerTokenFromHeaders(headers);
-    if (token === undefined || token === DEV_OIDC_LOCAL_TOKEN) {
+    // Dev tokens are well-known local fixtures, not secrets.
+    // eslint-disable-next-line security/detect-possible-timing-attacks -- dummy Bearer tokens
+    if (token === undefined) {
+      return guestPrincipal();
+    }
+    // eslint-disable-next-line security/detect-possible-timing-attacks -- dummy Bearer tokens
+    if (token === DEV_OIDC_LOCAL_TOKEN) {
       return localStandalonePrincipal();
     }
-    // Dev tokens are well-known local fixtures, not secrets.
     // eslint-disable-next-line security/detect-possible-timing-attacks -- dummy Bearer tokens
     if (token === DEV_OIDC_GUEST_TOKEN) {
       return guestPrincipal();

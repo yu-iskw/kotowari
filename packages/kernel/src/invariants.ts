@@ -6,7 +6,7 @@ import { classificationRank } from './scoped-metadata.js';
 
 import type { ClaimId, EvidenceId } from './branded-ids.js';
 import type { Claim, ClaimStatus } from './claim.js';
-import type { Conflict, ConflictResolution } from './conflict.js';
+import type { Conflict, ConflictKind, ConflictResolution } from './conflict.js';
 import type { ContextSnapshot, PolicyEvaluation } from './context.js';
 import type {
   AssertClaimInput,
@@ -278,6 +278,23 @@ export function buildPolicyEvaluated(input: EvaluatePolicyInput): {
       provenance: input.provenance,
       occurredAt: nowIso(),
     },
+  };
+}
+
+export function buildConflictDetected(input: {
+  metadata: ScopedMetadata;
+  kind: ConflictKind;
+  claimIds: readonly ClaimId[];
+}): Conflict {
+  if (input.claimIds.length < 2) {
+    throw new KernelError('INVALID_ID', 'A conflict requires at least two claims');
+  }
+  return {
+    ...input.metadata,
+    id: newId('ConflictId'),
+    kind: input.kind,
+    claimIds: input.claimIds,
+    recordedAt: nowIso(),
   };
 }
 

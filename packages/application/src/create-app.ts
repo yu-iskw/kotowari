@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { assembleContext } from '@kotowari/capability-context';
-import {
-  evidenceBlobKey,
-  ingestDocuments,
-  reextractFromStoredEvidence,
-} from '@kotowari/capability-ingestion';
+import { ingestDocuments } from '@kotowari/capability-ingestion';
 import { resolveClaimConflict } from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
 import { uniquePredicates } from '@kotowari/capability-ontology';
@@ -14,21 +10,31 @@ import {
   putPolicy,
   whatIfPolicy,
 } from '@kotowari/capability-policy';
-import { decisionToProvO } from '@kotowari/capability-provenance';
 import { DEFAULT_RETRIEVAL_PLAN, retrieve } from '@kotowari/capability-retrieval';
 import {
   asDecisionId,
-  asEvidenceId,
   assertAllowed,
   assertNoChainOfThought,
   buildDecisionRecorded,
   compactProvenance,
 } from '@kotowari/kernel';
 
+import {
+  drainQueuedJobs,
+  ensureWorkspacePolicies,
+  exportProvOFor,
+  listDecisionsFor,
+  loadEvidenceContent,
+  reextractEvidence,
+  searchDecisionsFor,
+} from './create-app-helpers.js';
+import { ApplicationError } from './errors.js';
+
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
 import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { RetrievalResult } from '@kotowari/capability-retrieval';
 import type {
+  Conflict,
   ConflictResolution,
   ContextSnapshot,
   Decision,
@@ -46,6 +52,7 @@ import type {
   ExtractionProvider,
   IdentityProvider,
   Queue,
+  QueuedJob,
   RerankerProvider,
 } from '@kotowari/plugin-sdk';
 
@@ -82,6 +89,21 @@ export type KotowariAppOptions = {
   profile?: string;
 };
 
+function bearerFromHeaders(headers: Record<string, string | undefined>): string | undefined {
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === 'authorization' && value !== undefined) {
+      const match = /^Bearer\s+(\S+)$/i.exec(value.trim());
+      return match?.[1];
+    }
+  }
+  return undefined;
+}
+
+type RequestScope = {
+  principal: Principal;
+  bearerToken: string | undefined;
+};
+
 export type KotowariApp = {
   ingestDocuments: (documents: readonly IngestDocument[]) => Promise<IngestResult>;
   ingestPath?: (target: string) => Promise<IngestResult>;
@@ -103,6 +125,9 @@ export type KotowariApp = {
   }) => Promise<Decision>;
   getDecision: (id: string) => Promise<Decision | undefined>;
   listDecisions: () => Promise<readonly Decision[]>;
+  searchDecisions: (input: { query: string }) => Promise<readonly Decision[]>;
+  listConflicts: () => Promise<readonly Conflict[]>;
+  listJobs: () => Promise<readonly QueuedJob[]>;
   recordMemory: (input: { body: string; kind?: MemoryRecord['kind'] }) => Promise<MemoryRecord>;
   searchMemory: (input: { query: string }) => Promise<readonly MemoryRecord[]>;
   putPolicy: (input: {
@@ -143,21 +168,24 @@ export type KotowariApp = {
   ) => Promise<T>;
 };
 
-function stringArrayFromUnknown(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((item) => typeof item === 'string');
-}
-
 export function createKotowariApp(
   ports: KotowariPorts,
   options: KotowariAppOptions = {},
 ): KotowariApp {
-  const principalSlot = new AsyncLocalStorage<Principal>();
+  const requestSlot = new AsyncLocalStorage<RequestScope>();
 
   async function current(): Promise<Principal> {
-    return principalSlot.getStore() ?? ports.identity.currentPrincipal();
+    return requestSlot.getStore()?.principal ?? ports.identity.currentPrincipal();
+  }
+
+  function assertWriterMayMutate(actor: Principal): void {
+    if (!actor.roles.includes('guest')) {
+      return;
+    }
+    if (requestSlot.getStore()?.bearerToken === undefined) {
+      throw new ApplicationError('Sign in required', 401);
+    }
+    throw new ApplicationError('Guest cannot write', 403);
   }
 
   async function runRetrieve(
@@ -181,6 +209,7 @@ export function createKotowariApp(
   const app: KotowariApp = {
     async ingestDocuments(documents) {
       const actor = await current();
+      assertWriterMayMutate(actor);
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
         tenantId: actor.tenantId,
       });
@@ -227,21 +256,12 @@ export function createKotowariApp(
     async recordDecision(input) {
       assertNoChainOfThought(input);
       const actor = await current();
+      assertWriterMayMutate(actor);
       assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), {
         tenantId: actor.tenantId,
       });
       const snapshot = await this.buildContext({ purpose: input.purpose, query: input.query });
-      let policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
-      if (policies.length === 0) {
-        const created = await putPolicy({
-          store: ports.store,
-          principal: actor,
-          name: 'workspace-default',
-          version: 1,
-          rules: {},
-        });
-        policies = [created];
-      }
+      const policies = await ensureWorkspacePolicies(ports.store, actor);
       const candidate = {
         selectedOutcome: input.selectedOutcome,
         confidence: input.confidence,
@@ -257,7 +277,7 @@ export function createKotowariApp(
           principalId: actor.id,
           classification: 'internal',
           visibility: 'workspace',
-          policyTags: [input.purpose],
+          policyTags: [input.purpose, ...(input.query === undefined ? [] : [`q:${input.query}`])],
         },
         inputContextSnapshot: snapshot,
         consideredEvidenceIds: snapshot.evidenceIds,
@@ -288,11 +308,20 @@ export function createKotowariApp(
     },
 
     async listDecisions() {
+      return listDecisionsFor(ports.store, await current());
+    },
+
+    async searchDecisions(input) {
+      return searchDecisionsFor(ports.store, await current(), input.query);
+    },
+
+    async listConflicts() {
       const actor = await current();
-      return ports.store.listDecisions({
-        tenantId: actor.tenantId,
-        namespaceId: actor.namespaceIds[0],
-      });
+      return ports.store.listConflicts({ tenantId: actor.tenantId });
+    },
+
+    async listJobs() {
+      return ports.queue.listPending();
     },
 
     async recordMemory(input) {
@@ -316,18 +345,13 @@ export function createKotowariApp(
     },
 
     async resolveConflict(input) {
-      return resolveClaimConflict({ store: ports.store, principal: await current(), ...input });
+      const actor = await current();
+      assertWriterMayMutate(actor);
+      return resolveClaimConflict({ store: ports.store, principal: actor, ...input });
     },
 
     async exportProvO(decisionId) {
-      const decision = await ports.store.getDecision(asDecisionId(decisionId));
-      if (decision === undefined) {
-        return undefined;
-      }
-      const evidence = (
-        await Promise.all(decision.consideredEvidenceIds.map((id) => ports.store.getEvidence(id)))
-      ).filter((item): item is Evidence => item !== undefined);
-      return decisionToProvO(decision, evidence);
+      return exportProvOFor(ports, decisionId);
     },
 
     async listPredicates() {
@@ -342,72 +366,30 @@ export function createKotowariApp(
     },
 
     async getEvidence(id) {
-      const actor = await current();
-      const evidence = await ports.store.getEvidence(asEvidenceId(id));
-      if (evidence === undefined) {
-        return undefined;
-      }
-      assertAllowed(
-        actor,
-        'knowledge.read',
-        { kind: 'evidence', id: evidence.id, metadata: evidence },
-        { tenantId: actor.tenantId },
-      );
-      return evidence;
+      const loaded = await loadEvidenceContent(ports, await current(), id);
+      return loaded?.evidence;
     },
 
     async getEvidenceContent(id) {
-      const evidence = await app.getEvidence(id);
-      if (evidence === undefined) {
-        return undefined;
-      }
-      const loaded = await ports.blobs.get(evidenceBlobKey(evidence));
-      if (loaded === undefined) {
-        return undefined;
-      }
-      const text = loaded.contentType.startsWith('text/')
-        ? new TextDecoder().decode(loaded.bytes)
-        : undefined;
-      return {
-        evidence,
-        bytes: loaded.bytes,
-        contentType: loaded.contentType,
-        text,
-      };
+      return loadEvidenceContent(ports, await current(), id);
     },
 
     async reextractFromEvidence(evidenceIds) {
       const actor = await current();
+      assertWriterMayMutate(actor);
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
         tenantId: actor.tenantId,
       });
-      return reextractFromStoredEvidence(
-        {
-          store: ports.store,
-          blobs: ports.blobs,
-          extraction: ports.extraction,
-          embeddings: ports.embeddings,
-          principal: actor,
-        },
-        evidenceIds,
-      );
+      return reextractEvidence(ports, actor, evidenceIds);
     },
 
     async processQueuedJobs() {
-      const jobs = await ports.queue.drain();
-      for (const job of jobs) {
-        if (job.kind === 'ingest.extract') {
-          await app.reextractFromEvidence(stringArrayFromUnknown(job.payload['evidenceIds']));
-        } else if (job.kind === 'ingest.path' && typeof job.payload['path'] === 'string') {
-          const ingestPath = app.ingestPath;
-          if (ingestPath !== undefined) {
-            await ingestPath(job.payload['path']);
-          }
-        } else if (job.kind === 'ingest.documents') {
-          await ports.store.rebuildLexicalProjection();
-        }
-      }
-      return jobs.length;
+      return drainQueuedJobs({
+        queue: ports.queue,
+        store: ports.store,
+        reextract: (evidenceIds) => app.reextractFromEvidence(evidenceIds),
+        ingestPath: app.ingestPath,
+      });
     },
 
     health() {
@@ -423,7 +405,7 @@ export function createKotowariApp(
         ports.identity.authenticate === undefined
           ? await ports.identity.currentPrincipal()
           : await ports.identity.authenticate(headers);
-      return principalSlot.run(principal, fn);
+      return requestSlot.run({ principal, bearerToken: bearerFromHeaders(headers) }, fn);
     },
   };
   return app;

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { DEV_OIDC_GUEST_TOKEN } from '@kotowari/adapter-fs';
+import { DEV_OIDC_GUEST_TOKEN, DEV_OIDC_LOCAL_TOKEN } from '@kotowari/adapter-fs';
 import { describe, expect, it } from 'vitest';
 
-import { createInProcessComposeApp, startComposeServer } from './compose.js';
-import { collectParitySnapshot, semanticParityEqual } from './parity.js';
+import { startComposeServer } from './compose.js';
+import { collectGuestOmitSnapshot, collectParitySnapshot, semanticParityEqual } from './parity.js';
 import { createStandaloneApp, runKotowariMcpStdio, startKotowariServer } from './public.js';
 
 function tempDocs(): string {
@@ -38,7 +38,12 @@ describe('S1 S4 MCP stdio', () => {
       result: { tools: { name: string }[] };
     };
     const names = payload.result.tools.map((tool) => tool.name);
-    expect(names).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
+    expect(names).toEqual([
+      'search_knowledge',
+      'search_memory',
+      'record_decision',
+      'search_decisions',
+    ]);
     expect(names).not.toContain('list_policies');
   });
 });
@@ -66,8 +71,8 @@ describe('S2 evidence HTTP click-through', () => {
   });
 });
 
-describe('Phase 2 in-process compose parity', () => {
-  it('standalone and in-process compose share semantic ingest/search/decision proofs', async () => {
+describe('S5 S7 ADR-0005 in-process compose parity', () => {
+  it('S5 S7 standalone and in-process compose share semantic ingest/search/decision proofs', async () => {
     const docs = tempDocs();
     const standaloneDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
     const standalone = await startKotowariServer({ dataDir: standaloneDir, port: 0 });
@@ -76,9 +81,12 @@ describe('Phase 2 in-process compose parity', () => {
       const left = await collectParitySnapshot(standalone.url, { ingestPath: docs });
       const right = await collectParitySnapshot(compose.url, {
         ingestPath: docs,
-        bearer: 'dev-local',
+        bearer: DEV_OIDC_LOCAL_TOKEN,
       });
       expect(left.claimCount).toBeGreaterThan(0);
+      expect(left.claimHasProvenance).toBe(true);
+      expect(left.decisionHasProvenance).toBe(true);
+      expect(left.decisionRoundTrip).toBe(true);
       expect(right.profile).toBe('compose');
       expect(semanticParityEqual(left, right)).toBe(true);
     } finally {
@@ -87,21 +95,21 @@ describe('Phase 2 in-process compose parity', () => {
     }
   });
 
-  it('S10 compose guest Bearer is retrieve-deny', async () => {
+  it('S10 ADR-0010 compose guest Bearer is retrieve-deny with policy_filter', async () => {
     const docs = tempDocs();
-    const { app, close } = await createInProcessComposeApp();
+    const compose = await startComposeServer({ port: 0 });
     try {
-      await app.runAsRequest({ authorization: 'Bearer dev-local' }, async () => {
-        await app.ingestPath?.(docs);
+      await collectParitySnapshot(compose.url, {
+        ingestPath: docs,
+        bearer: DEV_OIDC_LOCAL_TOKEN,
       });
-      const result = await app.runAsRequest(
-        { authorization: `Bearer ${DEV_OIDC_GUEST_TOKEN}` },
-        async () => app.searchKnowledge({ query: 'Vendor X', purpose: 'search' }),
-      );
-      expect(result.hits).toEqual([]);
-      expect(result.omitted.length).toBeGreaterThan(0);
+      const omitted = await collectGuestOmitSnapshot(compose.url, {
+        bearer: DEV_OIDC_GUEST_TOKEN,
+      });
+      expect(omitted.hitCount).toBe(0);
+      expect(omitted.omittedHasPolicyFilter).toBe(true);
     } finally {
-      await close();
+      await compose.close();
     }
   });
 });

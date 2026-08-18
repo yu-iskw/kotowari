@@ -17,5 +17,5 @@ export {
   startComposeServer,
 } from './compose.js';
 export { listenKotowariHttp } from './http-server.js';
-export { collectParitySnapshot, semanticParityEqual } from './parity.js';
+export { collectGuestOmitSnapshot, collectParitySnapshot, semanticParityEqual } from './parity.js';
 export type { ParitySnapshot } from './parity.js';

@@ -86,6 +86,7 @@ export type { Evidence } from './evidence.js';
 export {
   buildClaimAsserted,
   buildClaimRetracted,
+  buildConflictDetected,
   buildConflictResolved,
   buildContextSnapshot,
   buildDecisionRecorded,

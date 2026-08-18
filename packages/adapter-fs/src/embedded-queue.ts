@@ -1,18 +1,20 @@
-import type { Queue } from '@kotowari/plugin-sdk';
-
-type Job = { kind: string; payload: Record<string, unknown> };
+import type { Queue, QueuedJob } from '@kotowari/plugin-sdk';
 
 class EmbeddedQueue implements Queue {
-  private jobs: Job[] = [];
+  private jobs: QueuedJob[] = [];
 
-  async enqueue(job: Job): Promise<void> {
+  async enqueue(job: QueuedJob): Promise<void> {
     this.jobs.push(job);
   }
 
-  async drain(): Promise<readonly Job[]> {
+  async drain(): Promise<readonly QueuedJob[]> {
     const copy = [...this.jobs];
     this.jobs = [];
     return copy;
+  }
+
+  async listPending(): Promise<readonly QueuedJob[]> {
+    return [...this.jobs];
   }
 }
 
