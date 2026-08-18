@@ -47,10 +47,16 @@ const embeddings: EmbeddingProvider = {
   },
 };
 
+const emptyStore = {
+  async listEvents() {
+    return [];
+  },
+} as unknown as CanonicalStore;
+
 function projection(sql: SqlClient) {
   return createPostgresRetrievalProjection({
     sql,
-    store: {} as CanonicalStore,
+    store: emptyStore,
     embeddings,
     vectorAcceleration: {
       kind: 'pgvector-hnsw',
