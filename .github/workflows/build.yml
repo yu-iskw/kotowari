@@ -56,6 +56,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Make handler matcher index-based
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/fix-mcp-quality.py')
+          text = path.read_text()
+          start = text.index('old_map = dedent(')
+          end = text.index('\n\nstart = http.index(', start)
+          replacement = '''map_start = http.index("  const handlers = new Map<")
+          map_end = http.index("\n  for (const profile of MCP_PROFILES)", map_start)
+          http = (
+              http[:map_start]
+              + "  const handlers = new Map<McpProfile, McpRuntimeHandler>();"
+              + http[map_end:]
+          )'''
+          path.write_text(text[:start] + replacement + text[end:])
+          PY
+
       - name: Refactor lint findings
         run: python .github/scripts/fix-mcp-quality.py
 
