@@ -1,0 +1,64 @@
+name: Finalize retrieval projection lint
+
+on:
+  pull_request:
+    types: [synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'feat/enterprise-retrieval-projection-v1' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: feat/enterprise-retrieval-projection-v1
+      - name: Fix final lint findings
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/adapter-postgres/src/retrieval-projection.ts';
+          let s = fs.readFileSync(path, 'utf8');
+
+          s = s.replace(
+            "import type {\n  CanonicalStore,\n  Claim,\n  ClaimId,\n  DomainEvent,\n  EmbeddingProvider,\n  EntityId,\n  RetrievalCandidate,\n  RetrievalCandidateRequest,\n  RetrievalCandidateSource,\n} from '@kotowari/plugin-sdk';\nimport type { SqlClient } from './sql-client.js';",
+            "import type { SqlClient } from './sql-client.js';\nimport type {\n  CanonicalStore,\n  Claim,\n  ClaimId,\n  DomainEvent,\n  EmbeddingProvider,\n  EntityId,\n  RetrievalCandidate,\n  RetrievalCandidateRequest,\n  RetrievalCandidateSource,\n} from '@kotowari/plugin-sdk';",
+          );
+
+          s = s.replace(
+            "const CLAIM_EVENT_KINDS = ['claim.asserted', 'claim.retracted'] as const;\nconst ENTITY_IDENTITY_EVENT_KINDS = ['entity.merged', 'entity.merge_reverted'] as const;",
+            "const CLAIM_ASSERTED_EVENT = 'claim.asserted' as const;\nconst CLAIM_RETRACTED_EVENT = 'claim.retracted' as const;\nconst ENTITY_MERGED_EVENT = 'entity.merged' as const;\nconst ENTITY_MERGE_REVERTED_EVENT = 'entity.merge_reverted' as const;\nconst CLAIM_EVENT_KINDS = [CLAIM_ASSERTED_EVENT, CLAIM_RETRACTED_EVENT] as const;\nconst ENTITY_IDENTITY_EVENT_KINDS = [ENTITY_MERGED_EVENT, ENTITY_MERGE_REVERTED_EVENT] as const;",
+          );
+
+          s = s.replaceAll("event.kind === 'entity.merge_reverted'", 'event.kind === ENTITY_MERGE_REVERTED_EVENT');
+          s = s.replaceAll("event.kind !== 'entity.merged'", 'event.kind !== ENTITY_MERGED_EVENT');
+          s = s.replaceAll("event.kind === 'entity.merged'", 'event.kind === ENTITY_MERGED_EVENT');
+          s = s.replaceAll("{ kind: 'claim.asserted' | 'claim.retracted' }", '{ kind: typeof CLAIM_ASSERTED_EVENT | typeof CLAIM_RETRACTED_EVENT }');
+          s = s.replaceAll("event.kind === 'claim.asserted'", 'event.kind === CLAIM_ASSERTED_EVENT');
+          s = s.replaceAll("event.kind === 'claim.retracted'", 'event.kind === CLAIM_RETRACTED_EVENT');
+          s = s.replace(
+            "          (right.score ?? 0) - (left.score ?? 0) || left.claimId.localeCompare(right.claimId),",
+            "          right.score - left.score || left.claimId.localeCompare(right.claimId),",
+          );
+          fs.writeFileSync(path, s);
+          NODE
+      - name: Format and validate
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec prettier --write packages/adapter-postgres/src/retrieval-projection.ts
+          pnpm build
+          pnpm --filter @kotowari/adapter-postgres test
+          pnpm exec eslint packages/adapter-postgres/src/retrieval-projection.ts
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/adapter-postgres/src/retrieval-projection.ts
+          git commit -m 'fix(postgres): finalize retrieval projection lint'
+          git push origin HEAD:feat/enterprise-retrieval-projection-v1
