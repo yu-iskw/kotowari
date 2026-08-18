@@ -363,7 +363,7 @@ export async function findEntityResolutionCandidatesForEntity(input: {
   minScore?: number;
 }): Promise<readonly EntityResolutionCandidate[]> {
   const source = await requireEntity(input.store, input.entityId);
-  assertAllowed(input.principal, 'knowledge.read', entityResource(source), {
+  assertAllowed(input.principal, KNOWLEDGE_READ_ACTION, entityResource(source), {
     tenantId: input.principal.tenantId,
     purpose: ENTITY_RESOLUTION_PURPOSE,
   });
@@ -546,7 +546,7 @@ export async function recordEntityResolutionProposal(input: {
   }
   const proposedAt = nowIso();
   const provenance = compactProvenance({
-    source: 'entity-resolution',
+    source: ENTITY_RESOLUTION_PURPOSE,
     actor: input.principal.id,
     process: 'entity.propose_resolution',
   });
@@ -599,7 +599,7 @@ export async function decideEntityResolutionProposal(input: {
 
   const decidedAt = nowIso();
   const provenance = compactProvenance({
-    source: 'entity-resolution',
+    source: ENTITY_RESOLUTION_PURPOSE,
     actor: input.principal.id,
     process: 'entity.decide_resolution',
   });
@@ -668,7 +668,7 @@ export async function mergeApprovedEntityResolution(input: {
   }
 
   const provenance = compactProvenance({
-    source: 'entity-resolution',
+    source: ENTITY_RESOLUTION_PURPOSE,
     actor: input.principal.id,
     process: 'entity.merge_resolution',
   });
@@ -736,7 +736,7 @@ export async function revertEntityMerge(input: {
   assertEntityWrite(input.principal, 'entity.merge', entities);
 
   const provenance = compactProvenance({
-    source: 'entity-resolution',
+    source: ENTITY_RESOLUTION_PURPOSE,
     actor: input.principal.id,
     process: 'entity.revert_merge',
   });
@@ -775,7 +775,7 @@ export async function resolveCanonicalEntity(input: {
   entityId: string;
 }): Promise<Entity> {
   const entity = await requireEntity(input.store, input.entityId);
-  assertAllowed(input.principal, 'knowledge.read', entityResource(entity), {
+  assertAllowed(input.principal, KNOWLEDGE_READ_ACTION, entityResource(entity), {
     tenantId: input.principal.tenantId,
     purpose: ENTITY_RESOLUTION_PURPOSE,
   });
@@ -783,7 +783,7 @@ export async function resolveCanonicalEntity(input: {
     input.store,
   ).resolveCanonicalEntityId(entity.id);
   const canonical = await requireEntity(input.store, canonicalId);
-  assertAllowed(input.principal, 'knowledge.read', entityResource(canonical), {
+  assertAllowed(input.principal, KNOWLEDGE_READ_ACTION, entityResource(canonical), {
     tenantId: input.principal.tenantId,
     purpose: ENTITY_RESOLUTION_PURPOSE,
   });
