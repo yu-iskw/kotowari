@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   createMcpHttpHandler,
-  isMcpProfile,
+  createStandaloneMcpHttpHandler,
   MCP_PROFILES,
   protectedResourceMetadata,
 } from '@kotowari/protocol-mcp';
@@ -19,6 +19,7 @@ import type {
   McpAuditEvent,
   McpAuditSink,
   McpProfile,
+  McpStandalonePreset,
   McpTokenVerifier,
 } from '@kotowari/protocol-mcp';
 
@@ -97,11 +98,6 @@ function headersOf(request: IncomingMessage): Record<string, string | undefined>
     headers[key] = Array.isArray(value) ? value[0] : value;
   }
   return headers;
-}
-
-function mcpProfileFromPath(pathname: string): McpProfile | undefined {
-  const suffix = pathname.replace(/^\/mcp\//u, '');
-  return isMcpProfile(suffix) ? suffix : undefined;
 }
 
 function loadIndexHtml(webRoot: string | undefined): string {
@@ -224,7 +220,7 @@ type McpRuntimeHandler = {
 type RequestRouterInput = {
   app: KotowariApp;
   indexHtml: string;
-  handlers: ReadonlyMap<McpProfile, McpRuntimeHandler>;
+  handlers: ReadonlyMap<string, McpRuntimeHandler>;
   metadataRoutes: ReadonlyMap<string, Record<string, unknown>>;
   maxBodyBytes: number;
   requestTimeoutMs: number;
@@ -302,8 +298,8 @@ async function handleMcpRoute(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
-  const profile = url.pathname.startsWith('/mcp/') ? mcpProfileFromPath(url.pathname) : undefined;
-  if (profile === undefined) {
+  const handler = input.handlers.get(url.pathname);
+  if (handler === undefined) {
     return false;
   }
   if (
@@ -327,10 +323,6 @@ async function handleMcpRoute(
     request.method === 'GET' || request.method === 'HEAD'
       ? undefined
       : await readBody(request, input.maxBodyBytes);
-  const handler = input.handlers.get(profile);
-  if (handler === undefined) {
-    throw new Error(`MCP profile ${profile} is not configured`);
-  }
   await runMcpWithTimeout({
     request,
     response,
@@ -388,12 +380,83 @@ function writeRequestError(response: ServerResponse, error: unknown): void {
   writeJson(response, 500, { error: 'internal error' });
 }
 
+function profileRuntimeHandler(input: {
+  profile: McpProfile;
+  app: KotowariApp;
+  audit: McpAuditSink;
+  security?: McpHttpSecurityOptions;
+}): McpRuntimeHandler {
+  const authorization = input.security?.authorization;
+  const resourceServerUrl =
+    authorization === undefined ? undefined : publicMcpUrl(authorization.publicBaseUrl, input.profile);
+  const handler = createMcpHttpHandler({
+    profile: input.profile,
+    app: input.app,
+    audit: input.audit,
+    ...(authorization === undefined || resourceServerUrl === undefined
+      ? {}
+      : {
+          authorization: {
+            verifier: authorization.verifier,
+            resourceServerUrl,
+            authorizationServers: authorization.authorizationServers,
+          },
+        }),
+  });
+  return {
+    node: toNodeHandler(handler),
+    close: handler.close,
+    ...(handler.resourceMetadataUrl === undefined ||
+    resourceServerUrl === undefined ||
+    authorization === undefined
+      ? {}
+      : {
+          metadataPath: handler.resourceMetadataUrl.pathname,
+          metadata: protectedResourceMetadata({
+            profile: input.profile,
+            resourceServerUrl,
+            authorizationServers: authorization.authorizationServers,
+          }),
+        }),
+  };
+}
+
+function createRuntimeHandlers(input: {
+  app: KotowariApp;
+  audit: McpAuditSink;
+  security?: McpHttpSecurityOptions;
+  standalonePreset?: McpStandalonePreset;
+}): Map<string, McpRuntimeHandler> {
+  const handlers = new Map<string, McpRuntimeHandler>();
+  if (input.standalonePreset !== undefined) {
+    if (input.security?.authorization !== undefined) {
+      throw new Error('Standalone MCP presets cannot be combined with enterprise OAuth');
+    }
+    const handler = createStandaloneMcpHttpHandler({
+      preset: input.standalonePreset,
+      app: input.app,
+      audit: input.audit,
+    });
+    handlers.set('/mcp', { node: toNodeHandler(handler), close: handler.close });
+    return handlers;
+  }
+
+  for (const profile of MCP_PROFILES) {
+    handlers.set(
+      `/mcp/${profile}`,
+      profileRuntimeHandler({ profile, app: input.app, audit: input.audit, security: input.security }),
+    );
+  }
+  return handlers;
+}
+
 export function listenKotowariHttp(options: {
   app: KotowariApp;
   port: number;
   host?: string;
   webRoot?: string;
   mcpSecurity?: McpHttpSecurityOptions;
+  mcpStandalonePreset?: McpStandalonePreset;
 }): Promise<{
   url: string;
   close: () => Promise<void>;
@@ -419,43 +482,14 @@ export function listenKotowariHttp(options: {
     }
   };
 
-  const handlers = new Map<McpProfile, McpRuntimeHandler>();
-  for (const profile of MCP_PROFILES) {
-    const authorization = options.mcpSecurity?.authorization;
-    const resourceServerUrl =
-      authorization === undefined ? undefined : publicMcpUrl(authorization.publicBaseUrl, profile);
-    const handler = createMcpHttpHandler({
-      profile,
-      app,
-      audit,
-      ...(authorization === undefined || resourceServerUrl === undefined
-        ? {}
-        : {
-            authorization: {
-              verifier: authorization.verifier,
-              resourceServerUrl,
-              authorizationServers: authorization.authorizationServers,
-            },
-          }),
-    });
-    handlers.set(profile, {
-      node: toNodeHandler(handler),
-      close: handler.close,
-      ...(handler.resourceMetadataUrl === undefined ||
-      resourceServerUrl === undefined ||
-      authorization === undefined
-        ? {}
-        : {
-            metadataPath: handler.resourceMetadataUrl.pathname,
-            metadata: protectedResourceMetadata({
-              profile,
-              resourceServerUrl,
-              authorizationServers: authorization.authorizationServers,
-            }),
-          }),
-    });
-  }
-
+  const handlers = createRuntimeHandlers({
+    app,
+    audit,
+    ...(options.mcpSecurity === undefined ? {} : { security: options.mcpSecurity }),
+    ...(options.mcpStandalonePreset === undefined
+      ? {}
+      : { standalonePreset: options.mcpStandalonePreset }),
+  });
   const metadataRoutes = new Map<string, Record<string, unknown>>();
   for (const handler of handlers.values()) {
     if (handler.metadataPath !== undefined && handler.metadata !== undefined) {
