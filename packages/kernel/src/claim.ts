@@ -1,6 +1,7 @@
 import type { ClaimId, EntityId, EvidenceId, IsoTimestamp } from './branded-ids.js';
 import type { Provenance } from './provenance.js';
 import type { ScopedMetadata } from './scoped-metadata.js';
+import type { TemporalPerspective } from './temporal.js';
 
 export const CLAIM_STATUSES = ['asserted', 'retracted', 'superseded', 'conflicted'] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
@@ -48,12 +49,24 @@ export function claimText(claim: Pick<Claim, 'predicate' | 'object'>): string {
   return `${claim.predicate} ${object}`;
 }
 
+/** @deprecated Prefer claimVisibleAt with an explicit TemporalPerspective. */
 export function claimValidAt(claim: Claim, asOf: string | undefined): boolean {
   if (asOf === undefined) {
     return true;
   }
   const { validFrom, validTo } = claim.bitemporal;
   return validFrom <= asOf && (validTo === undefined || asOf < validTo);
+}
+
+export function claimKnownAt(claim: Claim, knownAt: string | undefined): boolean {
+  return knownAt === undefined || claim.bitemporal.recordedAt <= knownAt;
+}
+
+export function claimVisibleAt(claim: Claim, temporal: TemporalPerspective = {}): boolean {
+  if (claim.status === 'retracted') {
+    return false;
+  }
+  return claimValidAt(claim, temporal.validAt) && claimKnownAt(claim, temporal.knownAt);
 }
 
 export function validityOverlaps(left: Bitemporal, right: Bitemporal): boolean {
