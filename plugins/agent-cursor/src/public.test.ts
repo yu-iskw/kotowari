@@ -4,13 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  cursorPluginManifest,
-  decisionToolNames,
-  decisionToolsDocument,
-  retrieveToolNames,
-  PACKAGE_NAME,
-} from './public.js';
+import { cursorPluginManifest, PACKAGE_NAME } from './public.js';
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
@@ -39,13 +33,12 @@ describe('ADR-0009 agent pack must not import kernel', () => {
   });
 });
 
-describe('capability-scoped MCP tool snapshots', () => {
-  it('keeps retrieve read-only and decision recording on its own server', () => {
-    expect(retrieveToolNames).toEqual(['search_knowledge', 'search_memory']);
-    expect(decisionToolNames).toEqual(['record_decision']);
-    const decision = decisionToolsDocument.tools.find((tool) => tool.name === 'record_decision');
-    expect(decision?.inputSchema).toMatchObject({ required: ['selectedOutcome'] });
-    expect(cursorPluginManifest.mcpServers).toHaveProperty('kotowari-retrieve');
-    expect(cursorPluginManifest.mcpServers).toHaveProperty('kotowari-decision');
+describe('standalone MCP configuration', () => {
+  it('uses one zero-config personal MCP server', () => {
+    expect(Object.keys(cursorPluginManifest.mcpServers ?? {})).toEqual(['kotowari']);
+    expect(cursorPluginManifest.mcpServers?.['kotowari']).toEqual({
+      command: 'kotowari',
+      args: ['mcp'],
+    });
   });
 });
