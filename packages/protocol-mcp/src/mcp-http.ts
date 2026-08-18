@@ -7,6 +7,10 @@ import {
 } from '@modelcontextprotocol/server';
 
 import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
+import {
+  MCP_STANDALONE_PRESET_TOOLS,
+  type McpStandalonePreset,
+} from './mcp-presets.js';
 import { createKotowariMcpServer, type McpAuditSink } from './mcp-server.js';
 
 import type { KotowariApp } from '@kotowari/application';
@@ -68,12 +72,36 @@ export function protectedResourceMetadata(input: {
   };
 }
 
+export function createStandaloneMcpHttpHandler(input: {
+  preset: McpStandalonePreset;
+  app: KotowariApp;
+  audit?: McpAuditSink;
+}): McpFetchHandler {
+  const handler = createMcpHandler(
+    () =>
+      createKotowariMcpServer({
+        app: input.app,
+        name: input.preset,
+        operations: MCP_STANDALONE_PRESET_TOOLS[input.preset],
+        audit: input.audit,
+      }),
+    { legacy: 'reject' },
+  );
+
+  return {
+    fetch: (request) =>
+      input.app.runAsRequest(requestHeaders(request), () => handler.fetch(request)),
+    close: () => handler.close(),
+  };
+}
+
 export function createMcpHttpHandler(input: {
   profile: McpProfile;
   app: KotowariApp;
   authorization?: McpAuthorization;
   audit?: McpAuditSink;
 }): McpFetchHandler {
+  const profile = MCP_PROFILE_DEFINITIONS[input.profile];
   const resourceMetadataUrlValue =
     input.authorization === undefined
       ? undefined
@@ -83,7 +111,7 @@ export function createMcpHttpHandler(input: {
       ? undefined
       : requireBearerAuth({
           verifier: verifierForSdk(input.authorization.verifier),
-          requiredScopes: [...MCP_PROFILE_DEFINITIONS[input.profile].requiredScopes],
+          requiredScopes: [...profile.requiredScopes],
           resourceMetadataUrl: resourceMetadataUrlValue,
         });
 
@@ -91,7 +119,8 @@ export function createMcpHttpHandler(input: {
     (context) =>
       createKotowariMcpServer({
         app: input.app,
-        profile: input.profile,
+        name: input.profile,
+        operations: profile.tools,
         enforceScopes: gate !== undefined,
         scopes: context.authInfo?.scopes,
         clientId: context.authInfo?.clientId,
