@@ -66,7 +66,9 @@ async function canonicalGraphSearch(
 ): Promise<readonly RetrievalCandidate[]> {
   const claims = await store.listClaims({
     tenantId: request.tenantId,
-    ...(request.namespaceId === undefined ? {} : { namespaceId: request.namespaceId }),
+    ...(request.namespaceId === undefined
+      ? {}
+      : { namespaceId: request.namespaceId }),
     ...(request.temporal === undefined ? {} : { temporal: request.temporal }),
   });
   const byId = new Map(claims.map((claim) => [claim.id, claim]));
@@ -104,7 +106,9 @@ async function canonicalSearch(
 ): Promise<readonly RetrievalCandidate[]> {
   const filter = {
     tenantId: request.tenantId,
-    ...(request.namespaceId === undefined ? {} : { namespaceId: request.namespaceId }),
+    ...(request.namespaceId === undefined
+      ? {}
+      : { namespaceId: request.namespaceId }),
     ...(request.temporal === undefined ? {} : { temporal: request.temporal }),
   };
   if (request.strategy === 'lexical') {
@@ -116,7 +120,9 @@ async function canonicalSearch(
     });
     return claims.map((claim) => ({
       claimId: claim.id,
-      score: queryTokens.filter((token) => claimText(claim).toLowerCase().includes(token)).length,
+      score: queryTokens.filter((token) =>
+        claimText(claim).toLowerCase().includes(token),
+      ).length,
     }));
   }
   if (request.strategy === 'graph') {
@@ -132,7 +138,10 @@ async function canonicalSearch(
     [];
   const byClaim = new Map(storedEmbeddings.map((row) => [row.claimId, row.vector]));
   return claims
-    .map((claim) => ({ claimId: claim.id, score: cosine(vector, byClaim.get(claim.id) ?? []) }))
+    .map((claim) => ({
+      claimId: claim.id,
+      score: cosine(vector, byClaim.get(claim.id) ?? []),
+    }))
     .filter((candidate) => candidate.score >= 0.15)
     .sort((left, right) => right.score - left.score)
     .slice(0, request.limit);
