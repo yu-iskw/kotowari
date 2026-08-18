@@ -1,6 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/server';
 
-import { mcpOperation, type McpOperationName, type McpOperationRisk } from './operation-registry.js';
+import {
+  mcpOperation,
+  type McpOperationName,
+  type McpOperationRisk,
+} from './operation-registry.js';
 
 import type { KotowariApp } from '@kotowari/application';
 
