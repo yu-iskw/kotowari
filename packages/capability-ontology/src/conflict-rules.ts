@@ -1,9 +1,8 @@
-import type { CardinalityConflictRule } from '@kotowari/kernel';
-
 import { CapabilityOntologyError } from './errors.js';
 import { validateSemanticContract } from './semantic-contract.js';
 
 import type { SemanticContract } from './semantic-contract.js';
+import type { CardinalityConflictRule } from '@kotowari/kernel';
 
 export function semanticContractConflictRules(
   contract: SemanticContract,

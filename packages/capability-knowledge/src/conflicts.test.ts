@@ -103,12 +103,8 @@ describe('semantic conflict detection v1', () => {
       max: 1,
       ruleSource: 'semantic-contract:crm@1',
     });
-    expect((await store.listEvents()).map((event) => event.kind)).toContain(
-      'conflict.detected',
-    );
-    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
-      [],
-    );
+    expect((await store.listEvents()).map((event) => event.kind)).toContain('conflict.detected');
+    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual([]);
   });
 
   it('uses half-open validity intervals and ignores equal values', async () => {
@@ -137,9 +133,7 @@ describe('semantic conflict detection v1', () => {
       validFrom: '2026-02-01T00:00:00.000Z',
     });
 
-    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
-      [],
-    );
+    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual([]);
   });
 
   it('supports cardinalities greater than one', async () => {
@@ -243,9 +237,7 @@ describe('semantic conflict detection v1', () => {
         visibility: 'private',
       },
     });
-    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual(
-      [],
-    );
+    expect(await detectClaimConflicts({ store, principal, rules: [SINGLE_NAME_RULE] })).toEqual([]);
 
     await putClaim({ store, principal, subject: company, value: 'Visible conflict' });
     const viewer: Principal = { ...principal, roles: ['viewer'] };
