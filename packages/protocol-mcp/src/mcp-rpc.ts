@@ -124,6 +124,28 @@ async function dispatchTool(
   return handler(app, args);
 }
 
+function rpcErrorFromApplication(error: ApplicationError): { code: number; message: string } {
+  const code = error.status === 401 ? -32002 : error.status === 403 ? -32003 : -32602;
+  return { code, message: error.message };
+}
+
+async function callAllowedTool(input: {
+  app: KotowariApp;
+  id: string | number | null;
+  rpcName: string;
+  args: Record<string, unknown>;
+}): Promise<McpRpcResult> {
+  try {
+    const result = await dispatchTool(input.app, input.rpcName, input.args);
+    return { jsonrpc: '2.0', id: input.id, result };
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      return { jsonrpc: '2.0', id: input.id, error: rpcErrorFromApplication(error) };
+    }
+    throw error;
+  }
+}
+
 export function spyApplicationCommandName(toolName: string): string {
   switch (toolName) {
     case 'search_knowledge':
@@ -204,16 +226,7 @@ export async function handleMcpRpc(input: {
       };
     }
     const args = body.params?.arguments === undefined ? {} : body.params.arguments;
-    try {
-      const result = await dispatchTool(input.app, rpcName, args);
-      return { jsonrpc: '2.0', id, result };
-    } catch (error) {
-      if (error instanceof ApplicationError) {
-        const code = error.status === 401 ? -32002 : error.status === 403 ? -32003 : -32602;
-        return { jsonrpc: '2.0', id, error: { code, message: error.message } };
-      }
-      throw error;
-    }
+    return callAllowedTool({ app: input.app, id, rpcName, args });
   }
 
   return {

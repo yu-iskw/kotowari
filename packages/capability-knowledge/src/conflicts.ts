@@ -7,6 +7,7 @@ import {
   type ConflictResolution,
   type Principal,
 } from '@kotowari/kernel';
+
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
 function sameClaimSet(left: readonly string[], right: readonly string[]): boolean {
