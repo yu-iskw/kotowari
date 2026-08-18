@@ -60,9 +60,9 @@ jobs:
       - name: Build workspace packages
         run: pnpm build
 
-      - name: Diagnose SQLite formatting
+      - name: Diagnose Trunk-pinned SQLite formatting
         run: |
-          pnpm exec prettier --write packages/adapter-sqlite/src/sqlite-store.ts
+          pnpm dlx prettier@3.9.6 --write packages/adapter-sqlite/src/sqlite-store.ts
           git diff -- packages/adapter-sqlite/src/sqlite-store.ts
 
       - name: Trunk Check
