@@ -21,6 +21,7 @@ export const ACTIONS = [
   'policy.evaluate',
   'policy.manage',
   'policy.exception',
+  'conflict.detect',
   'conflict.resolve',
   'audit.read',
   'admin',
@@ -109,6 +110,7 @@ const WRITE_ACTIONS: ReadonlySet<Action> = new Set([
   'policy.evaluate',
   'policy.manage',
   'policy.exception',
+  'conflict.detect',
   'conflict.resolve',
   'admin',
 ]);

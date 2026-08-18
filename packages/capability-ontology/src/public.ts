@@ -6,6 +6,7 @@ export type {
   ClaimContractIssue,
   ClaimContractIssueCode,
 } from './claim-validation.js';
+export { semanticContractConflictRules } from './conflict-rules.js';
 export { CapabilityOntologyError } from './errors.js';
 export type { CapabilityOntologyContracts } from './contracts.js';
 export { PACKAGE_EVENTS } from './events.js';

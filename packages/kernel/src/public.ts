@@ -75,7 +75,14 @@ export {
 } from './claim.js';
 export type { Bitemporal, Claim, ClaimObject, ClaimStatus } from './claim.js';
 export { CONFLICT_KINDS, RESOLUTION_STRATEGIES } from './conflict.js';
-export type { Conflict, ConflictKind, ConflictResolution, ResolutionStrategy } from './conflict.js';
+export type {
+  CardinalityConflictRule,
+  Conflict,
+  ConflictCause,
+  ConflictKind,
+  ConflictResolution,
+  ResolutionStrategy,
+} from './conflict.js';
 export type {
   ContextSliceItem,
   ContextSnapshot,

@@ -13,11 +13,12 @@ import {
   reextractFromStoredEvidence,
 } from '@kotowari/capability-ingestion';
 import {
+  detectClaimConflicts,
   findEntityResolutionCandidates,
   resolveClaimConflict,
 } from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
-import { uniquePredicates } from '@kotowari/capability-ontology';
+import { semanticContractConflictRules, uniquePredicates } from '@kotowari/capability-ontology';
 import {
   policyVersionRef,
   putPolicy,
@@ -36,9 +37,11 @@ import type {
 } from '@kotowari/capability-decision';
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
 import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';
+import type { SemanticContract } from '@kotowari/capability-ontology';
 import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { RetrievalResult } from '@kotowari/capability-retrieval';
 import type {
+  Conflict,
   ConflictResolution,
   ContextSnapshot,
   Decision,
@@ -142,7 +145,9 @@ export type KotowariApp = {
   ) => Promise<
     readonly { decisionId: string; wouldFail: boolean; violations: readonly string[] }[]
   >;
+  detectSemanticConflicts?: (contract: SemanticContract) => Promise<readonly Conflict[]>;
   resolveConflict: (input: {
+    conflictId?: string;
     claimIds: readonly [string, string, ...string[]];
     preferredClaimId: string;
     reason: string;
@@ -358,6 +363,14 @@ export function createKotowariApp(
         tenantId: actor.tenantId,
       });
       return whatIfPolicy({ store: ports.store, principal: actor, policy });
+    },
+
+    async detectSemanticConflicts(contract) {
+      return detectClaimConflicts({
+        store: ports.store,
+        principal: await current(),
+        rules: semanticContractConflictRules(contract),
+      });
     },
 
     async resolveConflict(input) {

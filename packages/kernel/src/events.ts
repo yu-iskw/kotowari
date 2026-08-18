@@ -148,6 +148,14 @@ export type DomainEvent =
       occurredAt: IsoTimestamp;
     }
   | {
+      kind: 'conflict.detected';
+      eventId: EventId;
+      tenantId: TenantId;
+      conflictId: ConflictId;
+      provenance: Provenance;
+      occurredAt: IsoTimestamp;
+    }
+  | {
       kind: 'conflict.resolved';
       eventId: EventId;
       tenantId: TenantId;
