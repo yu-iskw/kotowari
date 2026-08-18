@@ -16,11 +16,11 @@ import type {
 import type { SqlClient } from './sql-client.js';
 
 const PROJECTION_ID = 'postgres-retrieval-v1' as const;
+const CLAIM_EVENT_KINDS = ['claim.asserted', 'claim.retracted'] as const;
+const ENTITY_IDENTITY_EVENT_KINDS = ['entity.merged', 'entity.merge_reverted'] as const;
 const RELEVANT_EVENT_KINDS = new Set<DomainEvent['kind']>([
-  'claim.asserted',
-  'claim.retracted',
-  'entity.merged',
-  'entity.merge_reverted',
+  ...CLAIM_EVENT_KINDS,
+  ...ENTITY_IDENTITY_EVENT_KINDS,
 ]);
 
 const SCHEMA = `
@@ -106,7 +106,8 @@ function relevantEvents(events: readonly DomainEvent[]): readonly DomainEvent[] 
     .filter((event) => RELEVANT_EVENT_KINDS.has(event.kind))
     .sort(
       (left, right) =>
-        left.occurredAt.localeCompare(right.occurredAt) || left.eventId.localeCompare(right.eventId),
+        left.occurredAt.localeCompare(right.occurredAt) ||
+        left.eventId.localeCompare(right.eventId),
     );
 }
 
@@ -160,6 +161,91 @@ function scopeSql(request: RetrievalCandidateRequest, params: unknown[]): string
   return sql;
 }
 
+async function seedGraphEntities(
+  sql: SqlClient,
+  seedClaimIds: readonly ClaimId[],
+): Promise<Set<string>> {
+  const entities = new Set<string>();
+  for (const claimId of seedClaimIds) {
+    const row = (
+      await sql.query<ProjectionRow>(
+        'SELECT claim_id, subject_id, object_entity_id, vector FROM retrieval_projection WHERE claim_id = $1',
+        [claimId],
+      )
+    )[0];
+    if (row === undefined) {
+      continue;
+    }
+    entities.add(row.subject_id);
+    if (row.object_entity_id !== null) {
+      entities.add(row.object_entity_id);
+    }
+  }
+  return entities;
+}
+
+async function graphRowsForEntity(
+  sql: SqlClient,
+  request: RetrievalCandidateRequest,
+  entityId: string,
+): Promise<readonly ProjectionRow[]> {
+  const validAt = request.temporal?.validAt;
+  if (request.namespaceId === undefined) {
+    const params: unknown[] = [request.tenantId, entityId];
+    const temporal =
+      validAt === undefined
+        ? ''
+        : (params.push(validAt), ' AND valid_from <= $3 AND (valid_to IS NULL OR $3 < valid_to)');
+    return sql.query<ProjectionRow>(
+      `SELECT claim_id, subject_id, object_entity_id, vector
+       FROM retrieval_projection
+       WHERE tenant_id = $1
+         AND (subject_id = $2 OR object_entity_id = $2)${temporal}`,
+      params,
+    );
+  }
+  const params: unknown[] = [request.tenantId, request.namespaceId, entityId];
+  const temporal =
+    validAt === undefined
+      ? ''
+      : (params.push(validAt), ' AND valid_from <= $4 AND (valid_to IS NULL OR $4 < valid_to)');
+  return sql.query<ProjectionRow>(
+    `SELECT claim_id, subject_id, object_entity_id, vector
+     FROM retrieval_projection
+     WHERE tenant_id = $1 AND namespace_id = $2
+       AND (subject_id = $3 OR object_entity_id = $3)${temporal}`,
+    params,
+  );
+}
+
+function collectGraphRows(input: {
+  rows: readonly ProjectionRow[];
+  entityId: string;
+  hop: number;
+  seenClaims: Set<ClaimId>;
+  candidates: Map<ClaimId, RetrievalCandidate>;
+}): Set<string> {
+  const next = new Set<string>();
+  for (const row of input.rows) {
+    const claimId = row.claim_id as ClaimId;
+    if (!input.seenClaims.has(claimId)) {
+      input.seenClaims.add(claimId);
+      input.candidates.set(claimId, {
+        claimId,
+        score: 1 / input.hop,
+        graphRoute: [input.entityId],
+      });
+    }
+    if (row.subject_id !== input.entityId) {
+      next.add(row.subject_id);
+    }
+    if (row.object_entity_id !== null && row.object_entity_id !== input.entityId) {
+      next.add(row.object_entity_id);
+    }
+  }
+  return next;
+}
+
 class RetrievalProjection implements PostgresRetrievalProjection {
   readonly id = PROJECTION_ID;
   private readonly ready: Promise<void>;
@@ -179,7 +265,9 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       ...new Set(
         events
           .filter(
-            (event): event is Extract<DomainEvent, { kind: 'claim.asserted' | 'claim.retracted' }> =>
+            (
+              event,
+            ): event is Extract<DomainEvent, { kind: 'claim.asserted' | 'claim.retracted' }> =>
               event.kind === 'claim.asserted' || event.kind === 'claim.retracted',
           )
           .map((event) => event.claimId),
@@ -217,7 +305,11 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     if (pending.length === 0) {
       return;
     }
-    if (pending.some((event) => event.kind === 'entity.merged' || event.kind === 'entity.merge_reverted')) {
+    if (
+      pending.some(
+        (event) => event.kind === 'entity.merged' || event.kind === 'entity.merge_reverted',
+      )
+    ) {
       await this.rebuild();
       return;
     }
@@ -319,7 +411,8 @@ class RetrievalProjection implements PostgresRetrievalProjection {
   private async searchVector(
     request: RetrievalCandidateRequest,
   ): Promise<readonly RetrievalCandidate[]> {
-    if (request.queryVector === undefined) {
+    const queryVector = request.queryVector;
+    if (queryVector === undefined) {
       throw new AdapterPostgresError('Vector candidate search requires queryVector');
     }
     const params: unknown[] = [];
@@ -333,9 +426,12 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     return rows
       .map((row) => ({
         claimId: row.claim_id as ClaimId,
-        score: cosine(request.queryVector ?? [], parseVector(row.vector)),
+        score: cosine(queryVector, parseVector(row.vector)),
       }))
-      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.claimId.localeCompare(right.claimId))
+      .sort(
+        (left, right) =>
+          (right.score ?? 0) - (left.score ?? 0) || left.claimId.localeCompare(right.claimId),
+      )
       .slice(0, request.limit);
   }
 
@@ -348,49 +444,15 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       return [];
     }
     const seenClaims = new Set<ClaimId>(seedClaimIds);
-    let frontier = new Set<string>();
-    for (const claimId of seedClaimIds) {
-      const rows = await this.sql.query<ProjectionRow>(
-        'SELECT claim_id, subject_id, object_entity_id, vector FROM retrieval_projection WHERE claim_id = $1',
-        [claimId],
-      );
-      const row = rows[0];
-      if (row !== undefined) {
-        frontier.add(row.subject_id);
-        if (row.object_entity_id !== null) {
-          frontier.add(row.object_entity_id);
-        }
-      }
-    }
-
+    let frontier = await seedGraphEntities(this.sql, seedClaimIds);
     const candidates = new Map<ClaimId, RetrievalCandidate>();
+
     for (let hop = 1; hop <= hops && frontier.size > 0; hop += 1) {
       const next = new Set<string>();
       for (const entityId of frontier) {
-        const params: unknown[] = [];
-        const scope = scopeSql(request, params);
-        params.push(entityId);
-        const entityIndex = params.length;
-        const temporal = temporalSql(request, params);
-        const rows = await this.sql.query<ProjectionRow>(
-          `SELECT claim_id, subject_id, object_entity_id, vector
-           FROM retrieval_projection
-           WHERE ${scope}${temporal}
-             AND (subject_id = $${entityIndex} OR object_entity_id = $${entityIndex})`,
-          params,
-        );
-        for (const row of rows) {
-          const claimId = row.claim_id as ClaimId;
-          if (!seenClaims.has(claimId)) {
-            seenClaims.add(claimId);
-            candidates.set(claimId, { claimId, score: 1 / hop, graphRoute: [entityId] });
-          }
-          if (row.subject_id !== entityId) {
-            next.add(row.subject_id);
-          }
-          if (row.object_entity_id !== null && row.object_entity_id !== entityId) {
-            next.add(row.object_entity_id);
-          }
+        const rows = await graphRowsForEntity(this.sql, request, entityId);
+        for (const value of collectGraphRows({ rows, entityId, hop, seenClaims, candidates })) {
+          next.add(value);
         }
       }
       frontier = next;

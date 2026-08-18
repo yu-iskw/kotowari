@@ -75,9 +75,7 @@ const embeddings: EmbeddingProvider = {
   id: 'projection-test-embedding',
   async embed({ texts }) {
     return {
-      vectors: texts.map((text) =>
-        text.toLowerCase().includes('alpha') ? [1, 0] : [0, 1],
-      ),
+      vectors: texts.map((text) => (text.toLowerCase().includes('alpha') ? [1, 0] : [0, 1])),
     };
   },
 };
@@ -92,9 +90,13 @@ async function fixture() {
 describe('Postgres retrieval projection', () => {
   it('rebuilds lexical and vector candidates from canonical claim events', async () => {
     const { store, projection } = await fixture();
-    await store.assertClaim(claim({ id: 'claim-alpha', subject: 'entity-a', literal: 'alpha vendor' }));
+    await store.assertClaim(
+      claim({ id: 'claim-alpha', subject: 'entity-a', literal: 'alpha vendor' }),
+    );
     await store.appendEvent(event('claim.asserted', 'claim-alpha', 1));
-    await store.assertClaim(claim({ id: 'claim-beta', subject: 'entity-b', literal: 'beta vendor' }));
+    await store.assertClaim(
+      claim({ id: 'claim-beta', subject: 'entity-b', literal: 'beta vendor' }),
+    );
     await store.appendEvent(event('claim.asserted', 'claim-beta', 2));
 
     await projection.rebuild();
