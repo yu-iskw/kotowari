@@ -38,6 +38,7 @@ import type {
   PolicyRecord,
   Principal,
   Resource,
+  TemporalPerspective,
 } from '@kotowari/kernel';
 import type {
   BlobStore,
@@ -68,6 +69,10 @@ function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
   };
 }
 
+function policyVersionKey(policy: PolicyRecord): string {
+  return `${policy.id}@${String(policy.version)}`;
+}
+
 export type KotowariPorts = {
   store: CanonicalStore;
   blobs: BlobStore;
@@ -88,12 +93,19 @@ export type KotowariApp = {
   searchKnowledge: (input: {
     query: string;
     purpose?: string;
+    temporal?: TemporalPerspective;
+    /** @deprecated Use temporal.validAt. */
     asOf?: string;
   }) => Promise<RetrievalResult>;
-  buildContext: (input: { purpose: string; query?: string }) => Promise<ContextSnapshot>;
+  buildContext: (input: {
+    purpose: string;
+    query?: string;
+    temporal?: TemporalPerspective;
+  }) => Promise<ContextSnapshot>;
   recordDecision: (input: {
     purpose: string;
     query?: string;
+    temporal?: TemporalPerspective;
     selectedOutcome: string;
     alternatives?: readonly string[];
     confidence: number;
@@ -162,7 +174,12 @@ export function createKotowariApp(
 
   async function runRetrieve(
     actor: Principal,
-    input: { query: string; purpose?: string; asOf?: string },
+    input: {
+      query: string;
+      purpose?: string;
+      temporal?: TemporalPerspective;
+      asOf?: string;
+    },
   ): Promise<RetrievalResult> {
     return retrieve({
       store: ports.store,
@@ -171,8 +188,35 @@ export function createKotowariApp(
       principal: actor,
       authz: { tenantId: actor.tenantId, purpose: input.purpose },
       query: input.query,
-      asOf: input.asOf,
+      ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+      ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
+      ...(input.asOf === undefined ? {} : { asOf: input.asOf }),
       plan: DEFAULT_RETRIEVAL_PLAN,
+    });
+  }
+
+  async function captureContext(
+    actor: Principal,
+    input: { purpose: string; query?: string; temporal?: TemporalPerspective },
+    policies: readonly PolicyRecord[],
+  ): Promise<ContextSnapshot> {
+    const retrieval = await runRetrieve(actor, {
+      query: input.query ?? input.purpose,
+      purpose: input.purpose,
+      ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
+    });
+    return assembleContext({
+      store: ports.store,
+      principal: actor,
+      purpose: input.purpose,
+      temporal: retrieval.receipt.temporal,
+      retrievalReceiptId: retrieval.receipt.id,
+      policyVersionIds: policies.map(policyVersionKey),
+      items: retrieval.hits.map((hit) => ({
+        claimId: hit.claim.id,
+        evidenceIds: hit.evidenceIds,
+      })),
+      budget: DEFAULT_RETRIEVAL_PLAN.budget,
     });
   }
 
@@ -208,20 +252,8 @@ export function createKotowariApp(
 
     async buildContext(input) {
       const actor = await current();
-      const retrieval = await runRetrieve(actor, {
-        query: input.query ?? input.purpose,
-        purpose: input.purpose,
-      });
-      return assembleContext({
-        store: ports.store,
-        principal: actor,
-        purpose: input.purpose,
-        items: retrieval.hits.map((hit) => ({
-          claimId: hit.claim.id,
-          evidenceIds: hit.evidenceIds,
-        })),
-        budget: DEFAULT_RETRIEVAL_PLAN.budget,
-      });
+      const policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
+      return captureContext(actor, input, policies);
     },
 
     async recordDecision(input) {
@@ -230,7 +262,6 @@ export function createKotowariApp(
       assertAllowed(actor, 'decision.record', scopeResource(actor, 'decision'), {
         tenantId: actor.tenantId,
       });
-      const snapshot = await this.buildContext({ purpose: input.purpose, query: input.query });
       let policies = await ports.store.listPolicies({ tenantId: actor.tenantId });
       if (policies.length === 0) {
         const created = await putPolicy({
@@ -242,6 +273,15 @@ export function createKotowariApp(
         });
         policies = [created];
       }
+      const snapshot = await captureContext(
+        actor,
+        {
+          purpose: input.purpose,
+          ...(input.query === undefined ? {} : { query: input.query }),
+          ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
+        },
+        policies,
+      );
       const candidate = {
         selectedOutcome: input.selectedOutcome,
         confidence: input.confidence,
