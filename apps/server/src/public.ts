@@ -16,9 +16,7 @@ export {
   createInProcessComposeApp,
   startComposeServer,
 } from './compose.js';
-export {
-  createComposeRetrievalProjectionFromEnv,
-} from './retrieval-projection-operations.js';
+export { createComposeRetrievalProjectionFromEnv } from './retrieval-projection-operations.js';
 export type {
   RetrievalProjectionMaintenance,
   RetrievalProjectionStatus,

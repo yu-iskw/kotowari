@@ -22,8 +22,7 @@ function positiveInt(value: string | undefined, fallback: number): number {
 
 function projectionEnabled(env: Record<string, string | undefined>): boolean {
   return (
-    env['KOTOWARI_PROFILE'] === 'enterprise' ||
-    env['KOTOWARI_RETRIEVAL_PROJECTION'] === 'postgres'
+    env['KOTOWARI_PROFILE'] === 'enterprise' || env['KOTOWARI_RETRIEVAL_PROJECTION'] === 'postgres'
   );
 }
 
