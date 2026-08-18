@@ -28,6 +28,7 @@ export {
   asPolicyId,
   asPrincipalId,
   asProvenanceId,
+  asRetrievalReceiptId,
   asTenantId,
   newId,
 } from './branded-ids.js';
@@ -45,13 +46,16 @@ export type {
   PolicyId,
   PrincipalId,
   ProvenanceId,
+  RetrievalReceiptId,
   TenantId,
 } from './branded-ids.js';
 export {
   CLAIM_STATUSES,
+  claimKnownAt,
   claimObjectsEqual,
   claimText,
   claimValidAt,
+  claimVisibleAt,
   detectClaimOverlap,
   validityOverlaps,
 } from './claim.js';
@@ -103,6 +107,12 @@ export {
   nowIso,
 } from './provenance.js';
 export type { Provenance } from './provenance.js';
+export type {
+  RetrievalReceipt,
+  RetrievalReceiptOmission,
+  RetrievalReceiptSelection,
+  RetrievalScoreComponents,
+} from './retrieval.js';
 export {
   CLASSIFICATIONS,
   classificationRank,
@@ -110,3 +120,5 @@ export {
   VISIBILITIES,
 } from './scoped-metadata.js';
 export type { Classification, ScopedMetadata, Visibility } from './scoped-metadata.js';
+export { normalizeTemporalPerspective } from './temporal.js';
+export type { TemporalPerspective } from './temporal.js';
