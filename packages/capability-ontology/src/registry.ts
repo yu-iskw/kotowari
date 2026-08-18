@@ -75,7 +75,8 @@ export async function latestActiveSemanticContract(
 ): Promise<SemanticContract | undefined> {
   const active = await registry.list({ id, status: 'active' });
   return active.reduce<SemanticContract | undefined>(
-    (latest, contract) => (latest === undefined || contract.version > latest.version ? contract : latest),
+    (latest, contract) =>
+      latest === undefined || contract.version > latest.version ? contract : latest,
     undefined,
   );
 }

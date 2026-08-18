@@ -1,6 +1,10 @@
 import { entityTypeIri, predicateIri } from './semantic-contract.js';
 
-import type { LiteralDatatype, PredicateDefinition, SemanticContract } from './semantic-contract.js';
+import type {
+  LiteralDatatype,
+  PredicateDefinition,
+  SemanticContract,
+} from './semantic-contract.js';
 
 export type JsonLdContextDocument = {
   '@context': Readonly<Record<string, unknown>>;
@@ -41,13 +45,19 @@ function predicateContextValue(
 
 export function semanticContractJsonLdContext(contract: SemanticContract): JsonLdContextDocument {
   const prefixes = Object.fromEntries(
-    Object.entries(contract.prefixes ?? {}).map(([prefix, iri]) => [prefix, { '@id': iri, '@prefix': true }]),
+    Object.entries(contract.prefixes ?? {}).map(([prefix, iri]) => [
+      prefix,
+      { '@id': iri, '@prefix': true },
+    ]),
   );
   const entityTypes = Object.fromEntries(
     contract.entityTypes.map((entityType) => [entityType.id, entityTypeIri(contract, entityType)]),
   );
   const predicates = Object.fromEntries(
-    contract.predicates.map((predicate) => [predicate.id, predicateContextValue(contract, predicate)]),
+    contract.predicates.map((predicate) => [
+      predicate.id,
+      predicateContextValue(contract, predicate),
+    ]),
   );
   return {
     '@context': {

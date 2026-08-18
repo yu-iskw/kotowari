@@ -23,10 +23,7 @@ export {
   latestActiveSemanticContract,
   semanticContractKey,
 } from './registry.js';
-export type {
-  SemanticContractFilter,
-  SemanticContractRegistry,
-} from './registry.js';
+export type { SemanticContractFilter, SemanticContractRegistry } from './registry.js';
 export {
   LITERAL_DATATYPES,
   SEMANTIC_CONTRACT_STATUSES,

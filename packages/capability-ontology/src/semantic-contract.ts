@@ -181,13 +181,17 @@ function hasEntityTypeCycle(
     return true;
   }
   visiting.add(id);
-  const found = (parents.get(id) ?? []).some((parent) => hasEntityTypeCycle(parents, parent, visiting));
+  const found = (parents.get(id) ?? []).some((parent) =>
+    hasEntityTypeCycle(parents, parent, visiting),
+  );
   visiting.delete(id);
   return found;
 }
 
 function entityTypeCycleIssues(contract: SemanticContract): readonly SemanticContractIssue[] {
-  const parents = new Map(contract.entityTypes.map((item) => [item.id, item.extends ?? []] as const));
+  const parents = new Map(
+    contract.entityTypes.map((item) => [item.id, item.extends ?? []] as const),
+  );
   return contract.entityTypes
     .filter((entityType) => hasEntityTypeCycle(parents, entityType.id, new Set()))
     .map((entityType) => ({
@@ -248,7 +252,9 @@ function aliasIssues(contract: SemanticContract): readonly SemanticContractIssue
   return duplicateIssues(aliases, 'DUPLICATE_ALIAS', 'aliases', 'Aliases');
 }
 
-export function validateSemanticContract(contract: SemanticContract): readonly SemanticContractIssue[] {
+export function validateSemanticContract(
+  contract: SemanticContract,
+): readonly SemanticContractIssue[] {
   return [
     ...duplicateIssues(
       contract.entityTypes.map((item) => item.id),
@@ -313,6 +319,9 @@ export function predicateIri(contract: SemanticContract, predicate: PredicateDef
   return predicate.iri ?? new URL(predicate.id, contract.baseIri).toString();
 }
 
-export function entityTypeIri(contract: SemanticContract, entityType: EntityTypeDefinition): string {
+export function entityTypeIri(
+  contract: SemanticContract,
+  entityType: EntityTypeDefinition,
+): string {
   return entityType.iri ?? new URL(entityType.id, contract.baseIri).toString();
 }

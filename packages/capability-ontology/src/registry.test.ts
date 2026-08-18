@@ -7,7 +7,10 @@ import {
 
 import type { SemanticContract } from './semantic-contract.js';
 
-function contract(version: number, status: SemanticContract['status'] = 'active'): SemanticContract {
+function contract(
+  version: number,
+  status: SemanticContract['status'] = 'active',
+): SemanticContract {
   return {
     id: 'people',
     name: 'People vocabulary',

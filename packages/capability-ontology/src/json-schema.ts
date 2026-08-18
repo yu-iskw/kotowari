@@ -126,7 +126,9 @@ export function semanticContractJsonSchema(
     throw new Error(`Unknown entity type: ${entityTypeTerm}`);
   }
   const closure = entityTypeClosure(contract, entityType);
-  const predicates = contract.predicates.filter((predicate) => appliesToEntityType(predicate, closure));
+  const predicates = contract.predicates.filter((predicate) =>
+    appliesToEntityType(predicate, closure),
+  );
   const properties = Object.fromEntries(
     predicates.map((predicate) => [predicate.id, predicateSchema(predicate)]),
   );

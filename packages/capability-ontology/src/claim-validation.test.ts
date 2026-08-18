@@ -66,17 +66,16 @@ function claim(predicate: string, object: ClaimObject) {
 describe('validateClaimAgainstContract', () => {
   it('accepts canonical predicates and aliases', () => {
     expect(
-      validateClaimAgainstContract(
-        claim('ageYears', { kind: 'literal', value: '42' }),
-        CONTRACT,
-        { subjectEntityTypeIds: ['Person'] },
-      ),
+      validateClaimAgainstContract(claim('ageYears', { kind: 'literal', value: '42' }), CONTRACT, {
+        subjectEntityTypeIds: ['Person'],
+      }),
     ).toEqual([]);
   });
 
   it('reports unknown predicates and domain mismatches', () => {
-    expect(validateClaimAgainstContract(claim('missing', { kind: 'literal', value: 'x' }), CONTRACT))
-      .toMatchObject([{ code: 'UNKNOWN_PREDICATE' }]);
+    expect(
+      validateClaimAgainstContract(claim('missing', { kind: 'literal', value: 'x' }), CONTRACT),
+    ).toMatchObject([{ code: 'UNKNOWN_PREDICATE' }]);
     expect(
       validateClaimAgainstContract(claim('age', { kind: 'literal', value: '42' }), CONTRACT, {
         subjectEntityTypeIds: ['Organization'],
