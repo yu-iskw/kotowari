@@ -2,7 +2,7 @@ import { localStandalonePrincipal } from '@kotowari/kernel';
 import { createMemoryCanonicalStore } from '@kotowari/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { retrieve } from './retrieve.js';
+import { RETRIEVAL_PLAN_VERSION, retrieve } from './retrieve.js';
 
 import type { Claim } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
@@ -56,6 +56,10 @@ describe('retrieval plan limits and hops', () => {
       principal,
       authz: { tenantId: principal.tenantId },
       query: 'Vendor X',
+      temporal: {
+        validAt: '2024-01-01T00:00:00.000Z',
+        knownAt: '2024-01-01T00:00:00.000Z',
+      },
       plan: {
         candidates: [
           { strategy: 'lexical', limit: 1 },
@@ -68,6 +72,12 @@ describe('retrieval plan limits and hops', () => {
       },
     });
     expect(limited.hits.length).toBe(1);
+    expect(limited.receipt.planVersion).toBe(RETRIEVAL_PLAN_VERSION);
+    expect(limited.receipt.temporal).toEqual({
+      validAt: '2024-01-01T00:00:00.000Z',
+      knownAt: '2024-01-01T00:00:00.000Z',
+    });
+    expect(await store.getRetrievalReceipt(limited.receipt.id)).toEqual(limited.receipt);
 
     const hopped = await retrieve({
       store,
