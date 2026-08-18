@@ -43,14 +43,14 @@ jobs:
           }
           fs.writeFileSync(testPath, test);
           NODE
-      - name: Format and test application
+      - name: Format and validate
         shell: bash
         run: |
           corepack enable
           pnpm install --frozen-lockfile
           pnpm exec prettier --write packages/application/src/create-app.ts packages/application/src/create-app.test.ts
+          pnpm build
           pnpm --filter @kotowari/application test
-          pnpm --filter @kotowari/application build
       - name: Commit changes
         shell: bash
         run: |
