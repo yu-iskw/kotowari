@@ -32,8 +32,7 @@ export type ContextSnapshot = ScopedMetadata & {
   namespaceIds: readonly NamespaceId[];
   claimIds: readonly ClaimId[];
   evidenceIds: readonly EvidenceId[];
-  /** Canonical for newly created snapshots; optional only to decode pre-migration snapshots. */
-  policyVersions?: readonly PolicyVersionRef[];
+  policyVersions: readonly PolicyVersionRef[];
   /** @deprecated Compatibility field for snapshots created before typed policy version refs. */
   policyVersionIds?: readonly string[];
   items: readonly ContextSliceItem[];
