@@ -65,7 +65,7 @@ jobs:
           text = path.read_text()
           start = text.index('old_map = dedent(')
           end = text.index('\n\nstart = http.index(', start)
-          replacement = '''map_start = http.index("  const handlers = new Map<")
+          replacement = r'''map_start = http.index("  const handlers = new Map<")
           map_end = http.index("\n  for (const profile of MCP_PROFILES)", map_start)
           http = (
               http[:map_start]
