@@ -1,6 +1,6 @@
-import { claimText, claimValidAt } from './contracts.js';
+import { claimText, claimVisibleAt, normalizeTemporalPerspective } from './contracts.js';
 
-import type { Claim, NamespaceId, TenantId } from './contracts.js';
+import type { Claim, NamespaceId, TemporalPerspective, TenantId } from './contracts.js';
 
 export function lexicalTokens(query: string): string[] {
   return query
@@ -22,16 +22,19 @@ export function rankClaimsLexically(input: {
   query: string;
   tenantId: TenantId;
   namespaceId?: NamespaceId;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
   asOf?: string;
   limit: number;
 }): readonly Claim[] {
   const tokens = lexicalTokens(input.query);
+  const temporal = normalizeTemporalPerspective(input.temporal, input.asOf);
   const ranked = input.claims
     .filter(
       (claim) =>
         claim.tenantId === input.tenantId &&
         (input.namespaceId === undefined || claim.namespaceId === input.namespaceId) &&
-        claimValidAt(claim, input.asOf),
+        claimVisibleAt(claim, temporal),
     )
     .map((claim) => ({ claim, score: lexicalScore(tokens, claimText(claim)) }))
     .filter((row) => tokens.length === 0 || row.score > 0)
