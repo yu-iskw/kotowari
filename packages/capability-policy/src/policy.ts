@@ -167,7 +167,7 @@ export function evaluateDecisionAgainstPolicy(
       visibility: policy.visibility,
       policyTags: policy.policyTags,
     },
-    policyId: policy.id,
+    policyId: policyVersionRef(policy).policyId,
     policyVersion: policy.version,
     name: policy.name,
     rules: policy.rules,
