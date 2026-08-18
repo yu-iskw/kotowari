@@ -60,6 +60,11 @@ jobs:
       - name: Build workspace packages
         run: pnpm build
 
+      - name: Diagnose SQLite formatting
+        run: |
+          pnpm exec prettier --write packages/adapter-sqlite/src/sqlite-store.ts
+          git diff -- packages/adapter-sqlite/src/sqlite-store.ts
+
       - name: Trunk Check
         uses: trunk-io/trunk-action@04ba50e7658c81db7356da96657e6e77f220bfa3 # v1.3.1
         with:
