@@ -32,11 +32,13 @@ import type {
 } from '@kotowari/kernel';
 import type { CanonicalStore } from '@kotowari/plugin-sdk';
 
+const POLICY_EXCEPTION_ACTION = 'policy.exception' as const;
+
 type LifecycleAction =
   | 'decision.relate'
   | 'decision.observe'
   | 'decision.approve'
-  | 'policy.exception';
+  | typeof POLICY_EXCEPTION_ACTION;
 
 async function decisionForLifecycle(input: {
   store: CanonicalStore;
@@ -173,7 +175,7 @@ export async function recordPolicyExceptionCapability(input: {
     store: input.store,
     principal: input.principal,
     decisionId: input.decisionId,
-    action: 'policy.exception',
+    action: POLICY_EXCEPTION_ACTION,
     purpose: 'policy-exception',
   });
   if (decision === undefined) {
@@ -189,7 +191,7 @@ export async function recordPolicyExceptionCapability(input: {
   }
   assertAllowed(
     input.principal,
-    'policy.exception',
+    POLICY_EXCEPTION_ACTION,
     { kind: 'policy', id: policy.id, metadata: policy },
     { tenantId: input.principal.tenantId, purpose: 'policy-exception' },
   );
@@ -201,7 +203,7 @@ export async function recordPolicyExceptionCapability(input: {
     provenance: compactProvenance({
       source: 'decision',
       actor: input.principal.id,
-      process: 'policy.exception',
+      process: POLICY_EXCEPTION_ACTION,
     }),
   });
   await persistLifecycleEvent(input.store, (lifecycle) => lifecycle.putPolicyException(exception));
@@ -248,16 +250,17 @@ function hash(value: unknown): string {
 }
 
 function lifecycleEventTouchesDecision(event: DomainEvent, decisionId: Decision['id']): boolean {
-  switch (event.kind) {
-    case 'decision.related':
-      return event.decisionId === decisionId || event.relatedDecisionId === decisionId;
-    case 'decision.outcome_observed':
-    case 'decision.approval_recorded':
-    case 'policy.exception_recorded':
-      return event.decisionId === decisionId;
-    default:
-      return false;
+  if (event.kind === 'decision.related') {
+    return event.decisionId === decisionId || event.relatedDecisionId === decisionId;
   }
+  if (
+    event.kind === 'decision.outcome_observed' ||
+    event.kind === 'decision.approval_recorded' ||
+    event.kind === 'policy.exception_recorded'
+  ) {
+    return event.decisionId === decisionId;
+  }
+  return false;
 }
 
 export async function buildDecisionAuditBundleCapability(input: {
