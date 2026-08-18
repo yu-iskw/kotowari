@@ -18,4 +18,10 @@ describe('public', () => {
       'Unknown MCP standalone preset: retrieve',
     );
   });
+
+  it('rejects enterprise profile flags rather than silently broadening local authority', () => {
+    expect(() => parseMcpStandalonePresetFlag(['--profile', 'retrieve'])).toThrow(
+      'Standalone MCP uses --preset; enterprise profiles are HTTP endpoints',
+    );
+  });
 });
