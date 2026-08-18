@@ -18,6 +18,9 @@ import type {
   PolicyId,
   PolicyRecord,
   Principal,
+  RetrievalReceipt,
+  RetrievalReceiptId,
+  TemporalPerspective,
   TenantId,
 } from './contracts.js';
 
@@ -47,6 +50,14 @@ export type ExtractedClaimDraft = {
   confidence: number;
 };
 
+export type ClaimReadFilter = {
+  tenantId: TenantId;
+  namespaceId?: NamespaceId;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
+  asOf?: string;
+};
+
 export interface CanonicalStore {
   withTransaction<T>(fn: (tx: CanonicalStore) => Promise<T>): Promise<T>;
   putEntity(entity: Entity): Promise<void>;
@@ -55,11 +66,7 @@ export interface CanonicalStore {
   getEvidence(id: EvidenceId): Promise<Evidence | undefined>;
   assertClaim(claim: Claim): Promise<void>;
   getClaim(id: ClaimId): Promise<Claim | undefined>;
-  listClaims(filter: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
-    asOf?: string;
-  }): Promise<readonly Claim[]>;
+  listClaims(filter: ClaimReadFilter): Promise<readonly Claim[]>;
   retractClaim(claim: Claim): Promise<void>;
   putDecision(decision: Decision): Promise<void>;
   getDecision(id: DecisionId): Promise<Decision | undefined>;
@@ -69,6 +76,8 @@ export interface CanonicalStore {
   }): Promise<readonly Decision[]>;
   putContextSnapshot(snapshot: ContextSnapshot): Promise<void>;
   getContextSnapshot(id: ContextId): Promise<ContextSnapshot | undefined>;
+  putRetrievalReceipt(receipt: RetrievalReceipt): Promise<void>;
+  getRetrievalReceipt(id: RetrievalReceiptId): Promise<RetrievalReceipt | undefined>;
   putMemory(record: MemoryRecord): Promise<void>;
   listMemory(filter: {
     tenantId: TenantId;
@@ -89,12 +98,9 @@ export interface CanonicalStore {
   putEmbedding(input: { claimId: ClaimId; vector: readonly number[] }): Promise<void>;
   listEmbeddings(): Promise<readonly { claimId: ClaimId; vector: readonly number[] }[]>;
   clearEmbeddings(): Promise<void>;
-  searchLexical(input: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
+  searchLexical(input: ClaimReadFilter & {
     query: string;
     limit: number;
-    asOf?: string;
   }): Promise<readonly Claim[]>;
   rebuildLexicalProjection(): Promise<void>;
 }
