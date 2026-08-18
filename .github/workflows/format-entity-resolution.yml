@@ -1,0 +1,86 @@
+name: Format entity resolution
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: feat/entity-identity-resolution-v1
+      - run: corepack enable
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.0.5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refactor repeated entity-resolution literals
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('packages/capability-knowledge/src/entity-resolution.ts')
+          text = path.read_text()
+          text = text.replace(
+              "import { CapabilityKnowledgeError } from './errors.js';\nimport {\n  canonicalEntityIdFromEvents,\n  createEventBackedEntityResolutionStore,\n} from './entity-resolution-store.js';",
+              "import {\n  canonicalEntityIdFromEvents,\n  createEventBackedEntityResolutionStore,\n} from './entity-resolution-store.js';\nimport { CapabilityKnowledgeError } from './errors.js';",
+          )
+          text = text.replace('  EventId,\n', '')
+          text = text.replace("    'knowledge.read',", '    KNOWLEDGE_READ_ACTION,')
+          text = text.replace("purpose: 'entity-resolution'", 'purpose: ENTITY_RESOLUTION_PURPOSE')
+          text = text.replace("event.kind === 'entity.merged'", 'event.kind === ENTITY_MERGED_EVENT')
+          text = text.replace(
+              "event.kind === 'entity.merge_reverted'",
+              'event.kind === ENTITY_MERGE_REVERTED_EVENT',
+          )
+          marker = "export const ENTITY_RESOLVER_VERSION = 'entity-resolution-v1' as const;\n"
+          constants = """
+          const ENTITY_RESOLUTION_PURPOSE = 'entity-resolution' as const;
+          const KNOWLEDGE_READ_ACTION = 'knowledge.read' as const;
+          const ENTITY_MERGED_EVENT = 'entity.merged' as const;
+          const ENTITY_MERGE_REVERTED_EVENT = 'entity.merge_reverted' as const;
+          """
+          if 'const ENTITY_RESOLUTION_PURPOSE' not in text:
+              text = text.replace(marker, marker + constants)
+          path.write_text(text)
+      - name: Format changed TypeScript files
+        run: >-
+          pnpm exec prettier --write
+          packages/kernel/src/entity.ts
+          packages/kernel/src/entity-resolution.ts
+          packages/kernel/src/authorization.ts
+          packages/kernel/src/contracts.ts
+          packages/kernel/src/events.ts
+          packages/kernel/src/invariants.ts
+          packages/kernel/src/public.ts
+          packages/plugin-sdk/src/ports.ts
+          packages/plugin-sdk/src/fakes/memory-store.ts
+          packages/adapter-sqlite/src/sqlite-store.ts
+          packages/adapter-sqlite/src/sqlite-store.test.ts
+          packages/adapter-postgres/src/postgres-store.ts
+          packages/adapter-postgres/src/postgres-store.test.ts
+          packages/capability-knowledge/src/entity-resolution-store.ts
+          packages/capability-knowledge/src/entity-resolution.ts
+          packages/capability-knowledge/src/entity-resolution.test.ts
+          packages/capability-knowledge/src/public.ts
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages
+          git commit -m 'style: format entity resolution tranche'
+          git push origin HEAD:feat/entity-identity-resolution-v1
