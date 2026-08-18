@@ -63,23 +63,24 @@ describe('createDevOidcIdentityProvider', () => {
 
 describe('createOAuthIntrospectionIdentityProvider', () => {
   it('validates audience and maps scoped claims to a principal', async () => {
-    const fetchFn = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          active: true,
-          exp: Math.floor(Date.now() / 1000) + 300,
-          aud: 'https://kotowari.example.com',
-          iss: 'https://id.example.com/',
-          client_id: 'cursor',
-          sub: 'alice',
-          scope: 'kotowari.retrieve kotowari.decision.read',
-          tenant_id: 'acme',
-          namespace_ids: ['analytics'],
-          roles: ['member'],
-          classification: 'internal',
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            active: true,
+            exp: Math.floor(Date.now() / 1000) + 300,
+            aud: 'https://kotowari.example.com',
+            iss: 'https://id.example.com/',
+            client_id: 'cursor',
+            sub: 'alice',
+            scope: 'kotowari.retrieve kotowari.decision.read',
+            tenant_id: 'acme',
+            namespace_ids: ['analytics'],
+            roles: ['member'],
+            classification: 'internal',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
     );
     const provider = createOAuthIntrospectionIdentityProvider({
       introspectionUrl: 'https://id.example.com/oauth/introspect',

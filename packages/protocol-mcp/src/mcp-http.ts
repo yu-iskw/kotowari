@@ -9,8 +9,8 @@ import {
 import { MCP_PROFILE_DEFINITIONS, type McpProfile } from './mcp-profiles.js';
 import { createKotowariMcpServer, type McpAuditSink } from './mcp-server.js';
 
-import type { AuthInfo } from '@modelcontextprotocol/server';
 import type { KotowariApp } from '@kotowari/application';
+import type { AuthInfo } from '@modelcontextprotocol/server';
 
 export type McpVerifiedToken = {
   token: string;
@@ -47,7 +47,7 @@ function verifierForSdk(verifier: McpTokenVerifier) {
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
       try {
-        return (await verifier.verifyAccessToken(token)) as AuthInfo;
+        return verifier.verifyAccessToken(token);
       } catch {
         throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid access token');
       }

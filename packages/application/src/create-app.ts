@@ -81,6 +81,19 @@ function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
   };
 }
 
+function assertDecisionAllowed(
+  principal: Principal,
+  action: 'decision.read' | 'audit.read',
+  decision: Decision,
+): void {
+  assertAllowed(
+    principal,
+    action,
+    { kind: 'decision', id: decision.id, metadata: decision },
+    { tenantId: principal.tenantId },
+  );
+}
+
 export type KotowariPorts = {
   store: CanonicalStore;
   blobs: BlobStore;
@@ -293,12 +306,7 @@ export function createKotowariApp(
       if (decision === undefined) {
         return undefined;
       }
-      assertAllowed(
-        actor,
-        'decision.read',
-        { kind: 'decision', id: decision.id, metadata: decision },
-        { tenantId: actor.tenantId },
-      );
+      assertDecisionAllowed(actor, 'decision.read', decision);
       return decision;
     },
 
@@ -394,12 +402,7 @@ export function createKotowariApp(
       if (decision === undefined) {
         return undefined;
       }
-      assertAllowed(
-        actor,
-        'audit.read',
-        { kind: 'decision', id: decision.id, metadata: decision },
-        { tenantId: actor.tenantId },
-      );
+      assertDecisionAllowed(actor, 'audit.read', decision);
       const evidence = (
         await Promise.all(decision.consideredEvidenceIds.map((id) => app.getEvidence(id)))
       ).filter((item): item is Evidence => item !== undefined);

@@ -7,7 +7,12 @@ import type { KotowariApp } from '@kotowari/application';
 function fakeApp(): KotowariApp {
   return {
     ingestDocuments: async () => ({ evidenceIds: [], claimIds: [], entityIds: [] }),
-    searchKnowledge: async () => ({ hits: [], omitted: [], plan: {} as never, receipt: {} as never }),
+    searchKnowledge: async () => ({
+      hits: [],
+      omitted: [],
+      plan: {} as never,
+      receipt: {} as never,
+    }),
     buildContext: async () => ({}) as never,
     recordDecision: async () => ({}) as never,
     getDecision: async () => undefined,
@@ -26,7 +31,8 @@ function fakeApp(): KotowariApp {
     processQueuedJobs: async () => 0,
     health: () => ({ ok: true, profile: 'test' }),
     currentPrincipal: async () => ({}) as never,
-    runAsRequest: async <T>(_headers: Record<string, string | undefined>, fn: () => Promise<T>) => fn(),
+    runAsRequest: async <T>(_headers: Record<string, string | undefined>, fn: () => Promise<T>) =>
+      fn(),
   };
 }
 

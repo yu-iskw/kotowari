@@ -21,16 +21,16 @@ If Kotowari owns JSON-RPC codecs or duplicates business contracts inside MCP han
 - Make one canonical operation registry the source of truth for operation name, description, input/output validation, application command, action, risk, OAuth scope, and execution. Generated agent artifacts derive from those contracts.
 - Use risk/capability-scoped MCP profiles rather than domain-noun groupings:
 
-  | Profile | Risk | Operations |
-  | --- | --- | --- |
-  | `retrieve` | read | `search_knowledge`, `search_memory` |
-  | `decision-read` | read | `replay_decision` |
-  | `decision-write` | write | `record_decision` |
-  | `audit` | privileged | `audit_decision`, `export_prov` |
-  | `memory-write` | write | `record_memory` |
-  | `curation` | privileged | `resolve_conflict` |
-  | `ingestion` | write | `ingest_path` |
-  | `admin` | privileged | `list_policies`, `what_if_policy` |
+  | Profile          | Risk       | Operations                          |
+  | ---------------- | ---------- | ----------------------------------- |
+  | `retrieve`       | read       | `search_knowledge`, `search_memory` |
+  | `decision-read`  | read       | `replay_decision`                   |
+  | `decision-write` | write      | `record_decision`                   |
+  | `audit`          | privileged | `audit_decision`, `export_prov`     |
+  | `memory-write`   | write      | `record_memory`                     |
+  | `curation`       | privileged | `resolve_conflict`                  |
+  | `ingestion`      | write      | `ingest_path`                       |
+  | `admin`          | privileged | `list_policies`, `what_if_policy`   |
 
 - Treat profile/scope authorization and resource authorization as two distinct layers:
   1. OAuth scope answers whether the caller may invoke an operation/profile.

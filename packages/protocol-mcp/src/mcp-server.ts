@@ -27,15 +27,15 @@ export type CreateKotowariMcpServerInput = {
   audit?: McpAuditSink;
 };
 
-function hasRequiredScopes(granted: readonly string[] | undefined, required: readonly string[]): boolean {
+function hasRequiredScopes(
+  granted: readonly string[] | undefined,
+  required: readonly string[],
+): boolean {
   return granted !== undefined && required.every((scope) => granted.includes(scope));
 }
 
-function resultText(tool: string, output: unknown): string {
+function resultText(output: unknown): string {
   const serialized = JSON.stringify(output);
-  if (serialized === undefined) {
-    return `${tool} completed`;
-  }
   const maxChars = 8_000;
   return serialized.length <= maxChars
     ? serialized
@@ -70,7 +70,10 @@ export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): Mc
       },
       async (rawInput) => {
         const startedAt = Date.now();
-        if (input.enforceScopes === true && !hasRequiredScopes(input.scopes, operation.requiredScopes)) {
+        if (
+          input.enforceScopes === true &&
+          !hasRequiredScopes(input.scopes, operation.requiredScopes)
+        ) {
           await input.audit?.({
             event: 'mcp.tool',
             profile: input.profile,
@@ -105,7 +108,7 @@ export function createKotowariMcpServer(input: CreateKotowariMcpServerInput): Mc
             durationMs: Date.now() - startedAt,
           });
           return {
-            content: [{ type: 'text' as const, text: resultText(operation.name, output) }],
+            content: [{ type: 'text' as const, text: resultText(output) }],
             structuredContent: output,
           };
         } catch {

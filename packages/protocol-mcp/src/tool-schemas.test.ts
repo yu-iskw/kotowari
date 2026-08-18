@@ -20,8 +20,10 @@ function generatedRetrieveTools(): {
 }
 
 function embeddedInputSchema(schema: z.ZodType): Record<string, unknown> {
-  const generated = z.toJSONSchema(schema, { io: 'input' });
-  const { $schema: _schemaDeclaration, ...embedded } = generated;
+  const embedded: Record<string, unknown> = {
+    ...z.toJSONSchema(schema, { io: 'input' }),
+  };
+  delete embedded['$schema'];
   return embedded;
 }
 
@@ -33,10 +35,8 @@ describe('ADR-0009 generated Cursor pack matches canonical MCP operations', () =
     for (const tool of generated.tools) {
       const operation = MCP_OPERATIONS[tool.name as keyof typeof MCP_OPERATIONS];
       expect(operation).toBeDefined();
-      expect(tool.description).toBe(operation?.description);
-      expect(tool.inputSchema).toEqual(
-        embeddedInputSchema(operation?.inputSchema ?? z.never()),
-      );
+      expect(tool.description).toBe(operation.description);
+      expect(tool.inputSchema).toEqual(embeddedInputSchema(operation.inputSchema));
     }
   });
 });

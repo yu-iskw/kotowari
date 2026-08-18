@@ -5,7 +5,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
   createMcpHttpHandler,
   isMcpProfile,
@@ -13,6 +12,7 @@ import {
   protectedResourceMetadata,
 } from '@kotowari/protocol-mcp';
 import { handleRest } from '@kotowari/protocol-rest';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 
 import type { KotowariApp } from '@kotowari/application';
 import type {
@@ -124,7 +124,12 @@ function loadIndexHtml(webRoot: string | undefined): string {
   return '<!DOCTYPE html><title>Kotowari</title><p>Web UI not found.</p>';
 }
 
-function writeJson(response: ServerResponse, status: number, json: unknown, headers: Record<string, string> = {}): void {
+function writeJson(
+  response: ServerResponse,
+  status: number,
+  json: unknown,
+  headers: Record<string, string> = {},
+): void {
   if (response.writableEnded) {
     return;
   }
@@ -151,15 +156,23 @@ function hostnameOfHostHeader(value: string | undefined): string | undefined {
   }
 }
 
-function hostIsAllowed(request: IncomingMessage, allowedHosts: readonly string[] | undefined): boolean {
+function hostIsAllowed(
+  request: IncomingMessage,
+  allowedHosts: readonly string[] | undefined,
+): boolean {
   if (allowedHosts === undefined || allowedHosts.length === 0) {
     return true;
   }
   const hostname = hostnameOfHostHeader(request.headers.host);
-  return hostname !== undefined && allowedHosts.some((allowed) => allowed.toLowerCase() === hostname);
+  return (
+    hostname !== undefined && allowedHosts.some((allowed) => allowed.toLowerCase() === hostname)
+  );
 }
 
-function originIsAllowed(request: IncomingMessage, allowedHosts: readonly string[] | undefined): boolean {
+function originIsAllowed(
+  request: IncomingMessage,
+  allowedHosts: readonly string[] | undefined,
+): boolean {
   const origin = request.headers.origin;
   if (origin === undefined || allowedHosts === undefined || allowedHosts.length === 0) {
     return true;
@@ -178,7 +191,9 @@ function rateLimitKey(request: IncomingMessage): string {
   return createHash('sha256').update(source).digest('hex');
 }
 
-function createRateLimiter(options: RateLimitOptions | undefined): (request: IncomingMessage) => number | undefined {
+function createRateLimiter(
+  options: RateLimitOptions | undefined,
+): (request: IncomingMessage) => number | undefined {
   if (options === undefined) {
     return () => undefined;
   }
@@ -197,6 +212,180 @@ function createRateLimiter(options: RateLimitOptions | undefined): (request: Inc
     }
     return Math.max(1, Math.ceil((current.resetAt - now) / 1000));
   };
+}
+
+type McpRuntimeHandler = {
+  node: ReturnType<typeof toNodeHandler>;
+  close: () => Promise<void>;
+  metadataPath?: string;
+  metadata?: Record<string, unknown>;
+};
+
+type RequestRouterInput = {
+  app: KotowariApp;
+  indexHtml: string;
+  handlers: ReadonlyMap<McpProfile, McpRuntimeHandler>;
+  metadataRoutes: ReadonlyMap<string, Record<string, unknown>>;
+  maxBodyBytes: number;
+  requestTimeoutMs: number;
+  consumeRateLimit: (request: IncomingMessage) => number | undefined;
+  requestContext: AsyncLocalStorage<{ traceId: string }>;
+  allowedHosts?: readonly string[];
+};
+
+function incomingUrl(request: IncomingMessage): URL {
+  const hostHeader = request.headers.host ?? '127.0.0.1';
+  return new URL(request.url ?? '/', `http://${hostHeader}`);
+}
+
+function handleMetadataRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  metadata: Record<string, unknown> | undefined,
+): boolean {
+  if (metadata === undefined) {
+    return false;
+  }
+  if (request.method !== 'GET') {
+    writeJson(response, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
+    return true;
+  }
+  writeJson(response, 200, metadata, { 'access-control-allow-origin': '*' });
+  return true;
+}
+
+function handleIndexRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  indexHtml: string,
+): boolean {
+  if (request.method !== 'GET' || (url.pathname !== '/' && url.pathname !== '/index.html')) {
+    return false;
+  }
+  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  response.end(indexHtml);
+  return true;
+}
+
+async function runMcpWithTimeout(input: {
+  request: IncomingMessage;
+  response: ServerResponse;
+  body: unknown;
+  handler: McpRuntimeHandler;
+  traceId: string;
+  requestTimeoutMs: number;
+  requestContext: AsyncLocalStorage<{ traceId: string }>;
+}): Promise<void> {
+  const timeout = setTimeout(() => {
+    if (input.response.writableEnded) {
+      return;
+    }
+    if (!input.response.headersSent) {
+      writeJson(input.response, 504, { error: 'mcp_request_timeout' });
+      return;
+    }
+    input.response.destroy();
+  }, input.requestTimeoutMs);
+  try {
+    await input.requestContext.run({ traceId: input.traceId }, () =>
+      input.handler.node(input.request, input.response, input.body),
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function handleMcpRoute(
+  input: RequestRouterInput,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const profile = url.pathname.startsWith('/mcp/') ? mcpProfileFromPath(url.pathname) : undefined;
+  if (profile === undefined) {
+    return false;
+  }
+  if (
+    !hostIsAllowed(request, input.allowedHosts) ||
+    !originIsAllowed(request, input.allowedHosts)
+  ) {
+    writeJson(response, 403, { error: 'forbidden_host_or_origin' });
+    return true;
+  }
+  const retryAfter = input.consumeRateLimit(request);
+  if (retryAfter !== undefined) {
+    writeJson(response, 429, { error: 'rate_limited' }, { 'retry-after': String(retryAfter) });
+    return true;
+  }
+  const traceId =
+    typeof request.headers['x-request-id'] === 'string'
+      ? request.headers['x-request-id']
+      : randomUUID();
+  response.setHeader('x-request-id', traceId);
+  const body =
+    request.method === 'GET' || request.method === 'HEAD'
+      ? undefined
+      : await readBody(request, input.maxBodyBytes);
+  const handler = input.handlers.get(profile);
+  if (handler === undefined) {
+    throw new Error(`MCP profile ${profile} is not configured`);
+  }
+  await runMcpWithTimeout({
+    request,
+    response,
+    body,
+    handler,
+    traceId,
+    requestTimeoutMs: input.requestTimeoutMs,
+    requestContext: input.requestContext,
+  });
+  return true;
+}
+
+async function handleRestRoute(
+  input: RequestRouterInput,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+): Promise<void> {
+  const body =
+    request.method === 'POST'
+      ? await readBody(request, input.maxBodyBytes)
+      : Object.fromEntries(url.searchParams.entries());
+  const result = await handleRest(input.app, {
+    method: request.method ?? 'GET',
+    pathname: url.pathname,
+    body,
+    headers: headersOf(request),
+  });
+  writeJson(response, result.status, result.json);
+}
+
+async function routeRequest(
+  input: RequestRouterInput,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  const url = incomingUrl(request);
+  if (handleMetadataRoute(request, response, input.metadataRoutes.get(url.pathname))) {
+    return;
+  }
+  if (handleIndexRoute(request, response, url, input.indexHtml)) {
+    return;
+  }
+  if (await handleMcpRoute(input, request, response, url)) {
+    return;
+  }
+  await handleRestRoute(input, request, response, url);
+}
+
+function writeRequestError(response: ServerResponse, error: unknown): void {
+  if (error instanceof HttpRequestError) {
+    writeJson(response, error.status, { error: error.message });
+    return;
+  }
+  writeJson(response, 500, { error: 'internal error' });
 }
 
 export function listenKotowariHttp(options: {
@@ -230,18 +419,11 @@ export function listenKotowariHttp(options: {
     }
   };
 
-  const handlers = new Map<
-    McpProfile,
-    {
-      node: ReturnType<typeof toNodeHandler>;
-      close: () => Promise<void>;
-      metadataPath?: string;
-      metadata?: Record<string, unknown>;
-    }
-  >();
+  const handlers = new Map<McpProfile, McpRuntimeHandler>();
   for (const profile of MCP_PROFILES) {
     const authorization = options.mcpSecurity?.authorization;
-    const resourceServerUrl = authorization === undefined ? undefined : publicMcpUrl(authorization.publicBaseUrl, profile);
+    const resourceServerUrl =
+      authorization === undefined ? undefined : publicMcpUrl(authorization.publicBaseUrl, profile);
     const handler = createMcpHttpHandler({
       profile,
       app,
@@ -259,7 +441,9 @@ export function listenKotowariHttp(options: {
     handlers.set(profile, {
       node: toNodeHandler(handler),
       close: handler.close,
-      ...(handler.resourceMetadataUrl === undefined || resourceServerUrl === undefined || authorization === undefined
+      ...(handler.resourceMetadataUrl === undefined ||
+      resourceServerUrl === undefined ||
+      authorization === undefined
         ? {}
         : {
             metadataPath: handler.resourceMetadataUrl.pathname,
@@ -279,92 +463,23 @@ export function listenKotowariHttp(options: {
     }
   }
 
+  const router: RequestRouterInput = {
+    app,
+    indexHtml,
+    handlers,
+    metadataRoutes,
+    maxBodyBytes,
+    requestTimeoutMs,
+    consumeRateLimit,
+    requestContext,
+    ...(options.mcpSecurity?.allowedHosts === undefined
+      ? {}
+      : { allowedHosts: options.mcpSecurity.allowedHosts }),
+  };
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
-    void (async () => {
-      try {
-        const hostHeader = request.headers.host ?? '127.0.0.1';
-        const url = new URL(request.url ?? '/', `http://${hostHeader}`);
-        const metadata = metadataRoutes.get(url.pathname);
-        if (metadata !== undefined) {
-          if (request.method !== 'GET') {
-            writeJson(response, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
-            return;
-          }
-          writeJson(response, 200, metadata, { 'access-control-allow-origin': '*' });
-          return;
-        }
-
-        if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-          response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-          response.end(indexHtml);
-          return;
-        }
-
-        const profile = url.pathname.startsWith('/mcp/') ? mcpProfileFromPath(url.pathname) : undefined;
-        if (profile !== undefined) {
-          if (!hostIsAllowed(request, options.mcpSecurity?.allowedHosts) || !originIsAllowed(request, options.mcpSecurity?.allowedHosts)) {
-            writeJson(response, 403, { error: 'forbidden_host_or_origin' });
-            return;
-          }
-          const retryAfter = consumeRateLimit(request);
-          if (retryAfter !== undefined) {
-            writeJson(response, 429, { error: 'rate_limited' }, { 'retry-after': String(retryAfter) });
-            return;
-          }
-
-          const traceId =
-            typeof request.headers['x-request-id'] === 'string'
-              ? request.headers['x-request-id']
-              : randomUUID();
-          response.setHeader('x-request-id', traceId);
-          const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await readBody(request, maxBodyBytes);
-          const selected = handlers.get(profile);
-          if (selected === undefined) {
-            throw new Error(`MCP profile ${profile} is not configured`);
-          }
-
-          let timedOut = false;
-          const timeout = setTimeout(() => {
-            timedOut = true;
-            if (!response.writableEnded) {
-              if (!response.headersSent) {
-                writeJson(response, 504, { error: 'mcp_request_timeout' });
-              } else {
-                response.destroy();
-              }
-            }
-          }, requestTimeoutMs);
-          try {
-            await requestContext.run({ traceId }, () => selected.node(request, response, body));
-          } catch (error) {
-            if (!timedOut) {
-              throw error;
-            }
-          } finally {
-            clearTimeout(timeout);
-          }
-          return;
-        }
-
-        const body =
-          request.method === 'POST'
-            ? await readBody(request, maxBodyBytes)
-            : Object.fromEntries(url.searchParams.entries());
-        const result = await handleRest(app, {
-          method: request.method ?? 'GET',
-          pathname: url.pathname,
-          body,
-          headers: headersOf(request),
-        });
-        writeJson(response, result.status, result.json);
-      } catch (error) {
-        if (error instanceof HttpRequestError) {
-          writeJson(response, error.status, { error: error.message });
-          return;
-        }
-        writeJson(response, 500, { error: 'internal error' });
-      }
-    })();
+    void routeRequest(router, request, response).catch((error: unknown) => {
+      writeRequestError(response, error);
+    });
   });
 
   return new Promise((resolve) => {

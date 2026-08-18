@@ -41,10 +41,12 @@ function defineOperation<InputSchema extends z.ZodType, OutputSchema extends z.Z
 
 const genericObjectOutput = z.object({}).passthrough();
 const decisionIdInput = z.object({ decisionId: z.string().min(1) }).strict();
+const DECISION_NOT_FOUND = 'Decision not found';
 
 const searchKnowledge = defineOperation({
   name: 'search_knowledge',
-  description: 'Search claims and evidence in the Kotowari knowledge workspace with sourced explanations.',
+  description:
+    'Search claims and evidence in the Kotowari knowledge workspace with sourced explanations.',
   applicationCommand: 'searchKnowledge',
   action: 'knowledge.read',
   risk: 'read',
@@ -92,7 +94,8 @@ const recordMemory = defineOperation({
 
 const recordDecision = defineOperation({
   name: 'record_decision',
-  description: 'Record a decision with its context snapshot, evidence, alternatives, and selected outcome.',
+  description:
+    'Record a decision with its context snapshot, evidence, alternatives, and selected outcome.',
   applicationCommand: 'recordDecision',
   action: 'decision.record',
   risk: 'write',
@@ -113,7 +116,8 @@ const recordDecision = defineOperation({
 
 const replayDecision = defineOperation({
   name: 'replay_decision',
-  description: 'Reconstruct the exact context, retrieval receipt, and policy versions used by a decision.',
+  description:
+    'Reconstruct the exact context, retrieval receipt, and policy versions used by a decision.',
   applicationCommand: 'replayDecision',
   action: 'decision.read',
   risk: 'read',
@@ -126,7 +130,7 @@ const replayDecision = defineOperation({
     }
     const result = await app.replayDecision(input.decisionId);
     if (result === undefined) {
-      throw new Error('Decision not found');
+      throw new Error(DECISION_NOT_FOUND);
     }
     return result;
   },
@@ -134,7 +138,8 @@ const replayDecision = defineOperation({
 
 const auditDecision = defineOperation({
   name: 'audit_decision',
-  description: 'Build an authorization-aware decision audit bundle with context, evidence, policies, events, and hashes.',
+  description:
+    'Build an authorization-aware decision audit bundle with context, evidence, policies, events, and hashes.',
   applicationCommand: 'getDecisionAuditBundle',
   action: 'audit.read',
   risk: 'privileged',
@@ -147,7 +152,7 @@ const auditDecision = defineOperation({
     }
     const result = await app.getDecisionAuditBundle(input.decisionId);
     if (result === undefined) {
-      throw new Error('Decision not found');
+      throw new Error(DECISION_NOT_FOUND);
     }
     return result;
   },
@@ -218,7 +223,7 @@ const exportProv = defineOperation({
   async execute(app, input) {
     const result = await app.exportProvO(input.decisionId);
     if (result === undefined) {
-      throw new Error('Decision not found');
+      throw new Error(DECISION_NOT_FOUND);
     }
     return result;
   },

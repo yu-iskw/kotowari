@@ -1,11 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import {
-  asNamespaceId,
-  asPrincipalId,
-  asTenantId,
-  isClassification,
-} from '@kotowari/kernel';
+import { asNamespaceId, asPrincipalId, asTenantId, isClassification } from '@kotowari/kernel';
 
 import { bearerTokenFromHeaders } from './dev-oidc-identity-provider.js';
 
@@ -130,7 +125,11 @@ export function createOAuthIntrospectionIdentityProvider(
 ): OAuthIntrospectionIdentityProvider {
   const introspectionUrl = requireHttps('introspectionUrl', options.introspectionUrl);
   const authorizationServer = requireHttps('authorizationServer', options.authorizationServer).href;
-  if (options.audience.length === 0 || options.clientId.length === 0 || options.clientSecret.length === 0) {
+  if (
+    options.audience.length === 0 ||
+    options.clientId.length === 0 ||
+    options.clientSecret.length === 0
+  ) {
     throw new Error('audience, clientId, and clientSecret are required for OAuth introspection');
   }
   const fetchFn = options.fetchFn ?? globalThis.fetch;
@@ -161,6 +160,8 @@ export function createOAuthIntrospectionIdentityProvider(
       throw new Error(`OAuth token introspection failed with HTTP ${String(response.status)}`);
     }
     const payload = (await response.json()) as IntrospectionPayload;
+    // The OAuth introspection `active` flag is public metadata, not secret material.
+    // eslint-disable-next-line security/detect-possible-timing-attacks
     if (payload['active'] !== true) {
       throw new Error('OAuth access token is inactive');
     }
@@ -173,7 +174,9 @@ export function createOAuthIntrospectionIdentityProvider(
     }
     const issuer = optionalString(payload, 'iss');
     if (issuer !== undefined && issuer !== authorizationServer) {
-      throw new Error('OAuth access token issuer does not match the configured authorization server');
+      throw new Error(
+        'OAuth access token issuer does not match the configured authorization server',
+      );
     }
 
     const expiresAtMs = Math.min(exp * 1000, now + cacheTtlMs);

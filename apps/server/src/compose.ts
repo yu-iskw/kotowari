@@ -131,7 +131,8 @@ export async function startComposeServer(options: {
   app: KotowariApp;
 }> {
   const env = options.env ?? process.env;
-  const enterprise = env['KOTOWARI_PROFILE'] === 'enterprise' || env['KOTOWARI_AUTH_MODE'] === 'oauth';
+  const enterprise =
+    env['KOTOWARI_PROFILE'] === 'enterprise' || env['KOTOWARI_AUTH_MODE'] === 'oauth';
 
   if (enterprise) {
     const identity = enterpriseIdentityFromEnv(env);
