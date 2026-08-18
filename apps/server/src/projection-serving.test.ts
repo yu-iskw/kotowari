@@ -13,6 +13,7 @@ function projection(input: {
   return {
     id: 'postgres-retrieval-v1',
     rebuild: async () => {},
+    rebuildVectorIndex: async () => {},
     sync: async () => {},
     search: async () => {
       if (input.failSearch === true) throw new Error('projection failed');
