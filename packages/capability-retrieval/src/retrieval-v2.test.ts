@@ -61,8 +61,14 @@ describe('retrieval architecture v2', () => {
   });
 
   it('uses an external candidate source without scanning canonical claims or embeddings', async () => {
-    const backing = createMemoryCanonicalStore();
-    await seed(backing);
+    const store = createMemoryCanonicalStore();
+    await seed(store);
+    store.listClaims = async () => {
+      throw new Error('unexpected full scan: listClaims');
+    };
+    store.listEmbeddings = async () => {
+      throw new Error('unexpected full scan: listEmbeddings');
+    };
     const calls: string[] = [];
     const source: RetrievalCandidateSource = {
       id: 'test-index',
@@ -78,17 +84,6 @@ describe('retrieval architecture v2', () => {
         return [{ claimId: 'c-c' as never, graphRoute: ['entity-1'] }];
       },
     };
-    const store: CanonicalStore = new Proxy(backing, {
-      get(target, property, receiver) {
-        if (property === 'listClaims' || property === 'listEmbeddings') {
-          return async () => {
-            throw new Error(`unexpected full scan: ${String(property)}`);
-          };
-        }
-        const value = Reflect.get(target, property, receiver) as unknown;
-        return typeof value === 'function' ? (value as Function).bind(target) : value;
-      },
-    });
     const principal = localStandalonePrincipal();
     const result = await retrieve({
       store,
