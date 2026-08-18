@@ -1,6 +1,7 @@
 import type {
   ClaimId,
   EntityId,
+  EventId,
   EvidenceId,
   IsoTimestamp,
   PolicyId,
@@ -9,6 +10,7 @@ import type {
 import type { ClaimObject, ClaimStatus } from './claim.js';
 import type { ConflictKind, ResolutionStrategy } from './conflict.js';
 import type { ContextSnapshot, PolicyEvaluation, PolicyRules } from './context.js';
+import type { EntityExternalId } from './entity.js';
 import type { Provenance } from './provenance.js';
 import type { Classification, ScopedMetadata } from './scoped-metadata.js';
 
@@ -47,6 +49,8 @@ export type MergeEntityInput = {
   metadata: ScopedMetadata;
   survivingEntityId: EntityId;
   absorbedEntityIds: readonly EntityId[];
+  resolutionProposalId?: EventId;
+  reason?: string;
   provenance: Provenance;
 };
 
@@ -94,6 +98,7 @@ export type PutEntityInput = {
   metadata: ScopedMetadata;
   labels: readonly string[];
   aliases?: readonly string[];
+  externalIds?: readonly EntityExternalId[];
   provenance: Provenance;
 };
 

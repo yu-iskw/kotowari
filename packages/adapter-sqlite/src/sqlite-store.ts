@@ -164,6 +164,13 @@ class SqliteCanonicalStore implements CanonicalStore {
     return this.getRecord<Entity>(COLLECTIONS.entities, id);
   }
 
+  async listEntities(filter: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+  }): Promise<readonly Entity[]> {
+    return this.listRecords<Entity>(COLLECTIONS.entities, filter);
+  }
+
   async putEvidence(item: Evidence): Promise<void> {
     this.putRecord(COLLECTIONS.evidence, item);
   }

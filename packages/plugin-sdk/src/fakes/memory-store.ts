@@ -80,6 +80,16 @@ class MemoryCanonicalStore implements CanonicalStore {
     return this.entities.get(id);
   }
 
+  async listEntities(filter: {
+    tenantId: TenantId;
+    namespaceId?: NamespaceId;
+  }): Promise<readonly Entity[]> {
+    return [...this.entities.values()].filter(
+      (entity) =>
+        matchesTenant(entity, filter.tenantId) && matchesNamespace(entity, filter.namespaceId),
+    );
+  }
+
   async putEvidence(item: Evidence): Promise<void> {
     this.evidence.set(item.id, item);
   }

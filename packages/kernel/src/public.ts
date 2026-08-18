@@ -111,7 +111,16 @@ export type {
   OutcomeObservation,
   PolicyException,
 } from './decision.js';
-export type { Entity } from './entity.js';
+export { ENTITY_RESOLUTION_SIGNAL_KINDS } from './entity-resolution.js';
+export type {
+  EntityMergeLineage,
+  EntityResolutionDecision,
+  EntityResolutionDecisionOutcome,
+  EntityResolutionProposal,
+  EntityResolutionSignal,
+  EntityResolutionSignalKind,
+} from './entity-resolution.js';
+export type { Entity, EntityExternalId } from './entity.js';
 export { KernelError, KERNEL_ERROR_CODES } from './errors.js';
 export type { KernelErrorCode } from './errors.js';
 export { createEventId } from './events.js';

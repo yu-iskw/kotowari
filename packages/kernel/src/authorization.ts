@@ -8,6 +8,8 @@ import type { Classification, ScopedMetadata } from './scoped-metadata.js';
 export const ACTIONS = [
   'knowledge.read',
   'knowledge.write',
+  'entity.resolve',
+  'entity.merge',
   'memory.read',
   'memory.write',
   'decision.read',
@@ -96,6 +98,8 @@ export type AuthorizationReceipt = {
 
 const WRITE_ACTIONS: ReadonlySet<Action> = new Set([
   'knowledge.write',
+  'entity.resolve',
+  'entity.merge',
   'memory.write',
   'decision.record',
   'decision.relate',
