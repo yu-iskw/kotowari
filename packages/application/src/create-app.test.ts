@@ -58,7 +58,8 @@ function ports() {
 
 describe('S2 ingest then sourced search', () => {
   it('S2 ingest then query returns claims linked to evidence', async () => {
-    const app = createKotowariApp(ports());
+    const base = ports();
+    const app = createKotowariApp(base);
     const text = 'Alice Chen is CEO of Vendor X as of 2024. Vendor X is the payment processor.';
     const ingested = await app.ingestDocuments([
       {
@@ -74,12 +75,14 @@ describe('S2 ingest then sourced search', () => {
     expect(result.hits.length).toBeGreaterThan(0);
     expect(result.hits[0]?.evidenceIds.length).toBeGreaterThan(0);
     expect(result.hits[0]?.whySelected).toBeTruthy();
+    expect(await base.store.getRetrievalReceipt(result.receipt.id)).toEqual(result.receipt);
   });
 });
 
 describe('S3 decision persistence', () => {
-  it('S3 records a decision with a context snapshot', async () => {
-    const app = createKotowariApp(ports());
+  it('S3 records a decision with a policy-aware, retrieval-bound context snapshot', async () => {
+    const base = ports();
+    const app = createKotowariApp(base);
     await app.ingestDocuments([
       {
         relativePath: 'note.md',
@@ -92,12 +95,27 @@ describe('S3 decision persistence', () => {
     const decision = await app.recordDecision({
       purpose: 'library-choice',
       query: 'Vendor X',
+      temporal: {
+        validAt: '2026-08-18T00:00:00.000Z',
+        knownAt: '2026-08-18T00:00:00.000Z',
+      },
       selectedOutcome: 'use_vendor_x',
       confidence: 0.8,
       rationale: 'HIPAA workload needs a sourced processor',
     });
     expect(decision.inputContextSnapshot.purpose).toBe('library-choice');
     expect(decision.consideredEvidenceIds.length).toBeGreaterThan(0);
+    expect(decision.inputContextSnapshot.retrievalReceiptId).toBeDefined();
+    expect(decision.inputContextSnapshot.policyVersionIds.length).toBeGreaterThan(0);
+    expect(decision.inputContextSnapshot.temporal).toEqual({
+      validAt: '2026-08-18T00:00:00.000Z',
+      knownAt: '2026-08-18T00:00:00.000Z',
+    });
+    const receiptId = decision.inputContextSnapshot.retrievalReceiptId;
+    expect(receiptId).toBeDefined();
+    if (receiptId !== undefined) {
+      expect(await base.store.getRetrievalReceipt(receiptId)).toBeDefined();
+    }
     const loaded = await app.getDecision(decision.id);
     expect(loaded?.id).toBe(decision.id);
     expect(decision.applicablePolicyIds.length).toBeGreaterThan(0);
