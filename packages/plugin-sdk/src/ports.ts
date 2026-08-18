@@ -98,10 +98,12 @@ export interface CanonicalStore {
   putEmbedding(input: { claimId: ClaimId; vector: readonly number[] }): Promise<void>;
   listEmbeddings(): Promise<readonly { claimId: ClaimId; vector: readonly number[] }[]>;
   clearEmbeddings(): Promise<void>;
-  searchLexical(input: ClaimReadFilter & {
-    query: string;
-    limit: number;
-  }): Promise<readonly Claim[]>;
+  searchLexical(
+    input: ClaimReadFilter & {
+      query: string;
+      limit: number;
+    },
+  ): Promise<readonly Claim[]>;
   rebuildLexicalProjection(): Promise<void>;
 }
 

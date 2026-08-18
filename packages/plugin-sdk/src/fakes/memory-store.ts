@@ -22,14 +22,16 @@ import type {
   PolicyRecord,
   RetrievalReceipt,
   RetrievalReceiptId,
-  TemporalPerspective,
   TenantId,
 } from '../contracts.js';
 import type { BlobStore, CanonicalStore, ClaimReadFilter } from '../ports.js';
 
 type EmbeddingRow = { claimId: ClaimId; vector: readonly number[] };
 
-function matchesTenant<T extends { tenantId: TenantId }>(record: T, tenantId: TenantId): boolean {
+function matchesTenant<T extends { tenantId: TenantId }>(
+  record: T,
+  tenantId: TenantId,
+): boolean {
   return record.tenantId === tenantId;
 }
 
@@ -237,10 +239,12 @@ class MemoryCanonicalStore implements CanonicalStore {
     this.embeddings.clear();
   }
 
-  async searchLexical(input: ClaimReadFilter & {
-    query: string;
-    limit: number;
-  }): Promise<readonly Claim[]> {
+  async searchLexical(
+    input: ClaimReadFilter & {
+      query: string;
+      limit: number;
+    },
+  ): Promise<readonly Claim[]> {
     const claims = await this.listClaims(input);
     return rankClaimsLexically({
       claims,
