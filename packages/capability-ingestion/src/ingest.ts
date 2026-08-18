@@ -14,7 +14,7 @@ import {
   nowIso,
 } from '@kotowari/kernel';
 
-import type { Claim, Conflict, DomainEvent, Entity, Principal } from '@kotowari/kernel';
+import type { Claim, ClaimId, Conflict, DomainEvent, Entity, Principal } from '@kotowari/kernel';
 import type {
   BlobStore,
   CanonicalStore,
@@ -223,8 +223,8 @@ async function persistExtractedClaims(
     });
     claimIds.push(item.toStore.id);
   }
-  const pendingIds = new Set(claimIds);
-  const existingToMark = new Set<string>();
+  const pendingIds = new Set<string>(claimIds);
+  const existingToMark = new Set<ClaimId>();
   for (const conflict of conflicts) {
     for (const id of conflict.claimIds) {
       if (!pendingIds.has(id)) {
