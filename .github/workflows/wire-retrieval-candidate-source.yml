@@ -1,0 +1,62 @@
+name: Wire retrieval candidate source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: feat/retrieval-architecture-v2
+      - name: Wire application port and test
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const appPath = 'packages/application/src/create-app.ts';
+          let source = fs.readFileSync(appPath, 'utf8');
+          source = source.replace(
+            '  Queue,\n  RerankerProvider,\n} from \'@kotowari/plugin-sdk\';',
+            '  Queue,\n  RerankerProvider,\n  RetrievalCandidateSource,\n} from \'@kotowari/plugin-sdk\';',
+          );
+          source = source.replace(
+            '  embeddings: EmbeddingProvider;\n  reranker?: RerankerProvider;\n};',
+            '  embeddings: EmbeddingProvider;\n  reranker?: RerankerProvider;\n  retrievalCandidateSource?: RetrievalCandidateSource;\n};',
+          );
+          source = source.replace(
+            '    embeddings: ports.embeddings,\n    reranker: ports.reranker,\n    principal: actor,',
+            '    embeddings: ports.embeddings,\n    reranker: ports.reranker,\n    ...(ports.retrievalCandidateSource === undefined\n      ? {}\n      : { candidateSource: ports.retrievalCandidateSource }),\n    principal: actor,',
+          );
+          fs.writeFileSync(appPath, source);
+
+          const testPath = 'packages/application/src/create-app.test.ts';
+          let test = fs.readFileSync(testPath, 'utf8');
+          if (!test.includes("describe('retrieval candidate source port'")) {
+            test += `\n\ndescribe('retrieval candidate source port', () => {\n  it('routes application retrieval through the configured candidate source', async () => {\n    const base = ports();\n    const bootstrap = createKotowariApp(base);\n    const ingested = await bootstrap.ingestDocuments([\n      {\n        relativePath: 'indexed.md',\n        bytes: new TextEncoder().encode('Vendor X is the indexed payment processor.'),\n        mimeType: 'text/markdown',\n      },\n    ]);\n    const app = createKotowariApp({\n      ...base,\n      retrievalCandidateSource: {\n        id: 'application-test-index',\n        async search() {\n          return ingested.claimIds.map((claimId) => ({ claimId }));\n        },\n      },\n    });\n\n    const result = await app.searchKnowledge({ query: 'Vendor X', purpose: 'search' });\n\n    expect(result.hits.length).toBeGreaterThan(0);\n    expect(result.receipt.provenance.source).toBe('application-test-index');\n  });\n});\n`;
+          }
+          fs.writeFileSync(testPath, test);
+          NODE
+      - name: Format and test application
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec prettier --write packages/application/src/create-app.ts packages/application/src/create-app.test.ts
+          pnpm --filter @kotowari/application test
+          pnpm --filter @kotowari/application build
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/application/src/create-app.ts packages/application/src/create-app.test.ts
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'feat(application): wire retrieval candidate source'
+          git push origin HEAD:feat/retrieval-architecture-v2
