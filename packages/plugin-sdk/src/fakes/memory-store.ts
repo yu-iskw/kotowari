@@ -1,4 +1,4 @@
-import { claimValidAt } from '../contracts.js';
+import { claimVisibleAt, normalizeTemporalPerspective } from '../contracts.js';
 import { rankClaimsLexically } from '../lexical-search.js';
 
 import type {
@@ -20,9 +20,12 @@ import type {
   NamespaceId,
   PolicyId,
   PolicyRecord,
+  RetrievalReceipt,
+  RetrievalReceiptId,
+  TemporalPerspective,
   TenantId,
 } from '../contracts.js';
-import type { BlobStore, CanonicalStore } from '../ports.js';
+import type { BlobStore, CanonicalStore, ClaimReadFilter } from '../ports.js';
 
 type EmbeddingRow = { claimId: ClaimId; vector: readonly number[] };
 
@@ -37,12 +40,27 @@ function matchesNamespace<T extends { namespaceId: NamespaceId }>(
   return namespaceId === undefined || record.namespaceId === namespaceId;
 }
 
+function latestClaimKnownAt(
+  versions: readonly Claim[],
+  knownAt: string | undefined,
+): Claim | undefined {
+  if (knownAt === undefined) {
+    return versions.at(-1);
+  }
+  return versions
+    .filter((claim) => claim.bitemporal.recordedAt <= knownAt)
+    .sort((left, right) => left.bitemporal.recordedAt.localeCompare(right.bitemporal.recordedAt))
+    .at(-1);
+}
+
 class MemoryCanonicalStore implements CanonicalStore {
   readonly entities = new Map<EntityId, Entity>();
   readonly evidence = new Map<EvidenceId, Evidence>();
   readonly claims = new Map<ClaimId, Claim>();
+  readonly claimHistory = new Map<ClaimId, Claim[]>();
   readonly decisions = new Map<DecisionId, Decision>();
   readonly snapshots = new Map<ContextId, ContextSnapshot>();
+  readonly retrievalReceipts = new Map<RetrievalReceiptId, RetrievalReceipt>();
   readonly memory = new Map<string, MemoryRecord>();
   readonly policies = new Map<PolicyId, PolicyRecord>();
   readonly conflicts = new Map<string, Conflict>();
@@ -72,6 +90,7 @@ class MemoryCanonicalStore implements CanonicalStore {
   }
 
   async assertClaim(claim: Claim): Promise<void> {
+    this.rememberCurrentClaim(claim.id);
     this.claims.set(claim.id, claim);
   }
 
@@ -79,20 +98,27 @@ class MemoryCanonicalStore implements CanonicalStore {
     return this.claims.get(id);
   }
 
-  async listClaims(filter: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
-    asOf?: string;
-  }): Promise<readonly Claim[]> {
-    return [...this.claims.values()].filter(
-      (claim) =>
-        matchesTenant(claim, filter.tenantId) &&
-        matchesNamespace(claim, filter.namespaceId) &&
-        claimValidAt(claim, filter.asOf),
-    );
+  async listClaims(filter: ClaimReadFilter): Promise<readonly Claim[]> {
+    const temporal = normalizeTemporalPerspective(filter.temporal, filter.asOf);
+    const claims: Claim[] = [];
+    for (const current of this.claims.values()) {
+      if (
+        !matchesTenant(current, filter.tenantId) ||
+        !matchesNamespace(current, filter.namespaceId)
+      ) {
+        continue;
+      }
+      const versions = [...(this.claimHistory.get(current.id) ?? []), current];
+      const visible = latestClaimKnownAt(versions, temporal.knownAt);
+      if (visible !== undefined && claimVisibleAt(visible, temporal)) {
+        claims.push(visible);
+      }
+    }
+    return claims;
   }
 
   async retractClaim(claim: Claim): Promise<void> {
+    this.rememberCurrentClaim(claim.id);
     this.claims.set(claim.id, claim);
   }
 
@@ -120,6 +146,14 @@ class MemoryCanonicalStore implements CanonicalStore {
 
   async getContextSnapshot(id: ContextId): Promise<ContextSnapshot | undefined> {
     return this.snapshots.get(id);
+  }
+
+  async putRetrievalReceipt(receipt: RetrievalReceipt): Promise<void> {
+    this.retrievalReceipts.set(receipt.id, receipt);
+  }
+
+  async getRetrievalReceipt(id: RetrievalReceiptId): Promise<RetrievalReceipt | undefined> {
+    return this.retrievalReceipts.get(id);
   }
 
   async putMemory(record: MemoryRecord): Promise<void> {
@@ -203,25 +237,32 @@ class MemoryCanonicalStore implements CanonicalStore {
     this.embeddings.clear();
   }
 
-  async searchLexical(input: {
-    tenantId: TenantId;
-    namespaceId?: NamespaceId;
+  async searchLexical(input: ClaimReadFilter & {
     query: string;
     limit: number;
-    asOf?: string;
   }): Promise<readonly Claim[]> {
+    const claims = await this.listClaims(input);
     return rankClaimsLexically({
-      claims: [...this.claims.values()],
+      claims,
       query: input.query,
       tenantId: input.tenantId,
       namespaceId: input.namespaceId,
-      asOf: input.asOf,
       limit: input.limit,
     });
   }
 
   async rebuildLexicalProjection(): Promise<void> {
     return;
+  }
+
+  private rememberCurrentClaim(id: ClaimId): void {
+    const current = this.claims.get(id);
+    if (current === undefined) {
+      return;
+    }
+    const history = this.claimHistory.get(id) ?? [];
+    history.push(current);
+    this.claimHistory.set(id, history);
   }
 }
 
