@@ -29,6 +29,11 @@ import {
   replayDecisionCapability,
 } from './decision-capability.js';
 
+import type {
+  DecisionPrecedent,
+  DecisionRecordRequest,
+  DecisionReplay,
+} from './decision-capability.js';
 import type { IngestDocument, IngestResult } from '@kotowari/capability-ingestion';
 import type { EntityResolutionCandidate } from '@kotowari/capability-knowledge';
 import type { ProvODocument } from '@kotowari/capability-provenance';
@@ -55,11 +60,6 @@ import type {
   Queue,
   RerankerProvider,
 } from '@kotowari/plugin-sdk';
-import type {
-  DecisionPrecedent,
-  DecisionRecordRequest,
-  DecisionReplay,
-} from './decision-capability.js';
 
 function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
   const namespaceId = principal.namespaceIds[0];
@@ -94,21 +94,25 @@ export type KotowariAppOptions = {
   profile?: string;
 };
 
+type KnowledgeSearchInput = {
+  query: string;
+  purpose?: string;
+  temporal?: TemporalPerspective;
+  /** @deprecated Use temporal.validAt. */
+  asOf?: string;
+};
+
+type ContextBuildInput = {
+  purpose: string;
+  query?: string;
+  temporal?: TemporalPerspective;
+};
+
 export type KotowariApp = {
   ingestDocuments: (documents: readonly IngestDocument[]) => Promise<IngestResult>;
   ingestPath?: (target: string) => Promise<IngestResult>;
-  searchKnowledge: (input: {
-    query: string;
-    purpose?: string;
-    temporal?: TemporalPerspective;
-    /** @deprecated Use temporal.validAt. */
-    asOf?: string;
-  }) => Promise<RetrievalResult>;
-  buildContext: (input: {
-    purpose: string;
-    query?: string;
-    temporal?: TemporalPerspective;
-  }) => Promise<ContextSnapshot>;
+  searchKnowledge: (input: KnowledgeSearchInput) => Promise<RetrievalResult>;
+  buildContext: (input: ContextBuildInput) => Promise<ContextSnapshot>;
   recordDecision: (input: DecisionRecordRequest) => Promise<Decision>;
   getDecision: (id: string) => Promise<Decision | undefined>;
   listDecisions: () => Promise<readonly Decision[]>;
@@ -175,6 +179,51 @@ function stringArrayFromUnknown(value: unknown): readonly string[] {
   return value.filter((item) => typeof item === 'string');
 }
 
+async function runRetrieve(
+  ports: KotowariPorts,
+  actor: Principal,
+  input: KnowledgeSearchInput,
+): Promise<RetrievalResult> {
+  return retrieve({
+    store: ports.store,
+    embeddings: ports.embeddings,
+    reranker: ports.reranker,
+    principal: actor,
+    authz: { tenantId: actor.tenantId, purpose: input.purpose },
+    query: input.query,
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+    ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
+    ...(input.asOf === undefined ? {} : { asOf: input.asOf }),
+    plan: DEFAULT_RETRIEVAL_PLAN,
+  });
+}
+
+async function captureContext(
+  ports: KotowariPorts,
+  actor: Principal,
+  input: ContextBuildInput,
+  policies: readonly PolicyRecord[],
+): Promise<ContextSnapshot> {
+  const retrieval = await runRetrieve(ports, actor, {
+    query: input.query ?? input.purpose,
+    purpose: input.purpose,
+    ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
+  });
+  return assembleContext({
+    store: ports.store,
+    principal: actor,
+    purpose: input.purpose,
+    temporal: retrieval.receipt.temporal,
+    retrievalReceiptId: retrieval.receipt.id,
+    policyVersionIds: policies.map(policyVersionKey),
+    items: retrieval.hits.map((hit) => ({
+      claimId: hit.claim.id,
+      evidenceIds: hit.evidenceIds,
+    })),
+    budget: DEFAULT_RETRIEVAL_PLAN.budget,
+  });
+}
+
 export function createKotowariApp(
   ports: KotowariPorts,
   options: KotowariAppOptions = {},
@@ -183,54 +232,6 @@ export function createKotowariApp(
 
   async function current(): Promise<Principal> {
     return principalSlot.getStore() ?? ports.identity.currentPrincipal();
-  }
-
-  async function runRetrieve(
-    actor: Principal,
-    input: {
-      query: string;
-      purpose?: string;
-      temporal?: TemporalPerspective;
-      asOf?: string;
-    },
-  ): Promise<RetrievalResult> {
-    return retrieve({
-      store: ports.store,
-      embeddings: ports.embeddings,
-      reranker: ports.reranker,
-      principal: actor,
-      authz: { tenantId: actor.tenantId, purpose: input.purpose },
-      query: input.query,
-      ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
-      ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
-      ...(input.asOf === undefined ? {} : { asOf: input.asOf }),
-      plan: DEFAULT_RETRIEVAL_PLAN,
-    });
-  }
-
-  async function captureContext(
-    actor: Principal,
-    input: { purpose: string; query?: string; temporal?: TemporalPerspective },
-    policies: readonly PolicyRecord[],
-  ): Promise<ContextSnapshot> {
-    const retrieval = await runRetrieve(actor, {
-      query: input.query ?? input.purpose,
-      purpose: input.purpose,
-      ...(input.temporal === undefined ? {} : { temporal: input.temporal }),
-    });
-    return assembleContext({
-      store: ports.store,
-      principal: actor,
-      purpose: input.purpose,
-      temporal: retrieval.receipt.temporal,
-      retrievalReceiptId: retrieval.receipt.id,
-      policyVersionIds: policies.map(policyVersionKey),
-      items: retrieval.hits.map((hit) => ({
-        claimId: hit.claim.id,
-        evidenceIds: hit.evidenceIds,
-      })),
-      budget: DEFAULT_RETRIEVAL_PLAN.budget,
-    });
   }
 
   const profile = options.profile ?? 'standalone';
@@ -259,7 +260,7 @@ export function createKotowariApp(
     },
 
     async searchKnowledge(input) {
-      return runRetrieve(await current(), input);
+      return runRetrieve(ports, await current(), input);
     },
 
     async buildContext(input) {
@@ -270,7 +271,7 @@ export function createKotowariApp(
         namespaceId: actor.namespaceIds[0],
         at: input.temporal?.knownAt ?? input.temporal?.validAt,
       });
-      return captureContext(actor, input, policies);
+      return captureContext(ports, actor, input, policies);
     },
 
     async recordDecision(input) {
@@ -278,7 +279,8 @@ export function createKotowariApp(
         store: ports.store,
         principal: await current(),
         request: input,
-        captureContext,
+        captureContext: (actor, request, policies) =>
+          captureContext(ports, actor, request, policies),
       });
     },
 
