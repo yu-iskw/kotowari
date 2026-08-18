@@ -12,6 +12,7 @@ describe('public', () => {
       Object.keys(OPENAPI_SNAPSHOT.paths).sort((left, right) => left.localeCompare(right)),
     ).toEqual(
       [
+        '/v1/conflicts',
         '/v1/context/build',
         '/v1/decisions',
         '/v1/decisions/{id}',
@@ -21,7 +22,9 @@ describe('public', () => {
         '/v1/evidence/{id}/content',
         '/v1/health',
         '/v1/ingest',
+        '/v1/jobs',
         '/v1/knowledge/search',
+        '/v1/me',
         '/v1/memory',
       ].sort((left, right) => left.localeCompare(right)),
     );

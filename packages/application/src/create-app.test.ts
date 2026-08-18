@@ -20,6 +20,7 @@ function ports() {
         jobs.length = 0;
         return drained;
       },
+      listPending: async () => [...jobs],
     },
     extraction: {
       id: 'test-extract',
@@ -140,6 +141,7 @@ describe('S10 classified omission', () => {
     expect(result.hits).toEqual([]);
     expect(result.omitted.length).toBeGreaterThan(0);
     expect(result.omitted[0]?.count).toBeGreaterThan(0);
+    expect(result.omitted[0]?.reason).toBe('policy_filter');
   });
 });
 
@@ -180,6 +182,88 @@ describe('S2 evidence locker and S8 audit export', () => {
     expect(prov?.['@type']).toBeDefined();
     expect(decision.inputContextSnapshot).toBeDefined();
     expect(decision.applicablePolicyIds.length).toBeGreaterThan(0);
+  });
+});
+
+describe('S17 competing truths', () => {
+  it('S17 ingest overlap persists a conflict and retrieval prefers preferredClaimId', async () => {
+    const base = ports();
+    const overlapping = {
+      ...base,
+      extraction: {
+        id: 'overlap-extract',
+        extract: async () => ({
+          drafts: [
+            {
+              subjectLabel: 'Alice Chen',
+              predicate: 'is',
+              objectLiteral: 'CEO of Vendor X as of 2024',
+              confidence: 0.9,
+            },
+            {
+              subjectLabel: 'Alice Chen',
+              predicate: 'is',
+              objectLiteral: 'not CEO of Vendor X as of 2025',
+              confidence: 0.8,
+            },
+          ],
+        }),
+      },
+    };
+    const app = createKotowariApp(overlapping);
+    await app.ingestDocuments([
+      {
+        relativePath: 'people.md',
+        bytes: new TextEncoder().encode('Alice Chen personnel notes.'),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    const conflicts = await app.listConflicts();
+    expect(conflicts.length).toBeGreaterThan(0);
+    const claimIds = conflicts[0]?.claimIds ?? [];
+    expect(claimIds.length).toBeGreaterThanOrEqual(2);
+    const preferredClaimId = claimIds[0] ?? '';
+    const secondId = claimIds[1];
+    expect(secondId).toBeDefined();
+    const suppressedId = claimIds.find((id) => id !== preferredClaimId);
+    expect(suppressedId).toBeDefined();
+    await app.resolveConflict({
+      claimIds: [preferredClaimId, secondId ?? preferredClaimId],
+      preferredClaimId,
+      reason: 'Later filing is authoritative',
+    });
+    expect(await app.listConflicts()).toEqual([]);
+    const result = await app.searchKnowledge({ query: 'Alice Chen CEO', purpose: 'search' });
+    expect(result.hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
+    expect(result.hits.some((hit) => hit.claimId === suppressedId)).toBe(false);
+  });
+});
+
+describe('S3 decision precedents', () => {
+  it('S3 searchDecisions finds a recorded outcome by query text', async () => {
+    const app = createKotowariApp(ports());
+    await app.ingestDocuments([
+      {
+        relativePath: 'note.md',
+        bytes: new TextEncoder().encode(
+          'Vendor X is the payment processor for the HIPAA workload.',
+        ),
+        mimeType: 'text/markdown',
+      },
+    ]);
+    await app.recordDecision({
+      purpose: 'library-choice',
+      query: 'zebra-pluto-precedent',
+      selectedOutcome: 'use_vendor_x',
+      confidence: 0.8,
+      rationale: 'HIPAA workload needs a sourced processor',
+    });
+    const hits = await app.searchDecisions({ query: 'zebra-pluto-precedent' });
+    expect(hits.some((decision) => decision.selectedOutcome === 'use_vendor_x')).toBe(true);
+    expect(hits.some((decision) => decision.policyTags.includes('q:zebra-pluto-precedent'))).toBe(
+      false,
+    );
+    expect(await app.searchDecisions({ query: 'unrelated widget' })).toEqual([]);
   });
 });
 

@@ -23,6 +23,7 @@ export type Decision = ScopedMetadata & {
   model?: string;
   runtimeId?: string;
   rationale?: string;
+  query?: string;
   resultingActionIds: readonly string[];
   observedOutcome?: string;
   policyEvaluations: readonly PolicyEvaluation[];

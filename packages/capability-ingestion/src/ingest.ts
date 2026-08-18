@@ -4,6 +4,7 @@ import {
   asEvidenceId,
   asIsoTimestamp,
   buildClaimAsserted,
+  buildConflictDetected,
   buildEntity,
   buildEvidenceInserted,
   claimText,
@@ -13,7 +14,7 @@ import {
   nowIso,
 } from '@kotowari/kernel';
 
-import type { Claim, DomainEvent, Entity, Principal } from '@kotowari/kernel';
+import type { Claim, ClaimId, Conflict, DomainEvent, Entity, Principal } from '@kotowari/kernel';
 import type {
   BlobStore,
   CanonicalStore,
@@ -156,6 +157,7 @@ async function persistExtractedClaims(
     namespaceId: metadata.namespaceId,
   });
   const pending: { toStore: Claim; event: DomainEvent }[] = [];
+  const conflicts: Conflict[] = [];
   const entityIds: string[] = [];
 
   for (const draft of drafts) {
@@ -177,10 +179,30 @@ async function persistExtractedClaims(
     const overlapping = [...existing, ...pending.map((item) => item.toStore)].filter((other) =>
       detectClaimOverlap(other, claim),
     );
-    pending.push({
-      toStore: overlapping.length > 0 ? { ...claim, status: 'conflicted' as const } : claim,
-      event,
-    });
+    if (overlapping.length > 0) {
+      const overlapIds = new Set(overlapping.map((other) => other.id));
+      for (const item of pending) {
+        if (overlapIds.has(item.toStore.id)) {
+          item.toStore = { ...item.toStore, status: 'conflicted' };
+        }
+      }
+      pending.push({
+        toStore: { ...claim, status: 'conflicted' },
+        event,
+      });
+      conflicts.push(
+        buildConflictDetected({
+          metadata,
+          kind: 'value',
+          claimIds: [claim.id, ...overlapping.map((other) => other.id)],
+        }),
+      );
+    } else {
+      pending.push({
+        toStore: claim,
+        event,
+      });
+    }
   }
 
   const claimIds: string[] = [];
@@ -200,6 +222,28 @@ async function persistExtractedClaims(
       await tx.putEmbedding({ claimId: item.toStore.id, vector });
     });
     claimIds.push(item.toStore.id);
+  }
+  const pendingIds = new Set<string>(claimIds);
+  const existingToMark = new Set<ClaimId>();
+  for (const conflict of conflicts) {
+    for (const id of conflict.claimIds) {
+      if (!pendingIds.has(id)) {
+        existingToMark.add(id);
+      }
+    }
+  }
+  if (conflicts.length > 0) {
+    await deps.store.withTransaction(async (tx) => {
+      for (const id of existingToMark) {
+        const loaded = await tx.getClaim(id);
+        if (loaded !== undefined && loaded.status !== 'conflicted') {
+          await tx.assertClaim({ ...loaded, status: 'conflicted' });
+        }
+      }
+      for (const conflict of conflicts) {
+        await tx.putConflict(conflict);
+      }
+    });
   }
   return { claimIds, entityIds };
 }

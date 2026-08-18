@@ -27,6 +27,7 @@
     "test": "vitest run",
     "verify": "pnpm build && pnpm lint:eslint && pnpm knip && pnpm test",
     "verify:parity": "vitest run --project @kotowari/server profile-parity",
+    "verify:parity:live": "vitest run --project @kotowari/server live-compose-parity",
     "coverage": "vitest run --coverage",
     "coverage:watch": "vitest --coverage"
   },

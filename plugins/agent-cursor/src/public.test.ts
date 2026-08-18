@@ -41,7 +41,12 @@ describe('retrieve profile tool list snapshot', () => {
     const jsonNames = toolsJson.tools.map((tool) => tool.name);
 
     expect(retrieveToolNames).toEqual(jsonNames);
-    expect(retrieveToolNames).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
+    expect(retrieveToolNames).toEqual([
+      'search_knowledge',
+      'search_memory',
+      'record_decision',
+      'search_decisions',
+    ]);
     const decision = retrieveToolsDocument.tools.find((tool) => tool.name === 'record_decision');
     expect(decision?.inputSchema).toMatchObject({ required: ['selectedOutcome'] });
 

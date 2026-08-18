@@ -87,6 +87,20 @@ export const TOOL_SCHEMAS: Record<string, McpToolSchema> = {
       additionalProperties: false,
     },
   },
+  search_decisions: {
+    description: 'Search recorded decisions as precedents by outcome, purpose, or rationale.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Keywords matching decision outcome, purpose, query, or rationale.',
+        },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+  },
   ingest_path: {
     description: 'Ingest a filesystem path or inline document into the workspace.',
     inputSchema: {

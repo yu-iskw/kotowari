@@ -1,4 +1,4 @@
-import { dispatchIngest } from '@kotowari/application';
+import { ApplicationError, dispatchIngest, requireClaimIds } from '@kotowari/application';
 
 import type { KotowariApp } from '@kotowari/application';
 
@@ -11,6 +11,9 @@ export const OPENAPI_SNAPSHOT = {
     '/v1/knowledge/search': { post: {} },
     '/v1/context/build': { post: {} },
     '/v1/decisions': { get: {}, post: {} },
+    '/v1/conflicts': { get: {}, post: {} },
+    '/v1/jobs': { get: {} },
+    '/v1/me': { get: {} },
     '/v1/memory': { get: {}, post: {} },
     '/v1/evidence/{id}': { get: {} },
     '/v1/evidence/{id}/content': { get: {} },
@@ -99,7 +102,27 @@ const ROUTES: Record<string, RouteHandler> = {
       rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
     }),
   }),
-  'GET /v1/decisions': async (app) => ({ status: 200, json: await app.listDecisions() }),
+  'GET /v1/decisions': async (app, body) => {
+    const query = asString(body['query']);
+    if (query.length > 0) {
+      return { status: 200, json: await app.searchDecisions({ query }) };
+    }
+    return { status: 200, json: await app.listDecisions() };
+  },
+  'GET /v1/conflicts': async (app) => ({ status: 200, json: await app.listConflicts() }),
+  'POST /v1/conflicts': async (app, body) => ({
+    status: 201,
+    json: await app.resolveConflict({
+      claimIds: requireClaimIds(body['claimIds']),
+      preferredClaimId: asString(body['preferredClaimId']),
+      reason: asString(body['reason']),
+    }),
+  }),
+  'GET /v1/jobs': async (app) => ({ status: 200, json: await app.listJobs() }),
+  'GET /v1/me': async (app) => {
+    const principal = await app.currentPrincipal();
+    return { status: 200, json: principal };
+  },
   'POST /v1/memory': async (app, body) => ({
     status: 201,
     json: await app.recordMemory({ body: asString(body['body']) }),
@@ -197,6 +220,13 @@ async function dispatch(app: KotowariApp, request: RestRequest): Promise<RestRes
   return { status: 404, json: { error: `No route for ${request.method} ${request.pathname}` } };
 }
 
-export function handleRest(app: KotowariApp, request: RestRequest): Promise<RestResponse> {
-  return app.runAsRequest(request.headers ?? {}, () => dispatch(app, request));
+export async function handleRest(app: KotowariApp, request: RestRequest): Promise<RestResponse> {
+  try {
+    return await app.runAsRequest(request.headers ?? {}, () => dispatch(app, request));
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      return { status: error.status, json: { error: error.message } };
+    }
+    throw error;
+  }
 }

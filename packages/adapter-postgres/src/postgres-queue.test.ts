@@ -9,6 +9,7 @@ describe('createPostgresQueue', () => {
     const queue = createPostgresQueue(client);
     await queue.enqueue({ kind: 'sync', payload: { id: '1' } });
     await queue.enqueue({ kind: 'notify', payload: { message: 'hello' } });
+    expect(await queue.listPending()).toHaveLength(2);
 
     const drained = await queue.drain();
     expect(drained).toEqual([

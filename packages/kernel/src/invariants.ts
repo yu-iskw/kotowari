@@ -6,7 +6,7 @@ import { classificationRank } from './scoped-metadata.js';
 
 import type { ClaimId, EvidenceId } from './branded-ids.js';
 import type { Claim, ClaimStatus } from './claim.js';
-import type { Conflict, ConflictResolution } from './conflict.js';
+import type { Conflict, ConflictKind, ConflictResolution } from './conflict.js';
 import type { ContextSnapshot, PolicyEvaluation } from './context.js';
 import type {
   AssertClaimInput,
@@ -216,6 +216,7 @@ export function buildDecisionRecorded(input: RecordDecisionInput): {
     ...(input.model === undefined ? {} : { model: input.model }),
     ...(input.runtimeId === undefined ? {} : { runtimeId: input.runtimeId }),
     ...(input.rationale === undefined ? {} : { rationale: input.rationale }),
+    ...(input.query === undefined ? {} : { query: input.query }),
     ...(input.observedOutcome === undefined ? {} : { observedOutcome: input.observedOutcome }),
     policyEvaluations: input.policyEvaluations,
     recordedAt,
@@ -281,6 +282,23 @@ export function buildPolicyEvaluated(input: EvaluatePolicyInput): {
   };
 }
 
+export function buildConflictDetected(input: {
+  metadata: ScopedMetadata;
+  kind: ConflictKind;
+  claimIds: readonly ClaimId[];
+}): Conflict {
+  if (input.claimIds.length < 2) {
+    throw new KernelError('INVALID_ID', 'A conflict requires at least two claims');
+  }
+  return {
+    ...input.metadata,
+    id: newId('ConflictId'),
+    kind: input.kind,
+    claimIds: input.claimIds,
+    recordedAt: nowIso(),
+  };
+}
+
 export function buildConflictResolved(input: ResolveConflictInput): {
   conflict: Conflict;
   resolution: ConflictResolution;
@@ -294,7 +312,7 @@ export function buildConflictResolved(input: ResolveConflictInput): {
     throw new KernelError('INVALID_ID', 'preferredClaimId must be one of the conflicting claims');
   }
   const recordedAt = nowIso();
-  const id = newId('ConflictId');
+  const id = input.conflictId ?? newId('ConflictId');
   const conflict: Conflict = {
     ...input.metadata,
     id,

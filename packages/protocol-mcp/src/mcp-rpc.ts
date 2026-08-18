@@ -1,9 +1,12 @@
-import { dispatchIngest } from '@kotowari/application';
+import {
+  ApplicationError,
+  dispatchIngest,
+  requireClaimIds,
+  type KotowariApp,
+} from '@kotowari/application';
 
 import { PROFILE_TOOLS, type McpProfile } from './mcp-profiles.js';
 import { toolDescriptor } from './tool-schemas.js';
-
-import type { KotowariApp } from '@kotowari/application';
 
 export const MCP_PROTOCOL_VERSION = '2026-07-28';
 
@@ -39,17 +42,6 @@ function asString(value: unknown, fallback = ''): string {
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' ? value : fallback;
-}
-
-function asClaimIds(value: unknown): [string, string, ...string[]] {
-  if (
-    Array.isArray(value) &&
-    value.length >= 2 &&
-    value.every((item) => typeof item === 'string')
-  ) {
-    return value as [string, string, ...string[]];
-  }
-  return ['', ''];
 }
 
 function unknownMethodLabel(rpcMethod: string | undefined): string {
@@ -89,6 +81,10 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
       }),
   ],
   ['search_memory', async (app, args) => app.searchMemory({ query: asString(args['query']) })],
+  [
+    'search_decisions',
+    async (app, args) => app.searchDecisions({ query: asString(args['query']) }),
+  ],
   ['record_memory', async (app, args) => app.recordMemory({ body: asString(args['body']) })],
   [
     'record_decision',
@@ -106,7 +102,7 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
     'resolve_conflict',
     async (app, args) =>
       app.resolveConflict({
-        claimIds: asClaimIds(args['claimIds']),
+        claimIds: requireClaimIds(args['claimIds']),
         preferredClaimId: asString(args['preferredClaimId']),
         reason: asString(args['reason']),
       }),
@@ -128,12 +124,36 @@ async function dispatchTool(
   return handler(app, args);
 }
 
+function rpcErrorFromApplication(error: ApplicationError): { code: number; message: string } {
+  const code = error.status === 401 ? -32002 : error.status === 403 ? -32003 : -32602;
+  return { code, message: error.message };
+}
+
+async function callAllowedTool(input: {
+  app: KotowariApp;
+  id: string | number | null;
+  rpcName: string;
+  args: Record<string, unknown>;
+}): Promise<McpRpcResult> {
+  try {
+    const result = await dispatchTool(input.app, input.rpcName, input.args);
+    return { jsonrpc: '2.0', id: input.id, result };
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      return { jsonrpc: '2.0', id: input.id, error: rpcErrorFromApplication(error) };
+    }
+    throw error;
+  }
+}
+
 export function spyApplicationCommandName(toolName: string): string {
   switch (toolName) {
     case 'search_knowledge':
       return 'searchKnowledge';
     case 'search_memory':
       return 'searchMemory';
+    case 'search_decisions':
+      return 'searchDecisions';
     case 'record_decision':
       return 'recordDecision';
     case 'record_memory':
@@ -206,8 +226,7 @@ export async function handleMcpRpc(input: {
       };
     }
     const args = body.params?.arguments === undefined ? {} : body.params.arguments;
-    const result = await dispatchTool(input.app, rpcName, args);
-    return { jsonrpc: '2.0', id, result };
+    return callAllowedTool({ app: input.app, id, rpcName, args });
   }
 
   return {

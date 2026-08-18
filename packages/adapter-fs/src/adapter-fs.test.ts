@@ -26,6 +26,7 @@ describe('createEmbeddedQueue', () => {
     const queue = createEmbeddedQueue();
     await queue.enqueue({ kind: 'sync', payload: { id: '1' } });
     await queue.enqueue({ kind: 'notify', payload: { message: 'hello' } });
+    expect(await queue.listPending()).toHaveLength(2);
 
     const drained = await queue.drain();
     expect(drained).toEqual([
@@ -57,5 +58,7 @@ describe('createDevOidcIdentityProvider', () => {
     expect(guest?.clearance).toBe('public');
     const local = await provider.authenticate?.({ authorization: 'Bearer dev-local' });
     expect(local).toEqual(localStandalonePrincipal());
+    const missing = await provider.authenticate?.({});
+    expect(missing?.roles).toContain('guest');
   });
 });

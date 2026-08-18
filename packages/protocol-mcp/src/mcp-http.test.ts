@@ -1,3 +1,4 @@
+import { ApplicationError, type KotowariApp } from '@kotowari/application';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,8 +8,6 @@ import {
   PROFILE_TOOLS,
   spyApplicationCommandName,
 } from './public.js';
-
-import type { KotowariApp } from '@kotowari/application';
 
 function fakeApp(): KotowariApp {
   return {
@@ -31,6 +30,9 @@ function fakeApp(): KotowariApp {
     recordDecision: async () => ({ id: 'd1' }) as never,
     getDecision: async () => undefined,
     listDecisions: async () => [],
+    searchDecisions: async () => [],
+    listConflicts: async () => [],
+    listJobs: async () => [],
     recordMemory: async () => ({ id: 'm1' }) as never,
     searchMemory: async () => [],
     putPolicy: async () => ({}) as never,
@@ -152,5 +154,31 @@ describe('S2 MCP ingest and S12 admin tools', () => {
     expect(result.status).toBe(200);
     const json = result.json as { result: { policies: { id: string }[] } };
     expect(json.result.policies[0]?.id).toBe('p1');
+  });
+
+  it('maps ApplicationError guest writes to HTTP 403', async () => {
+    const app = fakeApp();
+    app.recordMemory = async () => {
+      throw new ApplicationError('Guest cannot write', 403);
+    };
+    const result = await handleMcpHttp({
+      profile: 'memory',
+      headers: {
+        'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+        'Mcp-Method': 'tools/call',
+        'Mcp-Name': 'record_memory',
+      },
+      body: {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'tools/call',
+        params: { name: 'record_memory', arguments: { body: 'nope' } },
+      },
+      app,
+    });
+    expect(result.status).toBe(403);
+    const error = (result.json as { error: { code: number; message: string } }).error;
+    expect(error.code).toBe(-32003);
+    expect(error.message).toBe('Guest cannot write');
   });
 });

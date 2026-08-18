@@ -42,8 +42,13 @@ function asObject(value: unknown): {
 
 function rpcToHttp(rpc: McpRpcResult): McpHttpOutput {
   if (rpc.error !== undefined) {
-    const status = rpc.error.code === -32001 ? 403 : 400;
-    return { status, json: rpc };
+    if (rpc.error.code === -32002) {
+      return { status: 401, json: rpc };
+    }
+    if (rpc.error.code === -32001 || rpc.error.code === -32003) {
+      return { status: 403, json: rpc };
+    }
+    return { status: 400, json: rpc };
   }
   return { status: 200, json: rpc };
 }

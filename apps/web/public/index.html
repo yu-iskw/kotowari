@@ -12,7 +12,8 @@
         line-height: 1.45;
       }
       input,
-      button {
+      button,
+      select {
         font: inherit;
       }
       .hits {
@@ -23,62 +24,100 @@
       a {
         color: #1a4a7a;
       }
+      .row {
+        margin: 0.6rem 0;
+      }
     </style>
   </head>
   <body>
     <h1>Kotowari</h1>
-    <p>Ingest a folder, search with sources, record a decision.</p>
-    <p>
-      <button id="ingest" type="button">Ingest testdata</button>
+    <p>Ingest a folder, search with sources, record a decision, resolve conflicts.</p>
+    <p class="row">
+      <label for="token">Sign in</label>
+      <select id="token">
+        <option value="">Guest (no token)</option>
+        <option value="dev-local">dev-local</option>
+        <option value="dev-guest">dev-guest</option>
+      </select>
+      <button id="whoami" type="button">Who am I</button>
     </p>
-    <p>
+    <p class="row">
+      <button id="ingest" type="button">Ingest testdata</button>
+      <button id="jobs" type="button">Job queue</button>
+    </p>
+    <p class="row">
       <input id="q" size="48" placeholder="What did we decide about vendor X?" />
       <button id="search" type="button">Search</button>
+      <button id="precedents" type="button">Find precedents</button>
     </p>
-    <p>
+    <p class="row">
       <input id="outcome" placeholder="Record an outcome" />
       <button id="decide" type="button">Record decision</button>
+    </p>
+    <p class="row">
+      <button id="conflicts" type="button">List conflicts</button>
+      <input id="preferred" size="20" placeholder="Preferred claim id" />
+      <button id="resolve" type="button">Resolve</button>
     </p>
     <div class="hits" id="out">Empty workspace. Ingest a folder, then search.</div>
     <script>
       const out = document.getElementById('out');
       let lastDecisionId = '';
+      let lastConflict = null;
+      function tokenValue() {
+        return document.getElementById('token').value;
+      }
+      function headers(json) {
+        const result = {};
+        if (json) {
+          result['content-type'] = 'application/json';
+        }
+        const token = tokenValue();
+        if (token) {
+          result.authorization = 'Bearer ' + token;
+        }
+        return result;
+      }
       function show(value) {
         out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
       }
+      async function read(path, options) {
+        const res = await fetch(path, options);
+        const json = await res.json();
+        if (!res.ok) {
+          return { status: res.status, error: json.error ?? json };
+        }
+        return json;
+      }
+      document.getElementById('whoami').onclick = async () => {
+        show(await read('/v1/me', { headers: headers(false) }));
+      };
       document.getElementById('ingest').onclick = async () => {
-        const res = await fetch('/v1/ingest', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ path: 'testdata/vendor-x' }),
-        });
-        show(await res.json());
+        show(
+          await read('/v1/ingest', {
+            method: 'POST',
+            headers: headers(true),
+            body: JSON.stringify({ path: 'testdata/vendor-x' }),
+          }),
+        );
+      };
+      document.getElementById('jobs').onclick = async () => {
+        show(await read('/v1/jobs', { headers: headers(false) }));
       };
       document.getElementById('search').onclick = async () => {
         const query = document.getElementById('q').value;
-        const res = await fetch('/v1/knowledge/search', {
+        const result = await read('/v1/knowledge/search', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: headers(true),
           body: JSON.stringify({ query, purpose: 'search' }),
         });
-        const result = await res.json();
         const hits = result.hits ?? [];
-        const lines = hits.map((hit) => {
-          const evidence = (hit.evidenceIds ?? [])
-            .map((id) => id + ' — open /v1/evidence/' + id + '/content')
-            .join(', ');
-          return (
-            (hit.claimId ?? '') +
-            ' score ' +
-            (hit.score ?? '') +
-            '\n  why: ' +
-            (hit.whySelected ?? '') +
-            '\n  evidence: ' +
-            evidence
-          );
-        });
-        show(lines.length ? lines.join('\n\n') : result);
         out.innerHTML = '';
+        if (result.omitted && result.omitted.length) {
+          const omit = document.createElement('p');
+          omit.textContent = 'Omitted by policy_filter: ' + JSON.stringify(result.omitted);
+          out.appendChild(omit);
+        }
         for (const hit of hits) {
           const block = document.createElement('div');
           const title = document.createElement('p');
@@ -90,8 +129,7 @@
             link.textContent = 'Open source ' + id;
             link.onclick = async (event) => {
               event.preventDefault();
-              const content = await fetch(link.href);
-              show(await content.json());
+              show(await read(link.href, { headers: headers(false) }));
             };
             block.appendChild(link);
             block.appendChild(document.createElement('br'));
@@ -102,21 +140,28 @@
           show(result);
         }
       };
+      document.getElementById('precedents').onclick = async () => {
+        const query = document.getElementById('q').value;
+        show(
+          await read('/v1/decisions?query=' + encodeURIComponent(query), {
+            headers: headers(false),
+          }),
+        );
+      };
       document.getElementById('decide').onclick = async () => {
         const query = document.getElementById('q').value;
         const selectedOutcome = document.getElementById('outcome').value;
-        const res = await fetch('/v1/decisions', {
+        const decision = await read('/v1/decisions', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: headers(true),
           body: JSON.stringify({ purpose: 'search', query, selectedOutcome, confidence: 0.7 }),
         });
-        const decision = await res.json();
         lastDecisionId = decision.id ?? '';
         const audit = lastDecisionId
-          ? await (await fetch('/v1/decisions/' + lastDecisionId)).json()
+          ? await read('/v1/decisions/' + lastDecisionId, { headers: headers(false) })
           : decision;
         const prov = lastDecisionId
-          ? await (await fetch('/v1/decisions/' + lastDecisionId + '/prov')).json()
+          ? await read('/v1/decisions/' + lastDecisionId + '/prov', { headers: headers(false) })
           : {};
         show({
           decision: audit,
@@ -128,6 +173,30 @@
           prov,
           exportUrl: lastDecisionId ? '/v1/decisions/' + lastDecisionId + '/export' : '',
         });
+      };
+      document.getElementById('conflicts').onclick = async () => {
+        const conflicts = await read('/v1/conflicts', { headers: headers(false) });
+        lastConflict = Array.isArray(conflicts) ? conflicts[0] : null;
+        show(conflicts);
+      };
+      document.getElementById('resolve').onclick = async () => {
+        const claimIds = lastConflict?.claimIds ?? [];
+        if (claimIds.length < 2) {
+          show({ error: 'List conflicts first' });
+          return;
+        }
+        const preferredClaimId = document.getElementById('preferred').value || claimIds[0];
+        show(
+          await read('/v1/conflicts', {
+            method: 'POST',
+            headers: headers(true),
+            body: JSON.stringify({
+              claimIds,
+              preferredClaimId,
+              reason: 'Human review in the web UI',
+            }),
+          }),
+        );
       };
     </script>
   </body>
