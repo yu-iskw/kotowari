@@ -69,6 +69,7 @@ export function buildEntity(input: PutEntityInput): Entity {
     id: newId('EntityId'),
     labels: input.labels,
     aliases: input.aliases ?? [],
+    ...(input.externalIds === undefined ? {} : { externalIds: input.externalIds }),
     recordedAt: nowIso(),
     provenance: input.provenance,
   };
@@ -183,6 +184,9 @@ export function buildEntityMerged(
   if (input.absorbedEntityIds.length === 0) {
     throw new KernelError('INVALID_ID', 'entity.merged requires absorbed entity ids');
   }
+  if (input.absorbedEntityIds.includes(input.survivingEntityId)) {
+    throw new KernelError('INVALID_ID', 'surviving entity cannot also be absorbed');
+  }
   const occurredAt = nowIso();
   return {
     entity: surviving,
@@ -192,6 +196,10 @@ export function buildEntityMerged(
       tenantId: input.metadata.tenantId,
       survivingEntityId: input.survivingEntityId,
       absorbedEntityIds: input.absorbedEntityIds,
+      ...(input.resolutionProposalId === undefined
+        ? {}
+        : { resolutionProposalId: input.resolutionProposalId }),
+      ...(input.reason === undefined ? {} : { reason: input.reason }),
       provenance: input.provenance,
       occurredAt,
     },
