@@ -17,5 +17,6 @@ export {
   startComposeServer,
 } from './compose.js';
 export { listenKotowariHttp } from './http-server.js';
+export type { McpHttpSecurityOptions, ServerMcpAuditEvent } from './http-server.js';
 export { collectParitySnapshot, semanticParityEqual } from './parity.js';
 export type { ParitySnapshot } from './parity.js';

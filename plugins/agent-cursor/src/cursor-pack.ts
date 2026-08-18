@@ -20,16 +20,6 @@ export type CursorPluginManifest = {
   >;
 };
 
-export type McpToolDescriptor = {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-};
-
-export type McpToolsDocument = {
-  tools: McpToolDescriptor[];
-};
-
 function readJson<T>(absolutePath: string): T {
   const raw = readFileSync(absolutePath, 'utf8');
   return JSON.parse(raw) as T;
@@ -37,12 +27,4 @@ function readJson<T>(absolutePath: string): T {
 
 export const cursorPluginManifest: CursorPluginManifest = readJson(
   join(packageRoot, '.cursor-plugin/plugin.json'),
-);
-
-export const retrieveToolsDocument: McpToolsDocument = readJson(
-  join(packageRoot, 'src/generated/tools.json'),
-);
-
-export const retrieveToolNames: readonly string[] = retrieveToolsDocument.tools.map(
-  (tool) => tool.name,
 );

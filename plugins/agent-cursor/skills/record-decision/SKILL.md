@@ -5,6 +5,8 @@ description: Record an explicit decision with selectedOutcome, rationale, and a 
 
 # Record decision
 
+`record_decision` is part of the default standalone `personal` MCP preset, so an individual user gets decision recording from the same local Kotowari MCP server used for knowledge and memory. Enterprise deployments continue to expose decision writes through the independently scoped `decision-write` HTTP profile.
+
 ## When to record
 
 Call `record_decision` when:
@@ -29,7 +31,7 @@ Do **not** call this tool for exploratory reasoning, tentative suggestions, or i
 1. Search knowledge (`search_knowledge`) to gather sourced facts.
 2. Optionally search memory (`search_memory`) for prior agent context.
 3. Present options to the user when the choice is not already explicit.
-4. After confirmation, call `record_decision` with `selectedOutcome`.
+4. After confirmation, call `record_decision` with `selectedOutcome` and all relevant alternatives.
 5. Tell the user the decision was recorded.
 
 Never persist hidden chain-of-thought.

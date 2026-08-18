@@ -686,22 +686,34 @@ MCP is a **transport adapter**. Python/TS MCP SDKs must not own domain logic. Se
 **Protocol facts used by Kotowari**
 
 - Stateless core: no required `initialize` handshake, no `Mcp-Session-Id` on the core path.
-- Streamable HTTP POST requires `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`. Header/body mismatch → reject (`-32020`).
-- Optional `server/discover`. Per-request `_meta` carries version/client/capabilities as required by the spec.
-- Authorization: OAuth 2.1-shaped HTTP auth, Protected Resource Metadata, RFC 8707 `resource` audience, RFC 9207 `iss` validation, CIMD preferred, DCR deprecated.
-- Extensions: MCP Apps (UI in host), Tasks (long-running). Elicitation via multi-round-trip `input_required` (no sticky stream).
+- Streamable HTTP uses the standard `MCP-Protocol-Version`, `Mcp-Method`, and named-method `Mcp-Name` headers; the official SDK owns wire validation.
+- `server/discover` is the 2026-07-28 discovery RPC. Per-request `_meta` carries protocol version, client information, and capabilities.
+- Authorization: OAuth-protected enterprise HTTP publishes Protected Resource Metadata and uses audience-bound Bearer tokens plus application/kernel resource authorization.
+- Extensions such as MCP Apps and Tasks remain presentation/orchestration additions rather than domain logic.
 - Stdio remains for **local** IDE plugins talking to standalone Kotowari.
-- Serve 2026-07-28 as primary; optionally accept legacy Streamable HTTP during a deprecation window.
+- Kotowari serves MCP 2026-07-28 in modern-only mode; legacy revisions are intentionally rejected.
 
-**Capability-scoped endpoints** (do not hand every tool to every agent):
+**Exposure topology**
+
+Standalone optimizes for individual UX. `kotowari mcp` and standalone HTTP `/mcp` expose the `personal` preset by default; `--preset readonly` and `--preset advanced` are explicit local alternatives. Enterprise profile names are not standalone CLI concepts.
 
 ```text
-/mcp/retrieve
-/mcp/knowledge
-/mcp/memory
-/mcp/ingestion
-/mcp/admin
+Standalone
+  stdio: kotowari mcp                 -> personal
+  HTTP:  /mcp                         -> personal
+
+Enterprise / enterprise-local Compose
+  /mcp/retrieve
+  /mcp/decision-read
+  /mcp/decision-write
+  /mcp/audit
+  /mcp/memory-write
+  /mcp/curation
+  /mcp/ingestion
+  /mcp/admin
 ```
+
+Profiles are enterprise security/exposure boundaries; presets are standalone UX/safety choices. Both select operations from the same canonical MCP operation registry.
 
 ### Sequence: MCP v2 tool call (HTTP, no session)
 
@@ -712,7 +724,7 @@ sequenceDiagram
   participant Mcp as protocol_mcp
   participant App as Application
   participant Idp as Authorization_server
-  Client->>Idp: OAuth_CIMD_resource_audience
+  Client->>Idp: OAuth_resource_audience
   Idp-->>Client: access_token
   Client->>Gw: POST_mcp_retrieve
   Note over Client,Gw: MCP-Protocol-Version 2026-07-28
@@ -824,7 +836,7 @@ See [ADR-0009](./adr/0009-agent-plugins-thin-mcp.md).
 | Claude Agent SDK                            | helper that points the SDK at Kotowari MCP/HTTP                |
 | ADK / Mastra / DeepAgent / Codex / OpenCode | thin adapters over SDK or MCP                                  |
 
-Skills and tool descriptors are **generated from JSON Schema** so they cannot drift from `contracts.ts`.
+Agent packs stay thin and rely on MCP discovery. Tool contracts come directly from the canonical MCP operation registry rather than duplicated agent-pack schema snapshots.
 
 Compatibility hierarchy:
 

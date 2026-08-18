@@ -1,57 +1,58 @@
-import { createInterface } from 'node:readline';
+import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
-import { isMcpProfile, type McpProfile } from './mcp-profiles.js';
-import { handleMcpRpc } from './mcp-rpc.js';
+import {
+  DEFAULT_MCP_STANDALONE_PRESET,
+  isMcpStandalonePreset,
+  type McpStandalonePreset,
+} from './mcp-presets.js';
+import { createKotowariMcpServer } from './mcp-server.js';
 
+import type { McpOperationName } from './operation-registry.js';
 import type { KotowariApp } from '@kotowari/application';
 import type { Readable, Writable } from 'node:stream';
 
-export function parseMcpProfileFlag(
+export function parseMcpStandalonePresetFlag(
   argv: readonly string[],
-  fallback: McpProfile = 'retrieve',
-): McpProfile {
-  const flagIndex = argv.indexOf('--profile');
-  const value = flagIndex >= 0 ? argv[flagIndex + 1] : undefined;
-  if (value !== undefined && isMcpProfile(value)) {
-    return value;
+  fallback: McpStandalonePreset = DEFAULT_MCP_STANDALONE_PRESET,
+): McpStandalonePreset {
+  if (argv.includes('--profile')) {
+    throw new Error('Standalone MCP uses --preset; enterprise profiles are HTTP endpoints');
   }
-  return fallback;
+  const flagIndex = argv.indexOf('--preset');
+  const value = flagIndex >= 0 ? argv[flagIndex + 1] : undefined;
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!isMcpStandalonePreset(value)) {
+    throw new Error(`Unknown MCP standalone preset: ${value}`);
+  }
+  return value;
 }
 
 export async function handleMcpStdio(input: {
-  profile: McpProfile;
+  name: string;
+  operations: readonly McpOperationName[];
   app: KotowariApp;
   stdin: Readable;
   stdout: Writable;
+  maxBufferSize?: number;
 }): Promise<void> {
-  const lines = createInterface({ input: input.stdin, crlfDelay: Infinity });
-  for await (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) {
-      continue;
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(trimmed) as unknown;
-    } catch {
-      input.stdout.write(
-        `${JSON.stringify({
-          jsonrpc: '2.0',
-          id: null,
-          error: { code: -32700, message: 'Parse error' },
-        })}\n`,
-      );
-      continue;
-    }
-    const record = body as { method?: string; id?: unknown };
-    if (
-      typeof record.method === 'string' &&
-      record.method.startsWith('notifications/') &&
-      record.id === undefined
-    ) {
-      continue;
-    }
-    const rpc = await handleMcpRpc({ profile: input.profile, app: input.app, body });
-    input.stdout.write(`${JSON.stringify(rpc)}\n`);
-  }
+  const transport = new StdioServerTransport(input.stdin, input.stdout, {
+    maxBufferSize: input.maxBufferSize ?? 10 * 1024 * 1024,
+  });
+  const handle = serveStdio(
+    () =>
+      createKotowariMcpServer({
+        app: input.app,
+        name: input.name,
+        operations: input.operations,
+      }),
+    { legacy: 'reject', transport },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    input.stdin.once('end', resolve);
+    input.stdin.once('error', reject);
+  });
+  await handle.close();
 }

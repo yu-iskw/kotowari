@@ -12,3 +12,9 @@ export {
   DEV_OIDC_GUEST_TOKEN,
   DEV_OIDC_LOCAL_TOKEN,
 } from './dev-oidc-identity-provider.js';
+export { createOAuthIntrospectionIdentityProvider } from './oauth-introspection-identity-provider.js';
+export type {
+  OAuthIntrospectionIdentityProvider,
+  OAuthIntrospectionIdentityProviderOptions,
+  VerifiedAccessToken,
+} from './oauth-introspection-identity-provider.js';

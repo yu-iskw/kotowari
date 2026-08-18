@@ -84,6 +84,19 @@ function scopeResource(principal: Principal, kind: Resource['kind']): Resource {
   };
 }
 
+function assertDecisionAllowed(
+  principal: Principal,
+  action: 'decision.read' | 'audit.read',
+  decision: Decision,
+): void {
+  assertAllowed(
+    principal,
+    action,
+    { kind: 'decision', id: decision.id, metadata: decision },
+    { tenantId: principal.tenantId },
+  );
+}
+
 export type KotowariPorts = {
   store: CanonicalStore;
   blobs: BlobStore;
@@ -293,7 +306,13 @@ export function createKotowariApp(
     },
 
     async getDecision(id) {
-      return ports.store.getDecision(asDecisionId(id));
+      const actor = await current();
+      const decision = await ports.store.getDecision(asDecisionId(id));
+      if (decision === undefined) {
+        return undefined;
+      }
+      assertDecisionAllowed(actor, 'decision.read', decision);
+      return decision;
     },
 
     async listDecisions() {
@@ -391,12 +410,14 @@ export function createKotowariApp(
     },
 
     async exportProvO(decisionId) {
+      const actor = await current();
       const decision = await ports.store.getDecision(asDecisionId(decisionId));
       if (decision === undefined) {
         return undefined;
       }
+      assertDecisionAllowed(actor, 'audit.read', decision);
       const evidence = (
-        await Promise.all(decision.consideredEvidenceIds.map((id) => ports.store.getEvidence(id)))
+        await Promise.all(decision.consideredEvidenceIds.map((id) => app.getEvidence(id)))
       ).filter((item): item is Evidence => item !== undefined);
       return decisionToProvO(decision, evidence);
     },
@@ -412,6 +433,9 @@ export function createKotowariApp(
 
     async listPolicies() {
       const actor = await current();
+      assertAllowed(actor, 'policy.evaluate', scopeResource(actor, 'policy'), {
+        tenantId: actor.tenantId,
+      });
       return (await ports.store.listPolicies({ tenantId: actor.tenantId })).filter(
         (policy) => policy.namespaceId === actor.namespaceIds[0],
       );
