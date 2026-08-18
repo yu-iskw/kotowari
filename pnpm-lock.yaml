@@ -160,6 +160,9 @@ importers:
       '@kotowari/capability-context':
         specifier: workspace:*
         version: link:../capability-context
+      '@kotowari/capability-decision':
+        specifier: workspace:*
+        version: link:../capability-decision
       '@kotowari/capability-ingestion':
         specifier: workspace:*
         version: link:../capability-ingestion
@@ -190,6 +193,18 @@ importers:
 
   packages/capability-context:
     dependencies:
+      '@kotowari/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@kotowari/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+
+  packages/capability-decision:
+    dependencies:
+      '@kotowari/capability-policy':
+        specifier: workspace:*
+        version: link:../capability-policy
       '@kotowari/kernel':
         specifier: workspace:*
         version: link:../kernel
