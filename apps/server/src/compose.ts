@@ -1,4 +1,7 @@
-import { createDevOidcIdentityProvider } from '@kotowari/adapter-fs';
+import {
+  createDevOidcIdentityProvider,
+  createOAuthIntrospectionIdentityProvider,
+} from '@kotowari/adapter-fs';
 import {
   createPgPoolClient,
   createPgliteClient,
@@ -12,6 +15,7 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
 
+import type { OAuthIntrospectionIdentityProvider } from '@kotowari/adapter-fs';
 import type { SqlClient } from '@kotowari/adapter-postgres';
 import type { S3BlobStoreOptions } from '@kotowari/adapter-s3';
 import type { KotowariApp } from '@kotowari/application';
@@ -55,8 +59,37 @@ function s3OptionsFromEnv(
   };
 }
 
+function requiredEnv(env: Record<string, string | undefined>, name: string): string {
+  const value = env[name];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${name} is required for the enterprise profile`);
+  }
+  return value;
+}
+
+function positiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function enterpriseIdentityFromEnv(
+  env: Record<string, string | undefined>,
+): OAuthIntrospectionIdentityProvider {
+  return createOAuthIntrospectionIdentityProvider({
+    introspectionUrl: requiredEnv(env, 'OAUTH_INTROSPECTION_URL'),
+    authorizationServer: requiredEnv(env, 'OAUTH_AUTHORIZATION_SERVER'),
+    audience: requiredEnv(env, 'KOTOWARI_OAUTH_AUDIENCE'),
+    clientId: requiredEnv(env, 'OAUTH_CLIENT_ID'),
+    clientSecret: requiredEnv(env, 'OAUTH_CLIENT_SECRET'),
+  });
+}
+
 export function createComposeAppFromEnv(
   env: Record<string, string | undefined> = process.env,
+  identity?: IdentityProvider,
 ): KotowariApp {
   const databaseUrl = env['DATABASE_URL'];
   if (databaseUrl === undefined || databaseUrl.length === 0) {
@@ -66,6 +99,7 @@ export function createComposeAppFromEnv(
   return createComposeApp({
     sql,
     blobs: createS3BlobStore(s3OptionsFromEnv(env)),
+    ...(identity === undefined ? {} : { identity }),
   });
 }
 
@@ -97,10 +131,45 @@ export async function startComposeServer(options: {
   app: KotowariApp;
 }> {
   const env = options.env ?? process.env;
+  const enterprise =
+    env['KOTOWARI_PROFILE'] === 'enterprise' || env['KOTOWARI_AUTH_MODE'] === 'oauth';
+
+  if (enterprise) {
+    const identity = enterpriseIdentityFromEnv(env);
+    const publicBaseUrl = requiredEnv(env, 'KOTOWARI_PUBLIC_URL');
+    const authorizationServer = requiredEnv(env, 'OAUTH_AUTHORIZATION_SERVER');
+    const publicHost = new URL(publicBaseUrl).hostname;
+    const extraHosts = (env['KOTOWARI_ALLOWED_HOSTS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    return listenKotowariHttp({
+      app: createComposeAppFromEnv(env, identity),
+      port: options.port,
+      host: env['KOTOWARI_HOST'] ?? '0.0.0.0',
+      webRoot: options.webRoot,
+      mcpSecurity: {
+        authorization: {
+          verifier: identity,
+          publicBaseUrl,
+          authorizationServers: [authorizationServer],
+        },
+        allowedHosts: [publicHost, ...extraHosts],
+        maxBodyBytes: positiveInt(env['KOTOWARI_MCP_MAX_BODY_BYTES'], 4 * 1024 * 1024),
+        requestTimeoutMs: positiveInt(env['KOTOWARI_MCP_TIMEOUT_MS'], 30_000),
+        rateLimit: {
+          maxRequests: positiveInt(env['KOTOWARI_MCP_RATE_LIMIT'], 120),
+          windowMs: positiveInt(env['KOTOWARI_MCP_RATE_WINDOW_MS'], 60_000),
+        },
+      },
+    });
+  }
+
   if (env['DATABASE_URL'] !== undefined && env['DATABASE_URL'].length > 0) {
     return listenKotowariHttp({
       app: createComposeAppFromEnv(env),
       port: options.port,
+      host: '127.0.0.1',
       webRoot: options.webRoot,
     });
   }
@@ -108,6 +177,7 @@ export async function startComposeServer(options: {
   const started = await listenKotowariHttp({
     app: inProcess.app,
     port: options.port,
+    host: '127.0.0.1',
     webRoot: options.webRoot,
   });
   return {

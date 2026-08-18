@@ -9,7 +9,12 @@ import {
 import { createSqliteCanonicalStore } from '@kotowari/adapter-sqlite';
 import { createKotowariApp } from '@kotowari/application';
 import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@kotowari/model-fake';
-import { handleMcpStdio, parseMcpProfileFlag } from '@kotowari/protocol-mcp';
+import {
+  DEFAULT_MCP_STANDALONE_PRESET,
+  handleMcpStdio,
+  MCP_STANDALONE_PRESET_TOOLS,
+  parseMcpStandalonePresetFlag,
+} from '@kotowari/protocol-mcp';
 
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
@@ -50,6 +55,7 @@ export function startKotowariServer(options: StandaloneOptions & { port: number 
     app: createStandaloneApp(options),
     port: options.port,
     webRoot: options.webRoot,
+    mcpStandalonePreset: DEFAULT_MCP_STANDALONE_PRESET,
   });
 }
 
@@ -59,10 +65,11 @@ export async function runKotowariMcpStdio(input: {
   stdin?: Readable;
   stdout?: Writable;
 }): Promise<void> {
-  const profile = parseMcpProfileFlag(input.argv);
+  const preset = parseMcpStandalonePresetFlag(input.argv);
   const app = createStandaloneApp({ dataDir: input.dataDir });
   await handleMcpStdio({
-    profile,
+    name: preset,
+    operations: MCP_STANDALONE_PRESET_TOOLS[preset],
     app,
     stdin: input.stdin ?? process.stdin,
     stdout: input.stdout ?? process.stdout,

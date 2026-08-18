@@ -16,11 +16,16 @@ function printHelp(): void {
   process.stdout.write(`kotowari <command>
 
 Commands:
-  init [directory]     Create a local workspace
-  start                Serve web, REST, and MCP
-  ingest <path>        Ingest files into the workspace
-  doctor               Check the local workspace
-  mcp --profile <name> Speak MCP JSON-RPC on stdio (retrieve by default)
+  init [directory]       Create a local workspace
+  start                  Serve web, REST, and MCP
+  ingest <path>          Ingest files into the workspace
+  doctor                 Check the local workspace
+  mcp [--preset <name>]  Speak MCP on stdio (personal by default)
+
+Standalone MCP presets:
+  personal               Everyday knowledge, memory, and decision tools (default)
+  readonly               Read-only knowledge, memory, and decision inspection
+  advanced               All MCP tools, including privileged operations
 `);
 }
 

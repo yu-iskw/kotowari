@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { retrieveToolNames, retrieveToolsDocument, PACKAGE_NAME } from './public.js';
+import { cursorPluginManifest, PACKAGE_NAME } from './public.js';
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
@@ -33,26 +33,12 @@ describe('ADR-0009 agent pack must not import kernel', () => {
   });
 });
 
-describe('retrieve profile tool list snapshot', () => {
-  it('retrieveToolNames matches tools.json and excludes admin tools', () => {
-    const toolsJson = JSON.parse(
-      readFileSync(join(packageDir, 'generated/tools.json'), 'utf8'),
-    ) as { tools: { name: string }[] };
-    const jsonNames = toolsJson.tools.map((tool) => tool.name);
-
-    expect(retrieveToolNames).toEqual(jsonNames);
-    expect(retrieveToolNames).toEqual(['search_knowledge', 'search_memory', 'record_decision']);
-    const decision = retrieveToolsDocument.tools.find((tool) => tool.name === 'record_decision');
-    expect(decision?.inputSchema).toMatchObject({ required: ['selectedOutcome'] });
-
-    for (const name of retrieveToolNames) {
-      expect(name).not.toContain('admin');
-      expect(name).not.toBe('unrestricted_ingest');
-    }
-
-    for (const tool of retrieveToolsDocument.tools) {
-      expect(tool.name).not.toContain('admin');
-      expect(tool.name).not.toBe('unrestricted_ingest');
-    }
+describe('standalone MCP configuration', () => {
+  it('uses one zero-config personal MCP server', () => {
+    expect(Object.keys(cursorPluginManifest.mcpServers ?? {})).toEqual(['kotowari']);
+    expect(cursorPluginManifest.mcpServers?.['kotowari']).toEqual({
+      command: 'kotowari',
+      args: ['mcp'],
+    });
   });
 });
