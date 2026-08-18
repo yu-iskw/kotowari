@@ -1,0 +1,32 @@
+{
+  "name": "@kotowari/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kotowari server package scaffold.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/public.js",
+  "types": "./dist/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kotowari/application": "workspace:*",
+    "@kotowari/adapter-sqlite": "workspace:*",
+    "@kotowari/adapter-fs": "workspace:*",
+    "@kotowari/adapter-postgres": "workspace:*",
+    "@kotowari/adapter-s3": "workspace:*",
+    "@kotowari/capability-ingestion": "workspace:*",
+    "@kotowari/plugin-sdk": "workspace:*",
+    "@kotowari/model-fake": "workspace:*",
+    "@kotowari/protocol-rest": "workspace:*",
+    "@kotowari/protocol-mcp": "workspace:*"
+  }
+}

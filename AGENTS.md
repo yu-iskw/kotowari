@@ -12,7 +12,7 @@ Treat this file as the **canonical** description of how to work in this reposito
 
 ## Project overview
 
-Production-ready **TypeScript monorepo** template:
+**Kotowari** is a TypeScript monorepo for the context-and-accountability layer under agents and applications.
 
 - **Package manager:** pnpm (workspace); see **pnpm workspace** below
 - **Runtime:** Node.js (see `.node-version`)
@@ -20,11 +20,15 @@ Production-ready **TypeScript monorepo** template:
 - **Lint / format:** Trunk (ESLint, Prettier, and more)
 - **Tests:** Vitest
 - **CI/CD:** `.github/workflows/`
+- **Verify:** `pnpm verify` (eslint, knip, test, build). No network. Fake models only.
+
+Done means the cited story/ADR gates are green. Do not import `packages/kernel` from protocol packs or agent plugins. Do not add live Vertex calls to default CI.
 
 ## Quick commands
 
 ```bash
 pnpm install    # Dependencies (includes Trunk launcher; use pnpm lint/format below)
+pnpm verify     # Default Cloud-agent / CI gate: eslint, knip, test, build
 pnpm build      # Build all packages
 pnpm test       # Vitest across the workspace
 pnpm lint       # Trunk linters

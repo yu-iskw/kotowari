@@ -1,12 +1,46 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreBinaries": ["grype"],
+  "ignore": [".trunk/**"],
   "workspaces": {
     ".": {
-      "entry": ["stylelint.config.mjs"],
-      "project": ["**/*.{js,cjs,mjs,ts,cts,mts}", "!packages/**", "!.trunk/**", "!node_modules/**"]
+      "entry": [
+        "stylelint.config.mjs",
+        "dev/vitest-aliases.ts",
+        "dev/generate-agent-cursor-pack.ts",
+        "dev/profile-parity.ts"
+      ],
+      "project": [
+        "**/*.{js,cjs,mjs,ts,cts,mts}",
+        "!packages/**",
+        "!apps/**",
+        "!plugins/**",
+        "!.trunk/**",
+        "!node_modules/**"
+      ]
     },
     "packages/*": {
+      "entry": ["src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/cli": {
+      "entry": ["src/cli.ts", "src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/server": {
+      "entry": ["src/standalone.ts", "src/public.ts", "src/server.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/worker": {
+      "entry": ["src/worker.ts", "src/public.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "plugins/*": {
+      "entry": ["src/public.ts"],
       "project": ["src/**/*.ts"]
     }
   }

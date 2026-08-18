@@ -2,3 +2,5 @@
 extends: markdownlint/style/prettier
 first-line-heading:
   severity: warning
+# ADR and design docs use bold labels (**Context**, **Decision**) rather than headings.
+MD036: false

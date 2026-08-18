@@ -1,0 +1,9 @@
+name: capability-provenance
+allowedDependencies:
+  - '@kotowari/kernel'
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - plugins-*
+  - '@google-cloud/*'

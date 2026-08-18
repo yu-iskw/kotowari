@@ -1,0 +1,23 @@
+{
+  "name": "@kotowari/protocol-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kotowari protocol-mcp package scaffold.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/public.js",
+  "types": "./dist/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kotowari/application": "workspace:*"
+  }
+}

@@ -1,0 +1,8 @@
+name: adapter-sqlite
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+forbiddenDependencies:
+  - protocol-*
+  - apps-*
+  - '@google-cloud/*'

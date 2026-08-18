@@ -1,0 +1,7 @@
+name: worker
+allowedDependencies:
+  - '@kotowari/application'
+  - '@kotowari/server'
+forbiddenDependencies:
+  - '@kotowari/kernel'
+  - '@google-cloud/*'

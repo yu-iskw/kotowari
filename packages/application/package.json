@@ -1,0 +1,32 @@
+{
+  "name": "@kotowari/application",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kotowari application package scaffold.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/public.js",
+  "types": "./dist/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kotowari/kernel": "workspace:*",
+    "@kotowari/plugin-sdk": "workspace:*",
+    "@kotowari/capability-knowledge": "workspace:*",
+    "@kotowari/capability-context": "workspace:*",
+    "@kotowari/capability-memory": "workspace:*",
+    "@kotowari/capability-ingestion": "workspace:*",
+    "@kotowari/capability-retrieval": "workspace:*",
+    "@kotowari/capability-ontology": "workspace:*",
+    "@kotowari/capability-policy": "workspace:*",
+    "@kotowari/capability-provenance": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+name: adapter-s3
+allowedDependencies:
+  - '@kotowari/plugin-sdk'
+  - '@kotowari/kernel'
+forbiddenDependencies:
+  - protocol-*
+  - apps-*
+  - plugins-*
+  - '@google-cloud/*'

@@ -1,0 +1,17 @@
+name: application
+allowedDependencies:
+  - '@kotowari/kernel'
+  - '@kotowari/plugin-sdk'
+  - '@kotowari/capability-knowledge'
+  - '@kotowari/capability-context'
+  - '@kotowari/capability-memory'
+  - '@kotowari/capability-ingestion'
+  - '@kotowari/capability-retrieval'
+  - '@kotowari/capability-ontology'
+  - '@kotowari/capability-policy'
+  - '@kotowari/capability-provenance'
+forbiddenDependencies:
+  - protocol-*
+  - adapter-*
+  - apps-*
+  - plugins-*

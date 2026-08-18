@@ -1,0 +1,6 @@
+name: protocol-mcp
+allowedDependencies:
+  - '@kotowari/application'
+forbiddenDependencies:
+  - adapter-*
+  - '@google-cloud/*'

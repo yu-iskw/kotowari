@@ -1,0 +1,6 @@
+name: protocol-rest
+allowedDependencies:
+  - '@kotowari/application'
+forbiddenDependencies:
+  - adapter-*
+  - '@google-cloud/*'

@@ -1,0 +1,8 @@
+name: model-vertex
+allowedDependencies:
+  - '@kotowari/plugin-sdk'
+forbiddenDependencies:
+  - '@google-cloud/*'
+  - protocol-*
+  - adapter-*
+  - apps-*
