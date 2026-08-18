@@ -1,4 +1,4 @@
-import { ApplicationError, dispatchIngest } from '@kotowari/application';
+import { ApplicationError, dispatchIngest, requireClaimIds } from '@kotowari/application';
 
 import type { KotowariApp } from '@kotowari/application';
 
@@ -57,17 +57,6 @@ function asStringArray(value: unknown): readonly string[] {
   return value.filter((item) => typeof item === 'string');
 }
 
-function asClaimIds(value: unknown): readonly [string, string, ...string[]] {
-  if (
-    Array.isArray(value) &&
-    value.length >= 2 &&
-    value.every((item) => typeof item === 'string')
-  ) {
-    return value as [string, string, ...string[]];
-  }
-  return ['', ''];
-}
-
 async function handleIngest(
   app: KotowariApp,
   body: Record<string, unknown>,
@@ -124,7 +113,7 @@ const ROUTES: Record<string, RouteHandler> = {
   'POST /v1/conflicts': async (app, body) => ({
     status: 201,
     json: await app.resolveConflict({
-      claimIds: asClaimIds(body['claimIds']),
+      claimIds: requireClaimIds(body['claimIds']),
       preferredClaimId: asString(body['preferredClaimId']),
       reason: asString(body['reason']),
     }),

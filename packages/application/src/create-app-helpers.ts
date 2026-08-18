@@ -1,4 +1,4 @@
-import { evidenceBlobKey, reextractFromStoredEvidence } from '@kotowari/capability-ingestion';
+import { evidenceBlobKey } from '@kotowari/capability-ingestion';
 import { putPolicy } from '@kotowari/capability-policy';
 import { decisionToProvO } from '@kotowari/capability-provenance';
 import { asDecisionId, asEvidenceId, assertAllowed } from '@kotowari/kernel';
@@ -6,22 +6,11 @@ import { asDecisionId, asEvidenceId, assertAllowed } from '@kotowari/kernel';
 import type { IngestResult } from '@kotowari/capability-ingestion';
 import type { ProvODocument } from '@kotowari/capability-provenance';
 import type { Decision, Evidence, PolicyRecord, Principal } from '@kotowari/kernel';
-import type {
-  BlobStore,
-  CanonicalStore,
-  EmbeddingProvider,
-  ExtractionProvider,
-  Queue,
-} from '@kotowari/plugin-sdk';
+import type { BlobStore, CanonicalStore, Queue } from '@kotowari/plugin-sdk';
 
 type ContentPorts = {
   store: CanonicalStore;
   blobs: BlobStore;
-};
-
-type ExtractPorts = ContentPorts & {
-  extraction: ExtractionProvider;
-  embeddings: EmbeddingProvider;
 };
 
 function stringArrayFromUnknown(value: unknown): readonly string[] {
@@ -35,9 +24,9 @@ function decisionMatchesQuery(decision: Decision, query: string): boolean {
   const haystack = [
     decision.selectedOutcome,
     decision.rationale ?? '',
+    decision.query ?? '',
     decision.inputContextSnapshot.purpose,
     ...decision.alternatives,
-    ...decision.policyTags,
   ]
     .join(' ')
     .toLowerCase();
@@ -102,6 +91,24 @@ export async function exportProvOFor(
   return decisionToProvO(decision, evidence);
 }
 
+export async function loadEvidence(
+  ports: ContentPorts,
+  actor: Principal,
+  id: string,
+): Promise<Evidence | undefined> {
+  const evidence = await ports.store.getEvidence(asEvidenceId(id));
+  if (evidence === undefined) {
+    return undefined;
+  }
+  assertAllowed(
+    actor,
+    'knowledge.read',
+    { kind: 'evidence', id: evidence.id, metadata: evidence },
+    { tenantId: actor.tenantId },
+  );
+  return evidence;
+}
+
 export async function loadEvidenceContent(
   ports: ContentPorts,
   actor: Principal,
@@ -115,16 +122,10 @@ export async function loadEvidenceContent(
     }
   | undefined
 > {
-  const evidence = await ports.store.getEvidence(asEvidenceId(id));
+  const evidence = await loadEvidence(ports, actor, id);
   if (evidence === undefined) {
     return undefined;
   }
-  assertAllowed(
-    actor,
-    'knowledge.read',
-    { kind: 'evidence', id: evidence.id, metadata: evidence },
-    { tenantId: actor.tenantId },
-  );
   const loaded = await ports.blobs.get(evidenceBlobKey(evidence));
   if (loaded === undefined) {
     return undefined;
@@ -160,21 +161,4 @@ export async function drainQueuedJobs(input: {
     }
   }
   return jobs.length;
-}
-
-export async function reextractEvidence(
-  ports: ExtractPorts,
-  actor: Principal,
-  evidenceIds: readonly string[],
-): Promise<IngestResult> {
-  return reextractFromStoredEvidence(
-    {
-      store: ports.store,
-      blobs: ports.blobs,
-      extraction: ports.extraction,
-      embeddings: ports.embeddings,
-      principal: actor,
-    },
-    evidenceIds,
-  );
 }

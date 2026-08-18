@@ -180,8 +180,9 @@ async function persistExtractedClaims(
       detectClaimOverlap(other, claim),
     );
     if (overlapping.length > 0) {
+      const overlapIds = new Set(overlapping.map((other) => other.id));
       for (const item of pending) {
-        if (overlapping.some((other) => other.id === item.toStore.id)) {
+        if (overlapIds.has(item.toStore.id)) {
           item.toStore = { ...item.toStore, status: 'conflicted' };
         }
       }
@@ -223,16 +224,25 @@ async function persistExtractedClaims(
     claimIds.push(item.toStore.id);
   }
   const pendingIds = new Set(claimIds);
+  const existingToMark = new Set<string>();
   for (const conflict of conflicts) {
-    const existingOverlaps = conflict.claimIds.filter((id) => !pendingIds.has(id));
+    for (const id of conflict.claimIds) {
+      if (!pendingIds.has(id)) {
+        existingToMark.add(id);
+      }
+    }
+  }
+  if (conflicts.length > 0) {
     await deps.store.withTransaction(async (tx) => {
-      for (const id of existingOverlaps) {
+      for (const id of existingToMark) {
         const loaded = await tx.getClaim(id);
         if (loaded !== undefined && loaded.status !== 'conflicted') {
           await tx.assertClaim({ ...loaded, status: 'conflicted' });
         }
       }
-      await tx.putConflict(conflict);
+      for (const conflict of conflicts) {
+        await tx.putConflict(conflict);
+      }
     });
   }
   return { claimIds, entityIds };

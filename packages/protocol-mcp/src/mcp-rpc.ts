@@ -1,9 +1,12 @@
-import { dispatchIngest } from '@kotowari/application';
+import {
+  ApplicationError,
+  dispatchIngest,
+  requireClaimIds,
+  type KotowariApp,
+} from '@kotowari/application';
 
 import { PROFILE_TOOLS, type McpProfile } from './mcp-profiles.js';
 import { toolDescriptor } from './tool-schemas.js';
-
-import type { KotowariApp } from '@kotowari/application';
 
 export const MCP_PROTOCOL_VERSION = '2026-07-28';
 
@@ -39,17 +42,6 @@ function asString(value: unknown, fallback = ''): string {
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' ? value : fallback;
-}
-
-function asClaimIds(value: unknown): [string, string, ...string[]] {
-  if (
-    Array.isArray(value) &&
-    value.length >= 2 &&
-    value.every((item) => typeof item === 'string')
-  ) {
-    return value as [string, string, ...string[]];
-  }
-  return ['', ''];
 }
 
 function unknownMethodLabel(rpcMethod: string | undefined): string {
@@ -110,7 +102,7 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
     'resolve_conflict',
     async (app, args) =>
       app.resolveConflict({
-        claimIds: asClaimIds(args['claimIds']),
+        claimIds: requireClaimIds(args['claimIds']),
         preferredClaimId: asString(args['preferredClaimId']),
         reason: asString(args['reason']),
       }),
@@ -212,8 +204,16 @@ export async function handleMcpRpc(input: {
       };
     }
     const args = body.params?.arguments === undefined ? {} : body.params.arguments;
-    const result = await dispatchTool(input.app, rpcName, args);
-    return { jsonrpc: '2.0', id, result };
+    try {
+      const result = await dispatchTool(input.app, rpcName, args);
+      return { jsonrpc: '2.0', id, result };
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        const code = error.status === 401 ? -32002 : error.status === 403 ? -32003 : -32602;
+        return { jsonrpc: '2.0', id, error: { code, message: error.message } };
+      }
+      throw error;
+    }
   }
 
   return {

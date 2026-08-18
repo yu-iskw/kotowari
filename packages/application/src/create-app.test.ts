@@ -232,6 +232,7 @@ describe('S17 competing truths', () => {
       preferredClaimId,
       reason: 'Later filing is authoritative',
     });
+    expect(await app.listConflicts()).toEqual([]);
     const result = await app.searchKnowledge({ query: 'Alice Chen CEO', purpose: 'search' });
     expect(result.hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
     expect(result.hits.some((hit) => hit.claimId === suppressedId)).toBe(false);
@@ -252,13 +253,16 @@ describe('S3 decision precedents', () => {
     ]);
     await app.recordDecision({
       purpose: 'library-choice',
-      query: 'What did we decide about vendor X?',
+      query: 'zebra-pluto-precedent',
       selectedOutcome: 'use_vendor_x',
       confidence: 0.8,
       rationale: 'HIPAA workload needs a sourced processor',
     });
-    const hits = await app.searchDecisions({ query: 'vendor X HIPAA' });
+    const hits = await app.searchDecisions({ query: 'zebra-pluto-precedent' });
     expect(hits.some((decision) => decision.selectedOutcome === 'use_vendor_x')).toBe(true);
+    expect(hits.some((decision) => decision.policyTags.includes('q:zebra-pluto-precedent'))).toBe(
+      false,
+    );
     expect(await app.searchDecisions({ query: 'unrelated widget' })).toEqual([]);
   });
 });

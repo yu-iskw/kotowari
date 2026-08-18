@@ -216,6 +216,7 @@ export function buildDecisionRecorded(input: RecordDecisionInput): {
     ...(input.model === undefined ? {} : { model: input.model }),
     ...(input.runtimeId === undefined ? {} : { runtimeId: input.runtimeId }),
     ...(input.rationale === undefined ? {} : { rationale: input.rationale }),
+    ...(input.query === undefined ? {} : { query: input.query }),
     ...(input.observedOutcome === undefined ? {} : { observedOutcome: input.observedOutcome }),
     policyEvaluations: input.policyEvaluations,
     recordedAt,
@@ -311,7 +312,7 @@ export function buildConflictResolved(input: ResolveConflictInput): {
     throw new KernelError('INVALID_ID', 'preferredClaimId must be one of the conflicting claims');
   }
   const recordedAt = nowIso();
-  const id = newId('ConflictId');
+  const id = input.conflictId ?? newId('ConflictId');
   const conflict: Conflict = {
     ...input.metadata,
     id,

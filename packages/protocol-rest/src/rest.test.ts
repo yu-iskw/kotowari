@@ -7,8 +7,12 @@ import type { KotowariApp } from '@kotowari/application';
 function capturingApp(): {
   app: KotowariApp;
   ingested: { relativePath: string; bytes: Uint8Array; mimeType: string }[];
+  searchedDecisions: string[];
+  listedDecisions: { count: number };
 } {
   const ingested: { relativePath: string; bytes: Uint8Array; mimeType: string }[] = [];
+  const searchedDecisions: string[] = [];
+  const listedDecisions = { count: 0 };
   const app = {
     ingestDocuments: async (
       documents: readonly { relativePath: string; bytes: Uint8Array; mimeType: string }[],
@@ -29,8 +33,14 @@ function capturingApp(): {
     buildContext: async () => ({}) as never,
     recordDecision: async () => ({ id: 'd1' }) as never,
     getDecision: async () => undefined,
-    listDecisions: async () => [],
-    searchDecisions: async () => [],
+    listDecisions: async () => {
+      listedDecisions.count += 1;
+      return [];
+    },
+    searchDecisions: async (input: { query: string }) => {
+      searchedDecisions.push(input.query);
+      return [];
+    },
     listConflicts: async () => [],
     listJobs: async () => [],
     recordMemory: async () => ({ id: 'm1' }) as never,
@@ -50,7 +60,7 @@ function capturingApp(): {
     runAsRequest: async <T>(_headers: Record<string, string | undefined>, fn: () => Promise<T>) =>
       fn(),
   } satisfies KotowariApp;
-  return { app, ingested };
+  return { app, ingested, searchedDecisions, listedDecisions };
 }
 
 describe('S2 REST ingest', () => {
@@ -94,17 +104,24 @@ describe('S17 S3 S5 REST surfaces', () => {
       body: { claimIds: ['c1', 'c2'], preferredClaimId: 'c1', reason: 'later filing' },
     });
     expect(resolved.status).toBe(201);
+    const invalid = await handleRest(app, {
+      method: 'POST',
+      pathname: '/v1/conflicts',
+      body: { claimIds: [], preferredClaimId: 'c1', reason: 'later filing' },
+    });
+    expect(invalid.status).toBe(400);
   });
 
   it('GET /v1/decisions?query uses searchDecisions', async () => {
-    const { app } = capturingApp();
-    const result = await handleRest(app, {
+    const captured = capturingApp();
+    const result = await handleRest(captured.app, {
       method: 'GET',
       pathname: '/v1/decisions',
       body: { query: 'vendor X' },
     });
     expect(result.status).toBe(200);
-    expect(result.json).toEqual([]);
+    expect(captured.searchedDecisions).toEqual(['vendor X']);
+    expect(captured.listedDecisions.count).toBe(0);
   });
 
   it('GET /v1/jobs lists pending work', async () => {

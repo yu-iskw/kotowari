@@ -1,5 +1,6 @@
 import type {
   ClaimId,
+  ConflictId,
   EntityId,
   EvidenceId,
   IsoTimestamp,
@@ -62,6 +63,7 @@ export type RecordDecisionInput = {
   model?: string;
   runtimeId?: string;
   rationale?: string;
+  query?: string;
   resultingActionIds: readonly string[];
   observedOutcome?: string;
   policyEvaluations: readonly PolicyEvaluation[];
@@ -88,6 +90,7 @@ export type ResolveConflictInput = {
   preferredClaimId: ClaimId;
   reason: string;
   provenance: Provenance;
+  conflictId?: ConflictId;
 };
 
 export type PutEntityInput = {

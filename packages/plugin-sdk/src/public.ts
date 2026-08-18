@@ -35,3 +35,4 @@ export {
   rankClaimsLexically,
 } from './lexical-search.js';
 export { createMemoryBlobStore, createMemoryCanonicalStore } from './fakes/memory-store.js';
+export { bearerTokenFromHeaders } from './http-headers.js';

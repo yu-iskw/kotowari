@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { assembleContext } from '@kotowari/capability-context';
-import { ingestDocuments } from '@kotowari/capability-ingestion';
+import { ingestDocuments, reextractFromStoredEvidence } from '@kotowari/capability-ingestion';
 import { resolveClaimConflict } from '@kotowari/capability-knowledge';
 import { recordMemory, searchMemory } from '@kotowari/capability-memory';
 import { uniquePredicates } from '@kotowari/capability-ontology';
@@ -18,14 +18,15 @@ import {
   buildDecisionRecorded,
   compactProvenance,
 } from '@kotowari/kernel';
+import { bearerTokenFromHeaders } from '@kotowari/plugin-sdk';
 
 import {
   drainQueuedJobs,
   ensureWorkspacePolicies,
   exportProvOFor,
   listDecisionsFor,
+  loadEvidence,
   loadEvidenceContent,
-  reextractEvidence,
   searchDecisionsFor,
 } from './create-app-helpers.js';
 import { ApplicationError } from './errors.js';
@@ -88,16 +89,6 @@ export type KotowariPorts = {
 export type KotowariAppOptions = {
   profile?: string;
 };
-
-function bearerFromHeaders(headers: Record<string, string | undefined>): string | undefined {
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === 'authorization' && value !== undefined) {
-      const match = /^Bearer\s+(\S+)$/i.exec(value.trim());
-      return match?.[1];
-    }
-  }
-  return undefined;
-}
 
 type RequestScope = {
   principal: Principal;
@@ -178,14 +169,18 @@ export function createKotowariApp(
     return requestSlot.getStore()?.principal ?? ports.identity.currentPrincipal();
   }
 
-  function assertWriterMayMutate(actor: Principal): void {
+  function denyIfGuest(actor: Principal, message: string): void {
     if (!actor.roles.includes('guest')) {
       return;
     }
     if (requestSlot.getStore()?.bearerToken === undefined) {
       throw new ApplicationError('Sign in required', 401);
     }
-    throw new ApplicationError('Guest cannot write', 403);
+    throw new ApplicationError(message, 403);
+  }
+
+  function assertWriterMayMutate(actor: Principal): void {
+    denyIfGuest(actor, 'Guest cannot write');
   }
 
   async function runRetrieve(
@@ -277,7 +272,7 @@ export function createKotowariApp(
           principalId: actor.id,
           classification: 'internal',
           visibility: 'workspace',
-          policyTags: [input.purpose, ...(input.query === undefined ? [] : [`q:${input.query}`])],
+          policyTags: [input.purpose],
         },
         inputContextSnapshot: snapshot,
         consideredEvidenceIds: snapshot.evidenceIds,
@@ -287,6 +282,7 @@ export function createKotowariApp(
         confidence: input.confidence,
         actor: actor.id,
         rationale: input.rationale,
+        query: input.query,
         resultingActionIds: [],
         policyEvaluations: evaluations,
         provenance: compactProvenance({
@@ -317,15 +313,22 @@ export function createKotowariApp(
 
     async listConflicts() {
       const actor = await current();
-      return ports.store.listConflicts({ tenantId: actor.tenantId });
+      const [conflicts, resolutions] = await Promise.all([
+        ports.store.listConflicts({ tenantId: actor.tenantId }),
+        ports.store.listResolutions({ tenantId: actor.tenantId }),
+      ]);
+      const resolvedIds = new Set(resolutions.map((resolution) => resolution.id));
+      return conflicts.filter((conflict) => !resolvedIds.has(conflict.id));
     },
 
     async listJobs() {
+      denyIfGuest(await current(), 'Guest cannot list jobs');
       return ports.queue.listPending();
     },
 
     async recordMemory(input) {
       const actor = await current();
+      assertWriterMayMutate(actor);
       assertAllowed(actor, 'memory.write', scopeResource(actor, 'memory'), {
         tenantId: actor.tenantId,
       });
@@ -337,7 +340,9 @@ export function createKotowariApp(
     },
 
     async putPolicy(input) {
-      return putPolicy({ store: ports.store, principal: await current(), ...input });
+      const actor = await current();
+      assertWriterMayMutate(actor);
+      return putPolicy({ store: ports.store, principal: actor, ...input });
     },
 
     async whatIfPolicy(policy) {
@@ -366,8 +371,7 @@ export function createKotowariApp(
     },
 
     async getEvidence(id) {
-      const loaded = await loadEvidenceContent(ports, await current(), id);
-      return loaded?.evidence;
+      return loadEvidence(ports, await current(), id);
     },
 
     async getEvidenceContent(id) {
@@ -380,7 +384,16 @@ export function createKotowariApp(
       assertAllowed(actor, 'ingestion.write', scopeResource(actor, 'namespace'), {
         tenantId: actor.tenantId,
       });
-      return reextractEvidence(ports, actor, evidenceIds);
+      return reextractFromStoredEvidence(
+        {
+          store: ports.store,
+          blobs: ports.blobs,
+          extraction: ports.extraction,
+          embeddings: ports.embeddings,
+          principal: actor,
+        },
+        evidenceIds,
+      );
     },
 
     async processQueuedJobs() {
@@ -405,7 +418,7 @@ export function createKotowariApp(
         ports.identity.authenticate === undefined
           ? await ports.identity.currentPrincipal()
           : await ports.identity.authenticate(headers);
-      return requestSlot.run({ principal, bearerToken: bearerFromHeaders(headers) }, fn);
+      return requestSlot.run({ principal, bearerToken: bearerTokenFromHeaders(headers) }, fn);
     },
   };
   return app;

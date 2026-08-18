@@ -54,6 +54,18 @@ describe('entity merge and conflict resolution', () => {
     expect(resolution.reason).toContain('authoritative');
     expect(event.kind).toBe('conflict.resolved');
     expect(resolution.provenance.source).toBe('test');
+    const reused = buildConflictResolved({
+      metadata: localStandaloneMetadata(),
+      kind: 'value',
+      claimIds: ['c1' as never, 'c2' as never],
+      strategy: 'human_review',
+      preferredClaimId: 'c1' as never,
+      reason: 'Later filing is authoritative',
+      provenance: provenance(),
+      conflictId: resolution.id,
+    });
+    expect(reused.conflict.id).toBe(resolution.id);
+    expect(reused.resolution.id).toBe(resolution.id);
   });
 
   it('retracts an asserted claim', () => {

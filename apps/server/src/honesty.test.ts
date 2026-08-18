@@ -6,6 +6,7 @@ import { DEV_OIDC_GUEST_TOKEN, DEV_OIDC_LOCAL_TOKEN } from '@kotowari/adapter-fs
 import { describe, expect, it } from 'vitest';
 
 import { startComposeServer } from './compose.js';
+import { collectGuestOmitSnapshot } from './parity.js';
 import { startKotowariServer } from './public.js';
 
 function overlappingDocs(): string {
@@ -19,41 +20,49 @@ async function jsonOf(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+async function resolveFirstConflictAndSearch(
+  baseUrl: string,
+  headers: Record<string, string> = {},
+): Promise<{ preferredClaimId: string; claimIds: string[]; hits: { claimId: string }[] }> {
+  await fetch(`${baseUrl}/v1/ingest`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ path: overlappingDocs() }),
+  });
+  const listed = await fetch(`${baseUrl}/v1/conflicts`, { headers });
+  const conflicts = (await listed.json()) as { claimIds: string[] }[];
+  expect(conflicts.length).toBeGreaterThan(0);
+  const claimIds = conflicts[0]?.claimIds ?? [];
+  const preferredClaimId = claimIds[0] ?? '';
+  await fetch(`${baseUrl}/v1/conflicts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({
+      claimIds,
+      preferredClaimId,
+      reason: 'Later filing is authoritative',
+    }),
+  });
+  const remaining = await fetch(`${baseUrl}/v1/conflicts`, { headers });
+  expect(await remaining.json()).toEqual([]);
+  const search = await fetch(`${baseUrl}/v1/knowledge/search`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ query: 'Alice Chen CEO', purpose: 'search' }),
+  });
+  const result = (await search.json()) as { hits: { claimId: string }[] };
+  return { preferredClaimId, claimIds, hits: result.hits };
+}
+
 describe('S17 S3 honesty on SQLite and Postgres', () => {
   it('S17 SQLite retrieve prefers preferredClaimId after resolve', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'kotowari-'));
     const started = await startKotowariServer({ dataDir, port: 0 });
     try {
-      await fetch(`${started.url}/v1/ingest`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ path: overlappingDocs() }),
-      });
-      const listed = await fetch(`${started.url}/v1/conflicts`);
-      const conflicts = (await listed.json()) as { claimIds: string[] }[];
-      expect(conflicts.length).toBeGreaterThan(0);
-      const claimIds = conflicts[0]?.claimIds ?? [];
-      const preferredClaimId = claimIds[0] ?? '';
-      await fetch(`${started.url}/v1/conflicts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          claimIds,
-          preferredClaimId,
-          reason: 'Later filing is authoritative',
-        }),
-      });
-      const search = await fetch(`${started.url}/v1/knowledge/search`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query: 'Alice Chen CEO', purpose: 'search' }),
-      });
-      const result = (await search.json()) as { hits: { claimId: string }[] };
-      expect(result.hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
+      const { preferredClaimId, claimIds, hits } = await resolveFirstConflictAndSearch(started.url);
+      expect(hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
       expect(
-        result.hits.some(
-          (hit) => claimIds.includes(hit.claimId) && hit.claimId !== preferredClaimId,
-        ),
+        hits.some((hit) => claimIds.includes(hit.claimId) && hit.claimId !== preferredClaimId),
       ).toBe(false);
     } finally {
       await started.close();
@@ -64,32 +73,14 @@ describe('S17 S3 honesty on SQLite and Postgres', () => {
     const compose = await startComposeServer({ port: 0 });
     const auth = { authorization: `Bearer ${DEV_OIDC_LOCAL_TOKEN}` };
     try {
-      await fetch(`${compose.url}/v1/ingest`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...auth },
-        body: JSON.stringify({ path: overlappingDocs() }),
-      });
-      const listed = await fetch(`${compose.url}/v1/conflicts`, { headers: auth });
-      const conflicts = (await listed.json()) as { claimIds: string[] }[];
-      expect(conflicts.length).toBeGreaterThan(0);
-      const claimIds = conflicts[0]?.claimIds ?? [];
-      const preferredClaimId = claimIds[0] ?? '';
-      await fetch(`${compose.url}/v1/conflicts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...auth },
-        body: JSON.stringify({
-          claimIds,
-          preferredClaimId,
-          reason: 'Later filing is authoritative',
-        }),
-      });
-      const search = await fetch(`${compose.url}/v1/knowledge/search`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...auth },
-        body: JSON.stringify({ query: 'Alice Chen CEO', purpose: 'search' }),
-      });
-      const result = (await search.json()) as { hits: { claimId: string }[] };
-      expect(result.hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
+      const { preferredClaimId, claimIds, hits } = await resolveFirstConflictAndSearch(
+        compose.url,
+        auth,
+      );
+      expect(hits.some((hit) => hit.claimId === preferredClaimId)).toBe(true);
+      expect(
+        hits.some((hit) => claimIds.includes(hit.claimId) && hit.claimId !== preferredClaimId),
+      ).toBe(false);
     } finally {
       await compose.close();
     }
@@ -110,7 +101,7 @@ describe('S17 S3 honesty on SQLite and Postgres', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           purpose: 'library-choice',
-          query: 'What did we decide about vendor X?',
+          query: 'zebra-pluto-precedent',
           selectedOutcome: 'use_vendor_x',
           confidence: 0.9,
         }),
@@ -122,9 +113,10 @@ describe('S17 S3 honesty on SQLite and Postgres', () => {
     const second = await startKotowariServer({ dataDir, port: 0 });
     try {
       const found = await fetch(
-        `${second.url}/v1/decisions?query=${encodeURIComponent('vendor X')}`,
+        `${second.url}/v1/decisions?query=${encodeURIComponent('zebra-pluto-precedent')}`,
       );
-      const decisions = (await found.json()) as { selectedOutcome?: string }[];
+      const decisions = (await found.json()) as { selectedOutcome?: string; query?: string }[];
+      expect(decisions.some((decision) => decision.query === 'zebra-pluto-precedent')).toBe(true);
       expect(decisions.some((decision) => decision.selectedOutcome === 'use_vendor_x')).toBe(true);
     } finally {
       await second.close();
@@ -160,13 +152,35 @@ describe('S5 compose door', () => {
         body: JSON.stringify({ path: overlappingDocs() }),
       });
       expect(guestWrite.status).toBe(403);
+      const memoryUnsigned = await fetch(`${compose.url}/v1/memory`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body: 'guest should not write memory' }),
+      });
+      expect(memoryUnsigned.status).toBe(401);
+      const memoryGuest = await fetch(`${compose.url}/v1/memory`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${DEV_OIDC_GUEST_TOKEN}`,
+        },
+        body: JSON.stringify({ body: 'guest should not write memory' }),
+      });
+      expect(memoryGuest.status).toBe(403);
       const me = await jsonOf(await fetch(`${compose.url}/v1/me`));
       expect(me['roles']).toEqual(['guest']);
+      const guestJobs = await fetch(`${compose.url}/v1/jobs`);
+      expect(guestJobs.status).toBe(401);
       const jobs = await fetch(`${compose.url}/v1/jobs`, {
         headers: { authorization: `Bearer ${DEV_OIDC_LOCAL_TOKEN}` },
       });
       const pending = (await jobs.json()) as { kind: string }[];
       expect(pending.some((job) => job.kind === 'ingest.documents')).toBe(true);
+      const omitted = await collectGuestOmitSnapshot(compose.url, {
+        bearer: DEV_OIDC_GUEST_TOKEN,
+      });
+      expect(omitted.hitCount).toBe(0);
+      expect(omitted.omittedHasPolicyFilter).toBe(true);
     } finally {
       await compose.close();
     }
