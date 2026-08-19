@@ -1,4 +1,12 @@
-import { claimText } from '@kotowari/plugin-sdk';
+import {
+  asClaimId,
+  asEntityId,
+  asIsoTimestamp,
+  asNamespaceId,
+  asPrincipalId,
+  asTenantId,
+  claimText,
+} from '@kotowari/plugin-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -17,7 +25,7 @@ import type {
 
 const DATABASE_URL = process.env.KOTOWARI_TEST_POSTGRES_URL;
 const describeLive = DATABASE_URL === undefined ? describe.skip : describe;
-const NOW = '2026-08-19T00:00:00.000Z' as never;
+const NOW = asIsoTimestamp('2026-08-19T00:00:00.000Z');
 const DIMENSIONS = 8;
 const LIMIT = 10;
 
@@ -48,19 +56,19 @@ function corpusVector(index: number): readonly number[] {
 
 function claim(item: CorpusItem): Claim {
   return {
-    tenantId: item.tenantId as never,
-    namespaceId: item.namespaceId as never,
-    principalId: 'principal-live-test' as never,
+    tenantId: asTenantId(item.tenantId),
+    namespaceId: asNamespaceId(item.namespaceId),
+    principalId: asPrincipalId('principal-live-test'),
     classification: 'internal',
     visibility: 'workspace',
     policyTags: [],
-    id: item.id as never,
-    subject: `entity-${item.id}` as never,
+    id: asClaimId(item.id),
+    subject: asEntityId(`entity-${item.id}`),
     predicate: 'description',
     object: { kind: 'literal', value: `live vector ${item.id}` },
     bitemporal: {
-      validFrom: item.validFrom as never,
-      ...(item.validTo === undefined ? {} : { validTo: item.validTo as never }),
+      validFrom: asIsoTimestamp(item.validFrom),
+      ...(item.validTo === undefined ? {} : { validTo: asIsoTimestamp(item.validTo) }),
       recordedAt: NOW,
       assertedAt: NOW,
     },
@@ -69,7 +77,7 @@ function claim(item: CorpusItem): Claim {
     evidenceIds: [],
     provenance: {
       source: 'pgvector-live-test',
-      actor: 'principal-live-test' as never,
+      actor: asPrincipalId('principal-live-test'),
       process: 'test',
       timestamp: NOW,
       parentIds: [],
@@ -81,16 +89,18 @@ function event(item: CorpusItem, sequence: number): DomainEvent {
   return {
     kind: 'claim.asserted',
     eventId: `event-${sequence}` as never,
-    tenantId: item.tenantId as never,
-    claimId: item.id as never,
+    tenantId: asTenantId(item.tenantId),
+    claimId: asClaimId(item.id),
     provenance: {
       source: 'pgvector-live-test',
-      actor: 'principal-live-test' as never,
+      actor: asPrincipalId('principal-live-test'),
       process: 'claim.asserted',
       timestamp: NOW,
       parentIds: [],
     },
-    occurredAt: new Date(Date.parse('2026-08-19T00:00:00.000Z') + sequence * 1000).toISOString() as never,
+    occurredAt: asIsoTimestamp(
+      new Date(Date.parse('2026-08-19T00:00:00.000Z') + sequence * 1000).toISOString(),
+    ),
   };
 }
 
@@ -223,12 +233,12 @@ describeLive('Postgres pgvector HNSW live validation', () => {
     for (const queryVector of queries) {
       const expected = exactTopK(corpus, queryVector, 'tenant-live', 'namespace-a', validAt);
       const actual = await projection.search({
-        tenantId: 'tenant-live' as never,
-        namespaceId: 'namespace-a' as never,
+        tenantId: asTenantId('tenant-live'),
+        namespaceId: asNamespaceId('namespace-a'),
         strategy: 'vector',
         query: 'benchmark',
         queryVector,
-        temporal: { validAt: validAt as never },
+        temporal: { validAt: asIsoTimestamp(validAt) },
         limit: LIMIT,
       });
       recalls.push(recallAtK(expected, actual.map((candidate) => candidate.claimId)));
