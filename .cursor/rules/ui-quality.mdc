@@ -1,0 +1,24 @@
+---
+description: Commercial-grade design, UI, UX, accessibility, and rendered-verification workflow for the Kotowari web surface.
+globs: apps/web/**/*
+alwaysApply: false
+---
+
+# Web UI quality workflow
+
+Apply this rule to substantial work in `apps/web`.
+
+1. **Start from user intent, not decoration.** Identify the audience, primary task, information hierarchy, and important states before choosing layout or styling.
+2. **Use the `frontend-design` skill** when creating or materially redesigning a UI. Establish a deliberate visual direction, token vocabulary, typography hierarchy, layout concept, and one justified signature element before implementation.
+3. **Use the `frontend-ui-engineering` skill** for implementation quality: semantic HTML, responsive behavior, state handling, accessibility, maintainable structure, and design-system consistency. Adapt framework-specific examples to the actual Kotowari stack; do not introduce React merely because an example uses React.
+4. **Use `ui-skills-root` selectively.** Query the configured `ui-skills` MCP registry for a narrow specialist skill when typography, motion, accessibility, layout, interaction, or another UI discipline needs deeper guidance. Prefer one skill; use at most three for broad redesign/review work.
+5. **Preserve architecture.** Do not add React, Next.js, shadcn/ui, Tailwind, or another UI framework/component system solely to satisfy these instructions. Adoption of a framework or design system is a separate architectural decision.
+6. **Review critically.** In Claude Code, use the configured Impeccable plugin when a critique/polish pass is useful. In Cursor, use the local design skills and UI Skills registry; an optional Impeccable Cursor installation must not be a prerequisite for ordinary development.
+7. **Verify the rendered product.** Use the configured Playwright MCP server after meaningful UI changes. Exercise the actual page rather than reasoning only from source code.
+8. **Check representative viewports:** 320px, 768px, 1024px, and 1440px unless the feature has different product-specific breakpoints.
+9. **Check interaction and accessibility:** keyboard traversal, visible focus, semantic controls, labels, error messaging, contrast, reduced motion, loading/empty/error states, overflow, long content, disabled states, and destructive-action affordances. Target WCAG 2.2 AA unless a stricter project requirement applies.
+10. **Check browser quality:** no unexpected console errors, broken navigation, clipped content, accidental horizontal scrolling, layout shift caused by the change, or inaccessible modal/popover focus behavior.
+11. **Use Cursor Design Mode when visual feedback is available.** Treat selected regions and annotations as concrete design-review evidence, then re-run browser verification after changes.
+12. **Do not claim the UI is polished or production-ready without rendered verification.** If browser verification cannot run, state that limitation explicitly.
+
+Prefer purposeful, information-dense product UI over generic AI aesthetics, ornamental card grids, unnecessary gradients, arbitrary radii, and motion that does not improve comprehension.
