@@ -25,7 +25,12 @@ export type {
   RetrievalProjectionStatus,
 } from './retrieval-projection-operations.js';
 export { createProjectionServingGate } from './projection-serving.js';
-export type { ProjectionServingGate, ProjectionServingSnapshot } from './projection-serving.js';
+export type {
+  ProjectionServingGate,
+  ProjectionServingSnapshot,
+  VectorRolloutMode,
+  VectorRolloutPolicy,
+} from './projection-serving.js';
 export { listenKotowariHttp } from './http-server.js';
 export type {
   McpHttpSecurityOptions,

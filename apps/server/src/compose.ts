@@ -16,7 +16,11 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
 import { createProjectionServingGate } from './projection-serving.js';
-import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
+import {
+  embeddingDimensionsFromEnv,
+  vectorAccelerationFromEnv,
+  vectorRolloutFromEnv,
+} from './vector-acceleration.js';
 
 import type { OAuthIntrospectionIdentityProvider } from '@kotowari/adapter-fs';
 import type { SqlClient } from '@kotowari/adapter-postgres';
@@ -166,7 +170,12 @@ export async function startComposeServer(options: {
       embeddings,
       ...(vectorAcceleration === undefined ? {} : { vectorAcceleration }),
     });
-    const projectionServing = createProjectionServingGate({ projection, store, embeddings });
+    const projectionServing = createProjectionServingGate({
+      projection,
+      store,
+      embeddings,
+      vectorRollout: vectorRolloutFromEnv(env),
+    });
     const app = createComposeApp({
       sql,
       blobs: createS3BlobStore(s3OptionsFromEnv(env)),
