@@ -2,6 +2,8 @@ import { claimText } from '@kotowari/plugin-sdk';
 
 import { stableCanarySample } from './retrieval-rollout.js';
 
+import type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
+
 import type {
   PostgresRetrievalProjection,
   RetrievalProjectionStatus,
@@ -14,7 +16,6 @@ import type {
   RetrievalCandidateRequest,
   RetrievalCandidateSource,
 } from '@kotowari/plugin-sdk';
-import type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
 
 const DEFAULT_ROLLOUT_POLICY: RetrievalRolloutPolicy = {
   mode: 'enabled',
@@ -174,14 +175,17 @@ function observeLatency(histogram: LatencyHistogram, durationMs: number): void {
   histogram.sumMs += durationMs;
   for (let index = 0; index < LATENCY_BUCKETS_MS.length; index += 1) {
     const bound = LATENCY_BUCKETS_MS[index];
-    if (bound !== undefined && durationMs <= bound) histogram.buckets[index] = (histogram.buckets[index] ?? 0) + 1;
+    if (bound !== undefined && durationMs <= bound)
+      histogram.buckets[index] = (histogram.buckets[index] ?? 0) + 1;
   }
 }
 
 function histogramMetrics(name: string, help: string, histogram: LatencyHistogram): string[] {
   const lines = [`# HELP ${name} ${help}`, `# TYPE ${name} histogram`];
   for (let index = 0; index < LATENCY_BUCKETS_MS.length; index += 1) {
-    lines.push(`${name}_bucket{le="${String(LATENCY_BUCKETS_MS[index])}"} ${String(histogram.buckets[index] ?? 0)}`);
+    lines.push(
+      `${name}_bucket{le="${String(LATENCY_BUCKETS_MS[index])}"} ${String(histogram.buckets[index] ?? 0)}`,
+    );
   }
   lines.push(`${name}_bucket{le="+Inf"} ${String(histogram.count)}`);
   lines.push(`${name}_sum ${String(histogram.sumMs)}`);
@@ -218,7 +222,9 @@ export function createProjectionServingGate(input: {
   const now = input.now ?? (() => new Date());
   const monotonicNowMs = input.monotonicNowMs ?? (() => performance.now());
   const policy = input.policy ?? DEFAULT_ROLLOUT_POLICY;
-  const sample = input.sample ?? ((request: RetrievalCandidateRequest) => stableCanarySample(canaryKey(request)));
+  const sample =
+    input.sample ??
+    ((request: RetrievalCandidateRequest) => stableCanarySample(canaryKey(request)));
   let projectionSearches = 0;
   let projectionServedSearches = 0;
   let canonicalSearches = 0;

@@ -31,17 +31,12 @@ export function retrievalRolloutPolicyFromEnv(
 ): RetrievalRolloutPolicy {
   const rawMode = env['KOTOWARI_RETRIEVAL_ROLLOUT_MODE'] ?? 'enabled';
   if (!MODES.has(rawMode as RetrievalRolloutMode)) {
-    throw new Error(
-      'KOTOWARI_RETRIEVAL_ROLLOUT_MODE must be disabled, shadow, canary, or enabled',
-    );
+    throw new Error('KOTOWARI_RETRIEVAL_ROLLOUT_MODE must be disabled, shadow, canary, or enabled');
   }
   return {
     mode: rawMode as RetrievalRolloutMode,
     canaryPercent: parsePercent(env['KOTOWARI_RETRIEVAL_CANARY_PERCENT'], 10),
-    maxConsecutiveErrors: parsePositiveInt(
-      env['KOTOWARI_RETRIEVAL_MAX_CONSECUTIVE_ERRORS'],
-      3,
-    ),
+    maxConsecutiveErrors: parsePositiveInt(env['KOTOWARI_RETRIEVAL_MAX_CONSECUTIVE_ERRORS'], 3),
   };
 }
 
