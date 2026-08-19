@@ -1,0 +1,17 @@
+---
+description: "Commercial-grade UI design, accessibility, and verification guidance for Kotowari browser-facing work."
+globs: "apps/web/**,**/*.html,**/*.css,**/*.tsx,**/*.jsx"
+alwaysApply: false
+---
+
+# Commercial UI
+
+For user-facing UI work, load the `commercial-ui` and `frontend-ui-engineering` project skills from `.agents/skills/` (the repository symlink exposes `.claude/skills/` to Cursor).
+
+- Ground design decisions in the product's real audience, task, data, and terminology before styling.
+- Prefer a coherent token/component system and semantic HTML over one-off CSS and bespoke interaction primitives.
+- Treat keyboard access, focus, labels/names, contrast, responsive reflow, reduced motion, and meaningful loading/empty/error states as acceptance criteria.
+- Avoid generic AI aesthetics and decorative UI that does not encode information or support a user task.
+- Use the Playwright MCP configured in `.cursor/mcp.json` to inspect rendered behavior when the target is actually runnable. Verify desktop and mobile together, batch fixes, then perform at most one confirmation pass.
+- Do not introduce React, Next.js, Tailwind, shadcn/ui, or another frontend framework solely because an agent skill recommends it. `apps/web` is currently a framework-neutral scaffold; framework adoption requires a separate repository decision.
+- Never claim visual/browser verification unless it was actually performed.
