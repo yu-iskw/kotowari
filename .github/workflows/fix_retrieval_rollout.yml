@@ -1,0 +1,54 @@
+name: Fix retrieval rollout formatting
+
+on:
+  push:
+    branches:
+      - feat/retrieval-rollout-control-v1
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: feat/retrieval-rollout-control-v1
+      - run: corepack enable
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.0.5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/server/src/projection-serving.ts')
+          text = path.read_text()
+          local_type = "import type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';\n"
+          if local_type not in text:
+              raise SystemExit('retrieval rollout type import not found')
+          text = text.replace(local_type, '')
+          marker = "import type {\n  PostgresRetrievalProjection,\n  RetrievalProjectionStatus,\n} from '@kotowari/adapter-postgres';\n"
+          if marker not in text:
+              raise SystemExit('adapter-postgres type import marker not found')
+          text = text.replace(marker, local_type + '\n' + marker, 1)
+          path.write_text(text)
+          PY
+          pnpm exec prettier --write \
+            apps/server/src/projection-serving.ts \
+            apps/server/src/retrieval-rollout.ts
+      - shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/server/src/projection-serving.ts apps/server/src/retrieval-rollout.ts
+          git diff --cached --quiet && exit 0
+          git commit -m 'style: format retrieval rollout controls'
+          git push origin HEAD:feat/retrieval-rollout-control-v1
