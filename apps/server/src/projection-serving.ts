@@ -1,8 +1,8 @@
 import { claimText } from '@kotowari/plugin-sdk';
 
 import { stableCanarySample } from './retrieval-rollout.js';
-import type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
 
+import type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
 import type {
   PostgresRetrievalProjection,
   RetrievalProjectionStatus,
