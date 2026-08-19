@@ -97,9 +97,10 @@ describe('S3 decision persistence', () => {
       version: 1,
       rules: { allowedOutcomes: ['use_vendor_x'] },
     });
+    const temporalInstant = new Date(Date.now() + 60_000).toISOString();
     const temporal = {
-      validAt: '2026-08-18T23:59:59.000Z',
-      knownAt: '2026-08-18T23:59:59.000Z',
+      validAt: temporalInstant,
+      knownAt: temporalInstant,
     };
     const decision = await app.recordDecision({
       purpose: 'library-choice',
