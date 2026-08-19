@@ -8,7 +8,13 @@ import {
   createPostgresRetrievalProjection,
 } from './public.js';
 
-import type { Claim, DomainEvent, EmbeddingProvider } from '@kotowari/plugin-sdk';
+import type {
+  CanonicalStore,
+  Claim,
+  DomainEvent,
+  EmbeddingProvider,
+} from '@kotowari/plugin-sdk';
+import type { PostgresRetrievalProjection, SqlClient } from './public.js';
 
 const DATABASE_URL = process.env.KOTOWARI_TEST_POSTGRES_URL;
 const describeLive = DATABASE_URL === undefined ? describe.skip : describe;
@@ -131,8 +137,9 @@ function recallAtK(expected: readonly string[], actual: readonly string[]): numb
 }
 
 describeLive('Postgres pgvector HNSW live validation', () => {
-  const sql = createPgPoolClient(DATABASE_URL ?? 'postgresql://unused');
-  const store = createPostgresCanonicalStore(sql);
+  let sql: SqlClient;
+  let store: CanonicalStore;
+  let projection: PostgresRetrievalProjection;
   const vectorsByText = new Map<string, readonly number[]>();
   const embeddings: EmbeddingProvider = {
     id: 'pgvector-live-test',
@@ -146,18 +153,6 @@ describeLive('Postgres pgvector HNSW live validation', () => {
       };
     },
   };
-  const projection = createPostgresRetrievalProjection({
-    sql,
-    store,
-    embeddings,
-    vectorAcceleration: {
-      kind: 'pgvector-hnsw',
-      dimensions: DIMENSIONS,
-      efSearch: 80,
-      m: 16,
-      efConstruction: 64,
-    },
-  });
 
   const corpus: CorpusItem[] = Array.from({ length: 320 }, (_, index) => ({
     id: `claim-${String(index).padStart(4, '0')}`,
@@ -169,6 +164,22 @@ describeLive('Postgres pgvector HNSW live validation', () => {
   }));
 
   beforeAll(async () => {
+    if (DATABASE_URL === undefined) throw new Error('KOTOWARI_TEST_POSTGRES_URL is required');
+    sql = createPgPoolClient(DATABASE_URL);
+    store = createPostgresCanonicalStore(sql);
+    projection = createPostgresRetrievalProjection({
+      sql,
+      store,
+      embeddings,
+      vectorAcceleration: {
+        kind: 'pgvector-hnsw',
+        dimensions: DIMENSIONS,
+        efSearch: 80,
+        m: 16,
+        efConstruction: 64,
+      },
+    });
+
     await sql.exec(`
       DROP TABLE IF EXISTS retrieval_projection_events;
       DROP TABLE IF EXISTS retrieval_projection_meta;
@@ -191,6 +202,7 @@ describeLive('Postgres pgvector HNSW live validation', () => {
   }, 120_000);
 
   afterAll(async () => {
+    if (DATABASE_URL === undefined) return;
     await sql.exec(`
       DROP TABLE IF EXISTS retrieval_projection_events;
       DROP TABLE IF EXISTS retrieval_projection_meta;
