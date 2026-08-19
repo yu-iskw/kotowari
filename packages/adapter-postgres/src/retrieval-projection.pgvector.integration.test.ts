@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
 import { claimText } from '@kotowari/plugin-sdk';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   createPgPoolClient,
@@ -8,13 +7,13 @@ import {
   createPostgresRetrievalProjection,
 } from './public.js';
 
+import type { PostgresRetrievalProjection, SqlClient } from './public.js';
 import type {
   CanonicalStore,
   Claim,
   DomainEvent,
   EmbeddingProvider,
 } from '@kotowari/plugin-sdk';
-import type { PostgresRetrievalProjection, SqlClient } from './public.js';
 
 const DATABASE_URL = process.env.KOTOWARI_TEST_POSTGRES_URL;
 const describeLive = DATABASE_URL === undefined ? describe.skip : describe;
