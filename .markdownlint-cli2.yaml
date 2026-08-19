@@ -1,0 +1,4 @@
+ignores:
+  - .claude/skills/frontend-design/SKILL.md
+  - .claude/skills/frontend-ui-engineering/SKILL.md
+  - .claude/skills/ui-skills-root/SKILL.md

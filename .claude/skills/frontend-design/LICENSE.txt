@@ -1,0 +1,6 @@
+This vendored skill is distributed under the Apache License, Version 2.0.
+The repository root LICENSE contains the complete license text.
+
+Upstream source: anthropics/claude-plugins-official
+Upstream path: plugins/frontend-design/skills/frontend-design/SKILL.md
+Snapshot date: 2026-08-19
