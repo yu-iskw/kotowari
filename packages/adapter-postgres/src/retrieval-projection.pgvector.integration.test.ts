@@ -17,12 +17,7 @@ import {
 } from './public.js';
 
 import type { PostgresRetrievalProjection, SqlClient } from './public.js';
-import type {
-  CanonicalStore,
-  Claim,
-  DomainEvent,
-  EmbeddingProvider,
-} from '@kotowari/plugin-sdk';
+import type { CanonicalStore, Claim, DomainEvent, EmbeddingProvider } from '@kotowari/plugin-sdk';
 
 const DATABASE_URL = process.env.KOTOWARI_TEST_POSTGRES_URL;
 const describeLive = DATABASE_URL === undefined ? describe.skip : describe;
@@ -69,9 +64,7 @@ function claim(item: CorpusItem): Claim {
     object: { kind: 'literal', value: `live vector ${item.id}` },
     bitemporal: {
       validFrom: asIsoTimestamp(item.validFrom),
-      ...(item.validTo === undefined
-        ? {}
-        : { validTo: asIsoTimestamp(item.validTo) }),
+      ...(item.validTo === undefined ? {} : { validTo: asIsoTimestamp(item.validTo) }),
       recordedAt: NOW,
       assertedAt: NOW,
     },
@@ -102,9 +95,7 @@ function event(item: CorpusItem, sequence: number): DomainEvent {
       parentIds: [],
     },
     occurredAt: asIsoTimestamp(
-      new Date(
-        Date.parse('2026-08-19T00:00:00.000Z') + sequence * 1000,
-      ).toISOString(),
+      new Date(Date.parse('2026-08-19T00:00:00.000Z') + sequence * 1000).toISOString(),
     ),
   };
 }
@@ -139,10 +130,7 @@ function exactTopK(
         (item.validTo === undefined || validAt < item.validTo),
     )
     .map((item) => ({ id: item.id, score: cosine(queryVector, item.vector) }))
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.id.localeCompare(right.id),
-    )
+    .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
     .slice(0, LIMIT)
     .map((item) => item.id);
 }
@@ -164,8 +152,7 @@ describeLive('Postgres pgvector HNSW live validation', () => {
       return {
         vectors: texts.map((text) => {
           const vector = vectorsByText.get(text);
-          if (vector === undefined)
-            throw new Error(`missing test vector for ${text}`);
+          if (vector === undefined) throw new Error(`missing test vector for ${text}`);
           return vector;
         }),
       };
@@ -176,17 +163,13 @@ describeLive('Postgres pgvector HNSW live validation', () => {
     id: `claim-${String(index).padStart(4, '0')}`,
     tenantId: index % 5 === 0 ? 'tenant-other' : 'tenant-live',
     namespaceId: index % 3 === 0 ? 'namespace-b' : 'namespace-a',
-    validFrom:
-      index % 7 === 0
-        ? '2027-01-01T00:00:00.000Z'
-        : '2026-01-01T00:00:00.000Z',
+    validFrom: index % 7 === 0 ? '2027-01-01T00:00:00.000Z' : '2026-01-01T00:00:00.000Z',
     ...(index % 11 === 0 ? { validTo: '2026-06-01T00:00:00.000Z' } : {}),
     vector: corpusVector(index),
   }));
 
   beforeAll(async () => {
-    if (DATABASE_URL === undefined)
-      throw new Error('KOTOWARI_TEST_POSTGRES_URL is required');
+    if (DATABASE_URL === undefined) throw new Error('KOTOWARI_TEST_POSTGRES_URL is required');
     sql = createPgPoolClient(DATABASE_URL);
     store = createPostgresCanonicalStore(sql);
     projection = createPostgresRetrievalProjection({
@@ -244,13 +227,7 @@ describeLive('Postgres pgvector HNSW live validation', () => {
     const recalls: number[] = [];
 
     for (const queryVector of queries) {
-      const expected = exactTopK(
-        corpus,
-        queryVector,
-        'tenant-live',
-        'namespace-a',
-        validAt,
-      );
+      const expected = exactTopK(corpus, queryVector, 'tenant-live', 'namespace-a', validAt);
       const actual = await projection.search({
         tenantId: asTenantId('tenant-live'),
         namespaceId: asNamespaceId('namespace-a'),
@@ -268,16 +245,13 @@ describeLive('Postgres pgvector HNSW live validation', () => {
       );
     }
 
-    const meanRecall =
-      recalls.reduce((sum, value) => sum + value, 0) / recalls.length;
+    const meanRecall = recalls.reduce((sum, value) => sum + value, 0) / recalls.length;
     expect(meanRecall).toBeGreaterThanOrEqual(0.95);
     expect(Math.min(...recalls)).toBeGreaterThanOrEqual(0.9);
   });
 
   it('marks a missing HNSW index stale and recovers after rebuild', async () => {
-    await sql.exec(
-      'DROP INDEX CONCURRENTLY IF EXISTS retrieval_projection_vector_hnsw',
-    );
+    await sql.exec('DROP INDEX CONCURRENTLY IF EXISTS retrieval_projection_vector_hnsw');
     const missing = await projection.status();
     expect(missing.stale).toBe(true);
     expect(missing.vectorIndex?.present).toBe(false);
