@@ -17,11 +17,11 @@ name: pgvector Integration
 on:
   pull_request:
     paths:
-      - '.github/workflows/pgvector_integration.yml'
-      - 'packages/adapter-postgres/**'
-      - 'packages/plugin-sdk/**'
-      - 'packages/kernel/**'
-      - 'pnpm-lock.yaml'
+      - .github/workflows/pgvector_integration.yml
+      - packages/adapter-postgres/**
+      - packages/plugin-sdk/**
+      - packages/kernel/**
+      - pnpm-lock.yaml
   workflow_dispatch:
 
 concurrency:
