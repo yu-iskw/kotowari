@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
+import {
+  embeddingDimensionsFromEnv,
+  vectorAccelerationFromEnv,
+  vectorRolloutFromEnv,
+} from './vector-acceleration.js';
 
 describe('enterprise vector acceleration configuration', () => {
-  it('keeps acceleration disabled by default', () => {
+  it('keeps acceleration disabled and rollout enabled by default', () => {
     expect(vectorAccelerationFromEnv({})).toBeUndefined();
     expect(embeddingDimensionsFromEnv({})).toBe(8);
+    expect(vectorRolloutFromEnv({})).toEqual({ mode: 'enabled' });
   });
 
   it('builds pgvector HNSW options from explicit enterprise configuration', () => {
@@ -26,7 +31,19 @@ describe('enterprise vector acceleration configuration', () => {
     });
   });
 
-  it('rejects unknown acceleration modes and invalid dimensions', () => {
+  it('parses shadow and canary rollout configuration', () => {
+    expect(vectorRolloutFromEnv({ KOTOWARI_VECTOR_ROLLOUT_MODE: 'shadow' })).toEqual({
+      mode: 'shadow',
+    });
+    expect(
+      vectorRolloutFromEnv({
+        KOTOWARI_VECTOR_ROLLOUT_MODE: 'canary',
+        KOTOWARI_VECTOR_CANARY_PERCENT: '12',
+      }),
+    ).toEqual({ mode: 'canary', canaryPercent: 12 });
+  });
+
+  it('rejects unknown acceleration and rollout modes or invalid rollout percentages', () => {
     expect(() => vectorAccelerationFromEnv({ KOTOWARI_VECTOR_ACCELERATION: 'ivfflat' })).toThrow(
       'none',
     );
@@ -36,5 +53,14 @@ describe('enterprise vector acceleration configuration', () => {
         KOTOWARI_EMBEDDING_DIMENSIONS: '0',
       }),
     ).toThrow('positive integer');
+    expect(() => vectorRolloutFromEnv({ KOTOWARI_VECTOR_ROLLOUT_MODE: 'random' })).toThrow(
+      'KOTOWARI_VECTOR_ROLLOUT_MODE',
+    );
+    expect(() =>
+      vectorRolloutFromEnv({
+        KOTOWARI_VECTOR_ROLLOUT_MODE: 'canary',
+        KOTOWARI_VECTOR_CANARY_PERCENT: '101',
+      }),
+    ).toThrow('at most 100');
   });
 });
