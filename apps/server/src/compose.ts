@@ -16,6 +16,11 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
 import { createProjectionServingGate } from './projection-serving.js';
+import {
+  assessRetrievalRollout,
+  retrievalRolloutSloMetrics,
+  retrievalRolloutSloPolicyFromEnv,
+} from './retrieval-rollout-slo.js';
 import { retrievalRolloutPolicyFromEnv } from './retrieval-rollout.js';
 import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
 
@@ -173,6 +178,14 @@ export async function startComposeServer(options: {
       embeddings,
       policy: retrievalRolloutPolicyFromEnv(env),
     });
+    const rolloutSloPolicy = retrievalRolloutSloPolicyFromEnv(env);
+    const rolloutObservability = async () => {
+      const projectionStatus = await projectionServing.status();
+      return {
+        projection: projectionStatus,
+        rollout: assessRetrievalRollout(projectionStatus, rolloutSloPolicy),
+      };
+    };
     const app = createComposeApp({
       sql,
       blobs: createS3BlobStore(s3OptionsFromEnv(env)),
@@ -185,15 +198,23 @@ export async function startComposeServer(options: {
       host: env['KOTOWARI_HOST'] ?? '0.0.0.0',
       webRoot: options.webRoot,
       observability: {
-        health: async () => ({ ok: true, projection: await projectionServing.status() }),
+        health: async () => ({ ok: true, ...(await rolloutObservability()) }),
         ready: async () => {
-          const projectionStatus = await projectionServing.status();
+          const status = await rolloutObservability();
           return {
-            ready: projectionStatus.servingReady,
-            projection: projectionStatus,
+            ready: status.projection.servingReady,
+            ...status,
           };
         },
-        metrics: () => projectionServing.metrics(),
+        metrics: async () => {
+          const [projectionMetrics, projectionStatus] = await Promise.all([
+            projectionServing.metrics(),
+            projectionServing.status(),
+          ]);
+          return `${projectionMetrics}${retrievalRolloutSloMetrics(
+            assessRetrievalRollout(projectionStatus, rolloutSloPolicy),
+          )}`;
+        },
       },
       mcpSecurity: {
         authorization: {

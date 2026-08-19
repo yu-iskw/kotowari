@@ -26,6 +26,16 @@ export type {
 } from './retrieval-projection-operations.js';
 export { createProjectionServingGate } from './projection-serving.js';
 export type { ProjectionServingGate, ProjectionServingSnapshot } from './projection-serving.js';
+export {
+  assessRetrievalRollout,
+  retrievalRolloutSloMetrics,
+  retrievalRolloutSloPolicyFromEnv,
+} from './retrieval-rollout-slo.js';
+export type {
+  RetrievalRolloutSloAssessment,
+  RetrievalRolloutSloPolicy,
+  RetrievalRolloutSloVerdict,
+} from './retrieval-rollout-slo.js';
 export { retrievalRolloutPolicyFromEnv, stableCanarySample } from './retrieval-rollout.js';
 export type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
 export { listenKotowariHttp } from './http-server.js';
