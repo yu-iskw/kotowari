@@ -32,21 +32,13 @@
     ]
   },
   "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true,
-    "impeccable@impeccable": true,
-    "agent-skills@addy-agent-skills": true
+    "impeccable@impeccable": true
   },
   "extraKnownMarketplaces": {
     "impeccable": {
       "source": {
         "source": "github",
         "repo": "pbakaus/impeccable"
-      }
-    },
-    "addy-agent-skills": {
-      "source": {
-        "source": "github",
-        "repo": "addyosmani/agent-skills"
       }
     }
   },
