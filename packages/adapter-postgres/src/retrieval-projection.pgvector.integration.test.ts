@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { claimText } from '@kotowari/plugin-sdk';
+
 import {
   createPgPoolClient,
   createPostgresCanonicalStore,
@@ -181,7 +183,7 @@ describeLive('Postgres pgvector HNSW live validation', () => {
 
     for (const [sequence, item] of corpus.entries()) {
       const value = claim(item);
-      vectorsByText.set(`${value.subject} ${value.predicate} ${value.object.kind === 'literal' ? value.object.value : value.object.entityId}`, item.vector);
+      vectorsByText.set(claimText(value), item.vector);
       await store.assertClaim(value);
       await store.appendEvent(event(item, sequence + 1));
     }
