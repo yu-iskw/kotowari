@@ -8,9 +8,7 @@ import {
 
 import type { ProjectionServingSnapshot } from './projection-serving.js';
 
-function snapshot(
-  overrides: Partial<ProjectionServingSnapshot> = {},
-): ProjectionServingSnapshot {
+function snapshot(overrides: Partial<ProjectionServingSnapshot> = {}): ProjectionServingSnapshot {
   return {
     projectionId: 'postgres-retrieval-v1',
     pendingEvents: 0,
@@ -155,8 +153,6 @@ describe('retrieval rollout SLO assessment', () => {
     const metrics = retrievalRolloutSloMetrics(assessRetrievalRollout(snapshot()));
     expect(metrics).toContain('kotowari_retrieval_rollout_slo_projection_error_ratio 0');
     expect(metrics).toContain('kotowari_retrieval_rollout_slo_verdict{verdict="promote"} 1');
-    expect(metrics).toContain(
-      'kotowari_retrieval_rollout_slo_recommended_mode{mode="canary"} 1',
-    );
+    expect(metrics).toContain('kotowari_retrieval_rollout_slo_recommended_mode{mode="canary"} 1');
   });
 });

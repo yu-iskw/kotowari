@@ -8,11 +8,7 @@ export type RetrievalRolloutSloPolicy = {
   maxShadowMismatchRatio: number;
 };
 
-export type RetrievalRolloutSloVerdict =
-  | 'insufficient-data'
-  | 'hold'
-  | 'promote'
-  | 'rollback';
+export type RetrievalRolloutSloVerdict = 'insufficient-data' | 'hold' | 'promote' | 'rollback';
 
 export type RetrievalRolloutSloAssessment = {
   verdict: RetrievalRolloutSloVerdict;
