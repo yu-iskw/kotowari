@@ -3,6 +3,12 @@
   "enableSharedBuildCache": true,
   "networkPolicy": {
     "default": "deny",
-    "allow": ["github.com", "pypi.org", "*.trunk.io"]
+    "allow": [
+      "github.com",
+      "pypi.org",
+      "*.trunk.io",
+      "registry.npmjs.org",
+      "www.ui-skills.com"
+    ]
   }
 }
