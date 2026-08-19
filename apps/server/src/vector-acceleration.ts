@@ -1,4 +1,5 @@
 import type { PgvectorHnswOptions } from '@kotowari/adapter-postgres';
+import type { VectorRolloutPolicy } from './projection-serving.js';
 
 const DEFAULT_EMBEDDING_DIMENSIONS = 8;
 
@@ -43,4 +44,23 @@ export function vectorAccelerationFromEnv(
     m: positiveIntEnv(env, 'KOTOWARI_HNSW_M', 16),
     efConstruction: positiveIntEnv(env, 'KOTOWARI_HNSW_EF_CONSTRUCTION', 64),
   };
+}
+
+export function vectorRolloutFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): VectorRolloutPolicy {
+  const mode = env['KOTOWARI_VECTOR_ROLLOUT_MODE'] ?? 'enabled';
+  if (!['disabled', 'shadow', 'canary', 'enabled'].includes(mode)) {
+    throw new Error(
+      'KOTOWARI_VECTOR_ROLLOUT_MODE must be "disabled", "shadow", "canary", or "enabled"',
+    );
+  }
+  if (mode !== 'canary') {
+    return { mode: mode as VectorRolloutPolicy['mode'] };
+  }
+  const canaryPercent = positiveIntEnv(env, 'KOTOWARI_VECTOR_CANARY_PERCENT', 5);
+  if (canaryPercent > 100) {
+    throw new Error('KOTOWARI_VECTOR_CANARY_PERCENT must be at most 100');
+  }
+  return { mode: 'canary', canaryPercent };
 }
