@@ -232,7 +232,10 @@ function summarizeLatency(samples: readonly number[]): LatencySummary {
   };
 }
 
-function searchRequest(scenario: Scenario, queryVector: readonly number[]): RetrievalCandidateRequest {
+function searchRequest(
+  scenario: Scenario,
+  queryVector: readonly number[],
+): RetrievalCandidateRequest {
   return {
     tenantId: asTenantId('tenant-benchmark'),
     ...(scenario.namespaceId === undefined
@@ -246,9 +249,7 @@ function searchRequest(scenario: Scenario, queryVector: readonly number[]): Retr
   };
 }
 
-async function timedSearch(
-  search: () => Promise<unknown>,
-): Promise<number> {
+async function timedSearch(search: () => Promise<unknown>): Promise<number> {
   const startedAt = performance.now();
   await search();
   return performance.now() - startedAt;
@@ -334,7 +335,8 @@ async function benchmarkServingGate(input: {
     );
   }
   const afterFallback = await gate.status();
-  const missingIndexFallbacks = afterFallback.canonicalFallbacks - beforeFallback.canonicalFallbacks;
+  const missingIndexFallbacks =
+    afterFallback.canonicalFallbacks - beforeFallback.canonicalFallbacks;
 
   const recoveryStartedAt = performance.now();
   await input.projection.rebuildVectorIndex();
@@ -443,18 +445,15 @@ async function writeBenchmarkOutput(results: readonly CorpusResult[]): Promise<v
 }
 
 describeLive('pgvector HNSW rollout benchmark', () => {
-  it(
-    'records recall, latency, rebuild, and fallback evidence across CI-scale corpora',
-    async () => {
-      if (DATABASE_URL === undefined) throw new Error('KOTOWARI_TEST_POSTGRES_URL is required');
-      const sql = createPgPoolClient(DATABASE_URL);
-      const results: CorpusResult[] = [];
-      for (const size of CORPUS_SIZES) {
-        results.push(await runCorpusBenchmark(sql, size));
-      }
-      await writeBenchmarkOutput(results);
-      await sql.exec(TABLE_RESET_SQL);
-    },
-    300_000,
-  );
+  it('records recall, latency, rebuild, and fallback evidence across CI-scale corpora', async () => {
+    if (DATABASE_URL === undefined) throw new Error('KOTOWARI_TEST_POSTGRES_URL is required');
+    const sql = createPgPoolClient(DATABASE_URL);
+    const results: CorpusResult[] = [];
+    for (const size of CORPUS_SIZES) {
+      results.push(await runCorpusBenchmark(sql, size));
+    }
+    expect(results).toHaveLength(CORPUS_SIZES.length);
+    await writeBenchmarkOutput(results);
+    await sql.exec(TABLE_RESET_SQL);
+  }, 300_000);
 });
