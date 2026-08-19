@@ -151,7 +151,9 @@ async function canonicalSearch(
     .slice(0, request.limit);
 }
 
-function normalizeVectorRolloutPolicy(policy: VectorRolloutPolicy | undefined): Required<VectorRolloutPolicy> {
+function normalizeVectorRolloutPolicy(
+  policy: VectorRolloutPolicy | undefined,
+): Required<VectorRolloutPolicy> {
   const mode = policy?.mode ?? 'enabled';
   const canaryPercent = policy?.canaryPercent ?? 5;
   if (!Number.isInteger(canaryPercent) || canaryPercent < 1 || canaryPercent > 100) {
@@ -161,12 +163,9 @@ function normalizeVectorRolloutPolicy(policy: VectorRolloutPolicy | undefined): 
 }
 
 function rolloutBucket(request: RetrievalCandidateRequest): number {
-  const key = [
-    request.tenantId,
-    request.namespaceId ?? '',
-    request.strategy,
-    request.query,
-  ].join('\u0000');
+  const key = [request.tenantId, request.namespaceId ?? '', request.strategy, request.query].join(
+    '\u0000',
+  );
   let hash = 2_166_136_261;
   for (let index = 0; index < key.length; index += 1) {
     hash ^= key.charCodeAt(index);
@@ -262,7 +261,7 @@ export function createProjectionServingGate(input: {
     request: RetrievalCandidateRequest,
   ): Promise<readonly RetrievalCandidate[]> => {
     const snapshot = await status();
-    if (!snapshot.ready || !snapshot.healthy) {
+    if (!snapshot.ready) {
       canonicalFallbacks += 1;
       lastFallbackReason = 'unavailable';
       return searchCanonical(request);
@@ -292,7 +291,7 @@ export function createProjectionServingGate(input: {
       vectorRolloutBypasses += 1;
       const canonical = await searchCanonical(request);
       const snapshot = await status();
-      if (!snapshot.ready || !snapshot.healthy) {
+      if (!snapshot.ready) {
         return canonical;
       }
       try {
