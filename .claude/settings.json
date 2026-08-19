@@ -31,6 +31,47 @@
       "Bash(wget * | bash)"
     ]
   },
+  "enabledPlugins": {
+    "frontend-design@commercial-ui": true,
+    "impeccable@commercial-ui": true,
+    "ui-skills@commercial-ui": true
+  },
+  "extraKnownMarketplaces": {
+    "commercial-ui": {
+      "source": {
+        "source": "settings",
+        "name": "commercial-ui",
+        "plugins": [
+          {
+            "name": "frontend-design",
+            "source": {
+              "source": "git-subdir",
+              "url": "https://github.com/anthropics/claude-code.git",
+              "path": "plugins/frontend-design",
+              "sha": "c3d2e35e554060b5a20ee6b28140fbdbd4eb0048"
+            }
+          },
+          {
+            "name": "impeccable",
+            "source": {
+              "source": "git-subdir",
+              "url": "https://github.com/pbakaus/impeccable.git",
+              "path": "plugin",
+              "sha": "f88b2837a7d7c3182e46307bbbb091a1ed547571"
+            }
+          },
+          {
+            "name": "ui-skills",
+            "source": {
+              "source": "github",
+              "repo": "ibelick/ui-skills",
+              "sha": "0a8411b1f8732d52923e78773d54b67a65ef9587"
+            }
+          }
+        ]
+      }
+    }
+  },
   "hooks": {
     "PreToolUse": [
       {
