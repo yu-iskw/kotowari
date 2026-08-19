@@ -11,8 +11,10 @@ export {
 export { createPostgresQueue } from './postgres-queue.js';
 export { createPostgresRetrievalProjection } from './retrieval-projection.js';
 export type {
+  PgvectorHnswOptions,
   PostgresRetrievalProjection,
   RetrievalProjectionStatus,
+  RetrievalVectorIndexStatus,
 } from './retrieval-projection.js';
 export { createPgPoolClient, createPgliteClient } from './sql-client.js';
 export type { SqlClient } from './sql-client.js';

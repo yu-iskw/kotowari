@@ -13,6 +13,7 @@ export type ProjectionOperationalStatus = RetrievalProjectionStatus & {
 export type ProjectionOperations = {
   syncOnce(): Promise<ProjectionOperationalStatus>;
   rebuild(): Promise<ProjectionOperationalStatus>;
+  rebuildVectorIndex(): Promise<ProjectionOperationalStatus>;
   status(): Promise<ProjectionOperationalStatus>;
   run(options?: { signal?: AbortSignal }): Promise<void>;
 };
@@ -91,6 +92,7 @@ export function createProjectionOperations(
   return {
     syncOnce: () => execute(() => projection.sync()),
     rebuild: () => execute(() => projection.rebuild()),
+    rebuildVectorIndex: () => execute(() => projection.rebuildVectorIndex()),
     status,
     async run(runOptions = {}) {
       while (runOptions.signal?.aborted !== true) {

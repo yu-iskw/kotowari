@@ -16,6 +16,7 @@ import { createFakeEmbeddingProvider, createFakeExtractionProvider } from '@koto
 import { listenKotowariHttp } from './http-server.js';
 import { ingestFilesystemPath } from './ingest-fs.js';
 import { createProjectionServingGate } from './projection-serving.js';
+import { embeddingDimensionsFromEnv, vectorAccelerationFromEnv } from './vector-acceleration.js';
 
 import type { OAuthIntrospectionIdentityProvider } from '@kotowari/adapter-fs';
 import type { SqlClient } from '@kotowari/adapter-postgres';
@@ -157,8 +158,14 @@ export async function startComposeServer(options: {
     const databaseUrl = requiredEnv(env, 'DATABASE_URL');
     const sql = createPgPoolClient(databaseUrl);
     const store = createPostgresCanonicalStore(sql);
-    const embeddings = createFakeEmbeddingProvider();
-    const projection = createPostgresRetrievalProjection({ sql, store, embeddings });
+    const embeddings = createFakeEmbeddingProvider(embeddingDimensionsFromEnv(env));
+    const vectorAcceleration = vectorAccelerationFromEnv(env);
+    const projection = createPostgresRetrievalProjection({
+      sql,
+      store,
+      embeddings,
+      ...(vectorAcceleration === undefined ? {} : { vectorAcceleration }),
+    });
     const projectionServing = createProjectionServingGate({ projection, store, embeddings });
     const app = createComposeApp({
       sql,

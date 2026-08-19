@@ -16,6 +16,7 @@ import type {
 } from '@kotowari/plugin-sdk';
 
 const PROJECTION_ID = 'postgres-retrieval-v1' as const;
+const VECTOR_INDEX_NAME = 'retrieval_projection_vector_hnsw' as const;
 const CLAIM_ASSERTED_EVENT = 'claim.asserted' as const;
 const CLAIM_RETRACTED_EVENT = 'claim.retracted' as const;
 const ENTITY_MERGED_EVENT = 'entity.merged' as const;
@@ -66,8 +67,26 @@ type ProjectionRow = {
 };
 
 type ScoredRow = { claim_id: string; score: number };
+type CountRow = { count: string | number };
 type ProcessedEventRow = { event_id: string };
 type MetaRow = { synced_at: string };
+type VectorIndexRow = { indexname: string };
+
+export type PgvectorHnswOptions = {
+  kind: 'pgvector-hnsw';
+  dimensions: number;
+  efSearch?: number;
+  m?: number;
+  efConstruction?: number;
+};
+
+export type RetrievalVectorIndexStatus = {
+  kind: 'pgvector-hnsw';
+  indexName: string;
+  dimensions: number;
+  efSearch: number;
+  present: boolean;
+};
 
 export type RetrievalProjectionStatus = {
   projectionId: string;
@@ -75,12 +94,48 @@ export type RetrievalProjectionStatus = {
   latestRelevantEventAt?: string;
   pendingEvents: number;
   stale: boolean;
+  vectorIndex?: RetrievalVectorIndexStatus;
 };
 
 export interface PostgresRetrievalProjection extends RetrievalCandidateSource {
   rebuild(): Promise<void>;
   sync(): Promise<void>;
   status(): Promise<RetrievalProjectionStatus>;
+  rebuildVectorIndex(): Promise<void>;
+}
+
+type NormalizedHnswOptions = {
+  kind: 'pgvector-hnsw';
+  dimensions: number;
+  efSearch: number;
+  m: number;
+  efConstruction: number;
+};
+
+function positiveInteger(name: string, value: number, maximum?: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0 || (maximum !== undefined && value > maximum)) {
+    const suffix = maximum === undefined ? '' : ` and at most ${String(maximum)}`;
+    throw new AdapterPostgresError(`${name} must be a positive integer${suffix}`);
+  }
+  return value;
+}
+
+function normalizeHnswOptions(options: PgvectorHnswOptions): NormalizedHnswOptions {
+  const dimensions = positiveInteger('pgvector dimensions', options.dimensions, 2000);
+  const efSearch = positiveInteger('HNSW efSearch', options.efSearch ?? 100);
+  const m = positiveInteger('HNSW m', options.m ?? 16);
+  const efConstruction = positiveInteger('HNSW efConstruction', options.efConstruction ?? 64);
+  if (efConstruction < m) {
+    throw new AdapterPostgresError('HNSW efConstruction must be greater than or equal to m');
+  }
+  return { kind: 'pgvector-hnsw', dimensions, efSearch, m, efConstruction };
+}
+
+function vectorLiteral(vector: readonly number[]): string {
+  if (vector.some((value) => !Number.isFinite(value))) {
+    throw new AdapterPostgresError('Vector values must be finite numbers');
+  }
+  return `[${vector.join(',')}]`;
 }
 
 function parseVector(value: string): readonly number[] {
@@ -253,13 +308,26 @@ function collectGraphRows(input: {
 class RetrievalProjection implements PostgresRetrievalProjection {
   readonly id = PROJECTION_ID;
   private readonly ready: Promise<void>;
+  private readonly vectorAcceleration?: NormalizedHnswOptions;
 
   constructor(
     private readonly sql: SqlClient,
     private readonly store: CanonicalStore,
     private readonly embeddings: EmbeddingProvider,
+    vectorAcceleration?: PgvectorHnswOptions,
   ) {
-    this.ready = this.sql.exec(SCHEMA);
+    this.vectorAcceleration =
+      vectorAcceleration === undefined ? undefined : normalizeHnswOptions(vectorAcceleration);
+    this.ready = this.initialize();
+  }
+
+  async rebuildVectorIndex(): Promise<void> {
+    await this.ready;
+    if (this.vectorAcceleration === undefined) {
+      throw new AdapterPostgresError('pgvector HNSW acceleration is not configured');
+    }
+    await this.sql.exec(`DROP INDEX CONCURRENTLY IF EXISTS ${VECTOR_INDEX_NAME}`);
+    await this.createVectorIndex();
   }
 
   async rebuild(): Promise<void> {
@@ -374,12 +442,27 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       )
     )[0];
     const latest = events.at(-1)?.occurredAt;
+    let vectorIndex: RetrievalVectorIndexStatus | undefined;
+    if (this.vectorAcceleration !== undefined) {
+      const rows = await this.sql.query<VectorIndexRow>(
+        'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1',
+        [VECTOR_INDEX_NAME],
+      );
+      vectorIndex = {
+        kind: 'pgvector-hnsw',
+        indexName: VECTOR_INDEX_NAME,
+        dimensions: this.vectorAcceleration.dimensions,
+        efSearch: this.vectorAcceleration.efSearch,
+        present: rows.length > 0,
+      };
+    }
     return {
       projectionId: this.id,
       ...(meta === undefined ? {} : { syncedAt: meta.synced_at }),
       ...(latest === undefined ? {} : { latestRelevantEventAt: latest }),
       pendingEvents,
-      stale: pendingEvents > 0,
+      stale: pendingEvents > 0 || (vectorIndex !== undefined && !vectorIndex.present),
+      ...(vectorIndex === undefined ? {} : { vectorIndex }),
     };
   }
 
@@ -397,6 +480,56 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       return this.searchVector(request);
     }
     return this.searchGraph(request);
+  }
+
+  private async initialize(): Promise<void> {
+    await this.sql.exec(SCHEMA);
+    if (this.vectorAcceleration !== undefined) {
+      await this.initializeVectorAcceleration();
+    }
+  }
+
+  private async initializeVectorAcceleration(): Promise<void> {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      return;
+    }
+    await this.sql.exec('CREATE EXTENSION IF NOT EXISTS vector');
+    await this.sql.exec(
+      'ALTER TABLE retrieval_projection ADD COLUMN IF NOT EXISTS vector_embedding vector',
+    );
+    const invalidRows = await this.sql.query<CountRow>(
+      `SELECT COUNT(*) AS count
+       FROM retrieval_projection
+       WHERE jsonb_typeof(vector::jsonb) <> 'array'
+          OR jsonb_array_length(vector::jsonb) <> $1`,
+      [acceleration.dimensions],
+    );
+    if (Number(invalidRows[0]?.count ?? 0) > 0) {
+      throw new AdapterPostgresError(
+        `Existing projection vectors do not match configured pgvector dimension ${String(acceleration.dimensions)}; rebuild the projection with the matching embedding provider before enabling HNSW`,
+      );
+    }
+    await this.sql.exec(
+      `UPDATE retrieval_projection
+       SET vector_embedding = vector::vector
+       WHERE vector_embedding IS NULL`,
+    );
+    await this.createVectorIndex();
+  }
+
+  private async createVectorIndex(): Promise<void> {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      return;
+    }
+    await this.sql.exec(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${VECTOR_INDEX_NAME}
+       ON retrieval_projection
+       USING hnsw ((vector_embedding::vector(${String(acceleration.dimensions)})) vector_cosine_ops)
+       WITH (m = ${String(acceleration.m)}, ef_construction = ${String(acceleration.efConstruction)})
+       WHERE vector_embedding IS NOT NULL`,
+    );
   }
 
   private async searchLexical(
@@ -425,6 +558,9 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     if (queryVector === undefined) {
       throw new AdapterPostgresError('Vector candidate search requires queryVector');
     }
+    if (this.vectorAcceleration !== undefined) {
+      return this.searchVectorHnsw(request, queryVector);
+    }
     const params: unknown[] = [];
     const scope = scopeSql(request, params);
     const temporal = temporalSql(request, params);
@@ -440,6 +576,40 @@ class RetrievalProjection implements PostgresRetrievalProjection {
       }))
       .sort((left, right) => right.score - left.score || left.claimId.localeCompare(right.claimId))
       .slice(0, request.limit);
+  }
+
+  private async searchVectorHnsw(
+    request: RetrievalCandidateRequest,
+    queryVector: readonly number[],
+  ): Promise<readonly RetrievalCandidate[]> {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      throw new AdapterPostgresError('pgvector HNSW acceleration is not configured');
+    }
+    if (queryVector.length !== acceleration.dimensions) {
+      throw new AdapterPostgresError(
+        `Query vector has ${String(queryVector.length)} dimensions; expected ${String(acceleration.dimensions)}`,
+      );
+    }
+    const params: unknown[] = [vectorLiteral(queryVector)];
+    const scope = scopeSql(request, params);
+    const temporal = temporalSql(request, params);
+    params.push(request.limit);
+    return this.sql.withTransaction(async (tx) => {
+      await tx.exec(`SET LOCAL hnsw.ef_search = ${String(acceleration.efSearch)}`);
+      await tx.exec('SET LOCAL hnsw.iterative_scan = strict_order');
+      const rows = await tx.query<ScoredRow>(
+        `SELECT claim_id,
+                1 - (vector_embedding::vector(${String(acceleration.dimensions)}) <=> $1::vector(${String(acceleration.dimensions)})) AS score
+         FROM retrieval_projection
+         WHERE ${scope}${temporal}
+           AND vector_embedding IS NOT NULL
+         ORDER BY vector_embedding::vector(${String(acceleration.dimensions)}) <=> $1::vector(${String(acceleration.dimensions)})
+         LIMIT $${params.length}`,
+        params,
+      );
+      return rows.map((row) => ({ claimId: row.claim_id as ClaimId, score: Number(row.score) }));
+    });
   }
 
   private async searchGraph(
@@ -470,20 +640,64 @@ class RetrievalProjection implements PostgresRetrievalProjection {
     return [...candidates.values()].slice(0, request.limit);
   }
 
+  private validateProjectionVector(vector: readonly number[]): void {
+    const acceleration = this.vectorAcceleration;
+    if (acceleration === undefined) {
+      return;
+    }
+    if (vector.length !== acceleration.dimensions) {
+      throw new AdapterPostgresError(
+        `Embedding provider returned ${String(vector.length)} dimensions; expected ${String(acceleration.dimensions)} for pgvector HNSW`,
+      );
+    }
+    vectorLiteral(vector);
+  }
+
   private async upsertClaim(
     sql: SqlClient,
     claim: Claim,
     vector: readonly number[],
     resolveEntity: (id: EntityId) => EntityId,
   ): Promise<void> {
+    this.validateProjectionVector(vector);
     const subjectId = resolveEntity(claim.subject);
     const objectEntityId =
       claim.object.kind === 'entity' ? resolveEntity(claim.object.entityId) : undefined;
     const body = claimText(claim);
+    const commonParams = [
+      claim.id,
+      claim.tenantId,
+      claim.namespaceId,
+      body,
+      subjectId,
+      objectEntityId ?? null,
+      JSON.stringify(vector),
+      claim.bitemporal.validFrom,
+      claim.bitemporal.validTo ?? null,
+    ];
+    if (this.vectorAcceleration === undefined) {
+      await sql.query(
+        `INSERT INTO retrieval_projection
+         (claim_id, tenant_id, namespace_id, body, subject_id, object_entity_id, vector, valid_from, valid_to, search_vector)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, to_tsvector('simple', $4))
+         ON CONFLICT (claim_id) DO UPDATE SET
+           tenant_id = EXCLUDED.tenant_id,
+           namespace_id = EXCLUDED.namespace_id,
+           body = EXCLUDED.body,
+           subject_id = EXCLUDED.subject_id,
+           object_entity_id = EXCLUDED.object_entity_id,
+           vector = EXCLUDED.vector,
+           valid_from = EXCLUDED.valid_from,
+           valid_to = EXCLUDED.valid_to,
+           search_vector = EXCLUDED.search_vector`,
+        commonParams,
+      );
+      return;
+    }
     await sql.query(
       `INSERT INTO retrieval_projection
-       (claim_id, tenant_id, namespace_id, body, subject_id, object_entity_id, vector, valid_from, valid_to, search_vector)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, to_tsvector('simple', $4))
+       (claim_id, tenant_id, namespace_id, body, subject_id, object_entity_id, vector, valid_from, valid_to, search_vector, vector_embedding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, to_tsvector('simple', $4), $10::vector)
        ON CONFLICT (claim_id) DO UPDATE SET
          tenant_id = EXCLUDED.tenant_id,
          namespace_id = EXCLUDED.namespace_id,
@@ -493,18 +707,9 @@ class RetrievalProjection implements PostgresRetrievalProjection {
          vector = EXCLUDED.vector,
          valid_from = EXCLUDED.valid_from,
          valid_to = EXCLUDED.valid_to,
-         search_vector = EXCLUDED.search_vector`,
-      [
-        claim.id,
-        claim.tenantId,
-        claim.namespaceId,
-        body,
-        subjectId,
-        objectEntityId ?? null,
-        JSON.stringify(vector),
-        claim.bitemporal.validFrom,
-        claim.bitemporal.validTo ?? null,
-      ],
+         search_vector = EXCLUDED.search_vector,
+         vector_embedding = EXCLUDED.vector_embedding`,
+      [...commonParams, vectorLiteral(vector)],
     );
   }
 
@@ -531,6 +736,12 @@ export function createPostgresRetrievalProjection(input: {
   sql: SqlClient;
   store: CanonicalStore;
   embeddings: EmbeddingProvider;
+  vectorAcceleration?: PgvectorHnswOptions;
 }): PostgresRetrievalProjection {
-  return new RetrievalProjection(input.sql, input.store, input.embeddings);
+  return new RetrievalProjection(
+    input.sql,
+    input.store,
+    input.embeddings,
+    input.vectorAcceleration,
+  );
 }
