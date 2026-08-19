@@ -26,6 +26,8 @@ export type {
 } from './retrieval-projection-operations.js';
 export { createProjectionServingGate } from './projection-serving.js';
 export type { ProjectionServingGate, ProjectionServingSnapshot } from './projection-serving.js';
+export { retrievalRolloutPolicyFromEnv, stableCanarySample } from './retrieval-rollout.js';
+export type { RetrievalRolloutMode, RetrievalRolloutPolicy } from './retrieval-rollout.js';
 export { listenKotowariHttp } from './http-server.js';
 export type {
   McpHttpSecurityOptions,
