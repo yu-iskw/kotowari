@@ -1,0 +1,222 @@
+groups:
+  - name: kotowari-retrieval-rollout
+    interval: 30s
+    rules:
+      - record: job:kotowari_retrieval_projection_attempts:increase15m
+        expr: |
+          sum by (job) (increase(kotowari_projection_searches_total[15m]))
+          +
+          sum by (job) (increase(kotowari_projection_errors_total[15m]))
+
+      - record: job:kotowari_retrieval_user_searches:increase15m
+        expr: |
+          sum by (job) (increase(kotowari_canonical_searches_total[15m]))
+          +
+          sum by (job) (increase(kotowari_projection_served_searches_total[15m]))
+
+      - record: job:kotowari_retrieval_canonical_fallbacks:increase15m
+        expr: sum by (job) (increase(kotowari_projection_canonical_fallbacks_total[15m]))
+
+      - record: job:kotowari_retrieval_shadow_comparisons:increase15m
+        expr: sum by (job) (increase(kotowari_projection_shadow_comparisons_total[15m]))
+
+      - record: job:kotowari_retrieval_shadow_mismatches:increase15m
+        expr: sum by (job) (increase(kotowari_projection_shadow_mismatches_total[15m]))
+
+      - record: job:kotowari_retrieval_projection_error_ratio:ratio15m
+        expr: |
+          sum by (job) (increase(kotowari_projection_errors_total[15m]))
+          /
+          clamp_min(job:kotowari_retrieval_projection_attempts:increase15m, 1)
+
+      - record: job:kotowari_retrieval_canonical_fallback_ratio:ratio15m
+        expr: |
+          job:kotowari_retrieval_canonical_fallbacks:increase15m
+          /
+          clamp_min(job:kotowari_retrieval_user_searches:increase15m, 1)
+
+      - record: job:kotowari_retrieval_shadow_mismatch_ratio:ratio15m
+        expr: |
+          job:kotowari_retrieval_shadow_mismatches:increase15m
+          /
+          clamp_min(job:kotowari_retrieval_shadow_comparisons:increase15m, 1)
+
+      - record: job:kotowari_retrieval_projection_ready:min
+        expr: min by (job) (kotowari_projection_ready)
+
+      - record: job:kotowari_retrieval_rollout_mode_replicas:sum
+        expr: sum by (job, mode) (kotowari_retrieval_effective_mode)
+
+      - record: job:kotowari_retrieval_rollout_active_modes:count
+        expr: count by (job) (job:kotowari_retrieval_rollout_mode_replicas:sum > 0)
+
+      - alert: KotowariRetrievalRolloutModeSplitBrain
+        expr: job:kotowari_retrieval_rollout_active_modes:count > 1
+        for: 2m
+        labels:
+          severity: critical
+          action: hold
+        annotations:
+          summary: Retrieval rollout cohort has multiple effective modes
+          description: >-
+            Kotowari job {{ $labels.job }} has replicas reporting different effective rollout modes.
+            Stop promotion and reconcile rollout configuration before continuing.
+
+      - alert: KotowariRetrievalCircuitBreakerActive
+        expr: sum by (job) (kotowari_retrieval_rollback_active) > 0
+        for: 1m
+        labels:
+          severity: critical
+          action: rollback
+          target_mode: disabled
+        annotations:
+          summary: Retrieval rollout circuit breaker is active
+          description: >-
+            At least one replica in Kotowari job {{ $labels.job }} has activated its local retrieval
+            circuit breaker. Roll the cohort back to disabled and investigate projection failures.
+
+      - alert: KotowariRetrievalProjectionUnavailable
+        expr: |
+          job:kotowari_retrieval_projection_ready:min < 1
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode=~"canary|enabled"}
+            ) > 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          action: rollback
+          target_mode: disabled
+        annotations:
+          summary: Retrieval projection is unavailable for a serving rollout
+          description: >-
+            At least one replica in Kotowari job {{ $labels.job }} reports an unready projection
+            while the cohort is serving canary or enabled traffic.
+
+      - alert: KotowariRetrievalProjectionErrorBudgetBreached
+        expr: |
+          job:kotowari_retrieval_projection_attempts:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_projection_error_ratio:ratio15m > 0.01
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode=~"canary|enabled"}
+            ) > 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          action: rollback
+          target_mode: disabled
+        annotations:
+          summary: Retrieval projection error budget is breached
+          description: >-
+            Kotowari job {{ $labels.job }} exceeded a 1% projection error ratio over the last 15 minutes
+            with at least 100 projection attempts.
+
+      - alert: KotowariRetrievalFallbackBudgetBreached
+        expr: |
+          job:kotowari_retrieval_user_searches:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_canonical_fallback_ratio:ratio15m > 0.02
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode=~"canary|enabled"}
+            ) > 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          action: rollback
+          target_mode: disabled
+        annotations:
+          summary: Retrieval canonical fallback budget is breached
+          description: >-
+            Kotowari job {{ $labels.job }} exceeded a 2% canonical fallback ratio over the last 15 minutes
+            with at least 100 user searches.
+
+      - alert: KotowariRetrievalShadowMismatchBudgetBreached
+        expr: |
+          job:kotowari_retrieval_shadow_comparisons:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_shadow_mismatch_ratio:ratio15m > 0.10
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode="shadow"}
+            ) > 0
+          )
+        for: 2m
+        labels:
+          severity: warning
+          action: hold
+          target_mode: shadow
+        annotations:
+          summary: Retrieval shadow parity budget is breached
+          description: >-
+            Kotowari job {{ $labels.job }} exceeded a 10% ordered-candidate mismatch ratio over the
+            last 15 minutes. Keep the cohort in shadow mode and investigate semantic drift.
+
+      - alert: KotowariRetrievalShadowReadyForCanary
+        expr: |
+          job:kotowari_retrieval_projection_attempts:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_shadow_comparisons:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_projection_error_ratio:ratio15m <= 0.01
+          and on (job)
+          job:kotowari_retrieval_shadow_mismatch_ratio:ratio15m <= 0.10
+          and on (job)
+          job:kotowari_retrieval_projection_ready:min == 1
+          and on (job)
+          job:kotowari_retrieval_rollout_active_modes:count == 1
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode="shadow"}
+            ) > 0
+          )
+        for: 5m
+        labels:
+          severity: info
+          action: promote
+          target_mode: canary
+        annotations:
+          summary: Retrieval shadow cohort is eligible for canary promotion
+          description: >-
+            Kotowari job {{ $labels.job }} has sustained the fleet rollout guardrails and is a candidate
+            for operator-approved promotion from shadow to canary.
+
+      - alert: KotowariRetrievalCanaryReadyForEnabled
+        expr: |
+          job:kotowari_retrieval_projection_attempts:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_user_searches:increase15m >= 100
+          and on (job)
+          job:kotowari_retrieval_projection_error_ratio:ratio15m <= 0.01
+          and on (job)
+          job:kotowari_retrieval_canonical_fallback_ratio:ratio15m <= 0.02
+          and on (job)
+          job:kotowari_retrieval_projection_ready:min == 1
+          and on (job)
+          job:kotowari_retrieval_rollout_active_modes:count == 1
+          and on (job)
+          (
+            sum by (job) (
+              job:kotowari_retrieval_rollout_mode_replicas:sum{mode="canary"}
+            ) > 0
+          )
+        for: 5m
+        labels:
+          severity: info
+          action: promote
+          target_mode: enabled
+        annotations:
+          summary: Retrieval canary cohort is eligible for full enablement
+          description: >-
+            Kotowari job {{ $labels.job }} has sustained the fleet rollout guardrails and is a candidate
+            for operator-approved promotion from canary to enabled.
