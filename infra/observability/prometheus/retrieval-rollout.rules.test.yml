@@ -1,0 +1,197 @@
+rule_files:
+  - retrieval-rollout.rules.yml
+
+evaluation_interval: 1m
+fuzzy_compare: true
+
+tests:
+  - name: healthy canary is eligible for enablement
+    interval: 1m
+    input_series:
+      - series: 'kotowari_projection_searches_total{job="kotowari-canary",instance="a"}'
+        values: '0+10x30'
+      - series: 'kotowari_projection_errors_total{job="kotowari-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_canonical_searches_total{job="kotowari-canary",instance="a"}'
+        values: '0+5x30'
+      - series: 'kotowari_projection_served_searches_total{job="kotowari-canary",instance="a"}'
+        values: '0+5x30'
+      - series: 'kotowari_projection_canonical_fallbacks_total{job="kotowari-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_shadow_comparisons_total{job="kotowari-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_shadow_mismatches_total{job="kotowari-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_ready{job="kotowari-canary",instance="a"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_effective_mode{job="kotowari-canary",instance="a",mode="canary"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_rollback_active{job="kotowari-canary",instance="a"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KotowariRetrievalCanaryReadyForEnabled
+        exp_alerts:
+          - exp_labels:
+              job: kotowari-canary
+              severity: info
+              action: promote
+              target_mode: enabled
+            exp_annotations:
+              summary: Retrieval canary cohort is eligible for full enablement
+              description: Kotowari job kotowari-canary has sustained the fleet rollout guardrails and is a candidate for operator-approved promotion from canary to enabled.
+    promql_expr_test:
+      - expr: job:kotowari_retrieval_projection_attempts:increase15m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'job:kotowari_retrieval_projection_attempts:increase15m{job="kotowari-canary"}'
+            value: 150
+      - expr: job:kotowari_retrieval_projection_error_ratio:ratio15m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'job:kotowari_retrieval_projection_error_ratio:ratio15m{job="kotowari-canary"}'
+            value: 0
+
+  - name: unhealthy canary recommends rollback
+    interval: 1m
+    input_series:
+      - series: 'kotowari_projection_searches_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0+9x30'
+      - series: 'kotowari_projection_errors_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0+1x30'
+      - series: 'kotowari_canonical_searches_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0+6x30'
+      - series: 'kotowari_projection_served_searches_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0+4x30'
+      - series: 'kotowari_projection_canonical_fallbacks_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0+1x30'
+      - series: 'kotowari_projection_shadow_comparisons_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_shadow_mismatches_total{job="kotowari-bad-canary",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_ready{job="kotowari-bad-canary",instance="a"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_effective_mode{job="kotowari-bad-canary",instance="a",mode="canary"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_rollback_active{job="kotowari-bad-canary",instance="a"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KotowariRetrievalProjectionErrorBudgetBreached
+        exp_alerts:
+          - exp_labels:
+              job: kotowari-bad-canary
+              severity: critical
+              action: rollback
+              target_mode: disabled
+            exp_annotations:
+              summary: Retrieval projection error budget is breached
+              description: Kotowari job kotowari-bad-canary exceeded a 1% projection error ratio over the last 15 minutes with at least 100 projection attempts.
+      - eval_time: 30m
+        alertname: KotowariRetrievalFallbackBudgetBreached
+        exp_alerts:
+          - exp_labels:
+              job: kotowari-bad-canary
+              severity: critical
+              action: rollback
+              target_mode: disabled
+            exp_annotations:
+              summary: Retrieval canonical fallback budget is breached
+              description: Kotowari job kotowari-bad-canary exceeded a 2% canonical fallback ratio over the last 15 minutes with at least 100 user searches.
+    promql_expr_test:
+      - expr: job:kotowari_retrieval_projection_error_ratio:ratio15m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'job:kotowari_retrieval_projection_error_ratio:ratio15m{job="kotowari-bad-canary"}'
+            value: 0.1
+      - expr: job:kotowari_retrieval_canonical_fallback_ratio:ratio15m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'job:kotowari_retrieval_canonical_fallback_ratio:ratio15m{job="kotowari-bad-canary"}'
+            value: 0.1
+
+  - name: shadow semantic drift blocks promotion
+    interval: 1m
+    input_series:
+      - series: 'kotowari_projection_searches_total{job="kotowari-shadow",instance="a"}'
+        values: '0+10x30'
+      - series: 'kotowari_projection_errors_total{job="kotowari-shadow",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_canonical_searches_total{job="kotowari-shadow",instance="a"}'
+        values: '0+10x30'
+      - series: 'kotowari_projection_served_searches_total{job="kotowari-shadow",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_canonical_fallbacks_total{job="kotowari-shadow",instance="a"}'
+        values: '0x30'
+      - series: 'kotowari_projection_shadow_comparisons_total{job="kotowari-shadow",instance="a"}'
+        values: '0+10x30'
+      - series: 'kotowari_projection_shadow_mismatches_total{job="kotowari-shadow",instance="a"}'
+        values: '0+2x30'
+      - series: 'kotowari_projection_ready{job="kotowari-shadow",instance="a"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_effective_mode{job="kotowari-shadow",instance="a",mode="shadow"}'
+        values: '1x30'
+      - series: 'kotowari_retrieval_rollback_active{job="kotowari-shadow",instance="a"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KotowariRetrievalShadowMismatchBudgetBreached
+        exp_alerts:
+          - exp_labels:
+              job: kotowari-shadow
+              severity: warning
+              action: hold
+              target_mode: shadow
+            exp_annotations:
+              summary: Retrieval shadow parity budget is breached
+              description: Kotowari job kotowari-shadow exceeded a 10% ordered-candidate mismatch ratio over the last 15 minutes. Keep the cohort in shadow mode and investigate semantic drift.
+      - eval_time: 30m
+        alertname: KotowariRetrievalShadowReadyForCanary
+        exp_alerts: []
+
+  - name: mixed replica modes are treated as split brain
+    interval: 1m
+    input_series:
+      - series: 'kotowari_projection_searches_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_errors_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_canonical_searches_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_served_searches_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_canonical_fallbacks_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_shadow_comparisons_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_shadow_mismatches_total{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_projection_ready{job="kotowari-mixed",instance="a"}'
+        values: '1x10'
+      - series: 'kotowari_projection_ready{job="kotowari-mixed",instance="b"}'
+        values: '1x10'
+      - series: 'kotowari_retrieval_effective_mode{job="kotowari-mixed",instance="a",mode="shadow"}'
+        values: '1x10'
+      - series: 'kotowari_retrieval_effective_mode{job="kotowari-mixed",instance="b",mode="canary"}'
+        values: '1x10'
+      - series: 'kotowari_retrieval_rollback_active{job="kotowari-mixed",instance="a"}'
+        values: '0x10'
+      - series: 'kotowari_retrieval_rollback_active{job="kotowari-mixed",instance="b"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KotowariRetrievalRolloutModeSplitBrain
+        exp_alerts:
+          - exp_labels:
+              job: kotowari-mixed
+              severity: critical
+              action: hold
+            exp_annotations:
+              summary: Retrieval rollout cohort has multiple effective modes
+              description: Kotowari job kotowari-mixed has replicas reporting different effective rollout modes. Stop promotion and reconcile rollout configuration before continuing.
+    promql_expr_test:
+      - expr: job:kotowari_retrieval_rollout_active_modes:count
+        eval_time: 10m
+        exp_samples:
+          - labels: 'job:kotowari_retrieval_rollout_active_modes:count{job="kotowari-mixed"}'
+            value: 2
