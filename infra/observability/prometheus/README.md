@@ -12,13 +12,13 @@ Do not place independently controlled production and staging replicas in the sam
 
 The rule bundle uses a rolling 15-minute window and mirrors the in-process guardrails introduced by the server rollout SLO evaluator:
 
-| Guardrail | Default |
-| --- | ---: |
-| Minimum projection attempts before promotion | 100 |
-| Maximum projection error ratio | 1% |
-| Maximum canonical fallback ratio | 2% |
-| Maximum shadow ordered-candidate mismatch ratio | 10% |
-| Promotion stability period | 5 minutes |
+| Guardrail                                       |   Default |
+| ----------------------------------------------- | --------: |
+| Minimum projection attempts before promotion    |       100 |
+| Maximum projection error ratio                  |        1% |
+| Maximum canonical fallback ratio                |        2% |
+| Maximum shadow ordered-candidate mismatch ratio |       10% |
+| Promotion stability period                      | 5 minutes |
 
 The minimum sample check prevents a quiet cohort from being promoted on a handful of successful requests. The five-minute `for` period requires the 15-minute window to remain within guardrails instead of treating one evaluation as sufficient evidence.
 
