@@ -13,14 +13,28 @@ import type {
   RetrievalCandidateSource,
 } from '@kotowari/plugin-sdk';
 
+export type VectorRolloutMode = 'disabled' | 'shadow' | 'canary' | 'enabled';
+
+export type VectorRolloutPolicy = {
+  mode: VectorRolloutMode;
+  canaryPercent?: number;
+};
+
 export type ProjectionServingSnapshot = RetrievalProjectionStatus & {
   ready: boolean;
   healthy: boolean;
   checkedAt: string;
   lastError?: string;
   projectionSearches: number;
+  canonicalSearches: number;
   canonicalFallbacks: number;
   projectionErrors: number;
+  vectorRolloutMode: VectorRolloutMode;
+  vectorCanaryPercent: number;
+  vectorRolloutBypasses: number;
+  vectorCanarySelections: number;
+  vectorShadowSearches: number;
+  vectorShadowMismatches: number;
   lastFallbackReason?: 'unavailable' | 'error';
 };
 
@@ -137,16 +151,55 @@ async function canonicalSearch(
     .slice(0, request.limit);
 }
 
+function normalizeVectorRolloutPolicy(policy: VectorRolloutPolicy | undefined): Required<VectorRolloutPolicy> {
+  const mode = policy?.mode ?? 'enabled';
+  const canaryPercent = policy?.canaryPercent ?? 5;
+  if (!Number.isInteger(canaryPercent) || canaryPercent < 1 || canaryPercent > 100) {
+    throw new Error('Vector rollout canaryPercent must be an integer from 1 through 100');
+  }
+  return { mode, canaryPercent };
+}
+
+function rolloutBucket(request: RetrievalCandidateRequest): number {
+  const key = [
+    request.tenantId,
+    request.namespaceId ?? '',
+    request.strategy,
+    request.query,
+  ].join('\u0000');
+  let hash = 2_166_136_261;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash % 100;
+}
+
+function sameCandidateIds(
+  left: readonly RetrievalCandidate[],
+  right: readonly RetrievalCandidate[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((candidate, index) => candidate.claimId === right[index]?.claimId);
+}
+
 export function createProjectionServingGate(input: {
   projection: PostgresRetrievalProjection;
   store: CanonicalStore;
   embeddings: EmbeddingProvider;
+  vectorRollout?: VectorRolloutPolicy;
   now?: () => Date;
 }): ProjectionServingGate {
   const now = input.now ?? (() => new Date());
+  const vectorRollout = normalizeVectorRolloutPolicy(input.vectorRollout);
   let projectionSearches = 0;
+  let canonicalSearches = 0;
   let canonicalFallbacks = 0;
   let projectionErrors = 0;
+  let vectorRolloutBypasses = 0;
+  let vectorCanarySelections = 0;
+  let vectorShadowSearches = 0;
+  let vectorShadowMismatches = 0;
   let lastError: string | undefined;
   let lastFallbackReason: 'unavailable' | 'error' | undefined;
 
@@ -161,8 +214,15 @@ export function createProjectionServingGate(input: {
         healthy: ready && lastError === undefined,
         checkedAt,
         projectionSearches,
+        canonicalSearches,
         canonicalFallbacks,
         projectionErrors,
+        vectorRolloutMode: vectorRollout.mode,
+        vectorCanaryPercent: vectorRollout.canaryPercent,
+        vectorRolloutBypasses,
+        vectorCanarySelections,
+        vectorShadowSearches,
+        vectorShadowMismatches,
         ...(lastError === undefined ? {} : { lastError }),
         ...(lastFallbackReason === undefined ? {} : { lastFallbackReason }),
       };
@@ -176,35 +236,96 @@ export function createProjectionServingGate(input: {
         healthy: false,
         checkedAt,
         projectionSearches,
+        canonicalSearches,
         canonicalFallbacks,
         projectionErrors,
+        vectorRolloutMode: vectorRollout.mode,
+        vectorCanaryPercent: vectorRollout.canaryPercent,
+        vectorRolloutBypasses,
+        vectorCanarySelections,
+        vectorShadowSearches,
+        vectorShadowMismatches,
         lastError,
         ...(lastFallbackReason === undefined ? {} : { lastFallbackReason }),
       };
     }
   };
 
+  const searchCanonical = async (
+    request: RetrievalCandidateRequest,
+  ): Promise<readonly RetrievalCandidate[]> => {
+    canonicalSearches += 1;
+    return canonicalSearch(input.store, input.embeddings, request);
+  };
+
+  const searchProjectionWithFallback = async (
+    request: RetrievalCandidateRequest,
+  ): Promise<readonly RetrievalCandidate[]> => {
+    const snapshot = await status();
+    if (!snapshot.ready || !snapshot.healthy) {
+      canonicalFallbacks += 1;
+      lastFallbackReason = 'unavailable';
+      return searchCanonical(request);
+    }
+    try {
+      const candidates = await input.projection.search(request);
+      projectionSearches += 1;
+      lastError = undefined;
+      return candidates;
+    } catch (error) {
+      projectionErrors += 1;
+      canonicalFallbacks += 1;
+      lastFallbackReason = 'error';
+      lastError = error instanceof Error ? error.message : String(error);
+      return searchCanonical(request);
+    }
+  };
+
+  const searchVector = async (
+    request: RetrievalCandidateRequest,
+  ): Promise<readonly RetrievalCandidate[]> => {
+    if (vectorRollout.mode === 'disabled') {
+      vectorRolloutBypasses += 1;
+      return searchCanonical(request);
+    }
+    if (vectorRollout.mode === 'shadow') {
+      vectorRolloutBypasses += 1;
+      const canonical = await searchCanonical(request);
+      const snapshot = await status();
+      if (!snapshot.ready || !snapshot.healthy) {
+        return canonical;
+      }
+      try {
+        const shadow = await input.projection.search(request);
+        projectionSearches += 1;
+        vectorShadowSearches += 1;
+        lastError = undefined;
+        if (!sameCandidateIds(canonical, shadow)) {
+          vectorShadowMismatches += 1;
+        }
+      } catch (error) {
+        projectionErrors += 1;
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+      return canonical;
+    }
+    if (vectorRollout.mode === 'canary') {
+      if (rolloutBucket(request) >= vectorRollout.canaryPercent) {
+        vectorRolloutBypasses += 1;
+        return searchCanonical(request);
+      }
+      vectorCanarySelections += 1;
+    }
+    return searchProjectionWithFallback(request);
+  };
+
   const candidateSource: RetrievalCandidateSource = {
     id: 'postgres-retrieval-failsafe-v1',
     async search(request) {
-      const snapshot = await status();
-      if (!snapshot.ready || !snapshot.healthy) {
-        canonicalFallbacks += 1;
-        lastFallbackReason = 'unavailable';
-        return canonicalSearch(input.store, input.embeddings, request);
+      if (request.strategy === 'vector') {
+        return searchVector(request);
       }
-      try {
-        const candidates = await input.projection.search(request);
-        projectionSearches += 1;
-        lastError = undefined;
-        return candidates;
-      } catch (error) {
-        projectionErrors += 1;
-        canonicalFallbacks += 1;
-        lastFallbackReason = 'error';
-        lastError = error instanceof Error ? error.message : String(error);
-        return canonicalSearch(input.store, input.embeddings, request);
-      }
+      return searchProjectionWithFallback(request);
     },
   };
 
@@ -220,15 +341,33 @@ export function createProjectionServingGate(input: {
         '# HELP kotowari_projection_pending_events Canonical events not yet projected.',
         '# TYPE kotowari_projection_pending_events gauge',
         `kotowari_projection_pending_events ${String(snapshot.pendingEvents)}`,
-        '# HELP kotowari_projection_searches_total Candidate searches served by the projection.',
+        '# HELP kotowari_projection_searches_total Candidate searches executed by the projection.',
         '# TYPE kotowari_projection_searches_total counter',
         `kotowari_projection_searches_total ${String(snapshot.projectionSearches)}`,
-        '# HELP kotowari_projection_canonical_fallbacks_total Candidate searches served canonically.',
+        '# HELP kotowari_projection_canonical_searches_total Candidate searches executed canonically.',
+        '# TYPE kotowari_projection_canonical_searches_total counter',
+        `kotowari_projection_canonical_searches_total ${String(snapshot.canonicalSearches)}`,
+        '# HELP kotowari_projection_canonical_fallbacks_total Projection searches rolled back canonically.',
         '# TYPE kotowari_projection_canonical_fallbacks_total counter',
         `kotowari_projection_canonical_fallbacks_total ${String(snapshot.canonicalFallbacks)}`,
         '# HELP kotowari_projection_errors_total Projection serving failures.',
         '# TYPE kotowari_projection_errors_total counter',
         `kotowari_projection_errors_total ${String(snapshot.projectionErrors)}`,
+        '# HELP kotowari_vector_rollout_mode Current vector rollout mode.',
+        '# TYPE kotowari_vector_rollout_mode gauge',
+        `kotowari_vector_rollout_mode{mode="${snapshot.vectorRolloutMode}"} 1`,
+        '# HELP kotowari_vector_rollout_bypasses_total Vector requests intentionally kept canonical by rollout policy.',
+        '# TYPE kotowari_vector_rollout_bypasses_total counter',
+        `kotowari_vector_rollout_bypasses_total ${String(snapshot.vectorRolloutBypasses)}`,
+        '# HELP kotowari_vector_canary_selections_total Vector requests selected for projection canary serving.',
+        '# TYPE kotowari_vector_canary_selections_total counter',
+        `kotowari_vector_canary_selections_total ${String(snapshot.vectorCanarySelections)}`,
+        '# HELP kotowari_vector_shadow_searches_total Projection vector searches executed in shadow mode.',
+        '# TYPE kotowari_vector_shadow_searches_total counter',
+        `kotowari_vector_shadow_searches_total ${String(snapshot.vectorShadowSearches)}`,
+        '# HELP kotowari_vector_shadow_mismatches_total Shadow vector searches whose ordered candidate IDs differed from canonical.',
+        '# TYPE kotowari_vector_shadow_mismatches_total counter',
+        `kotowari_vector_shadow_mismatches_total ${String(snapshot.vectorShadowMismatches)}`,
         '',
       ].join('\n');
     },
