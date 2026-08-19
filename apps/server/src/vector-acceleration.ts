@@ -1,5 +1,6 @@
-import type { PgvectorHnswOptions } from '@kotowari/adapter-postgres';
 import type { VectorRolloutPolicy } from './projection-serving.js';
+
+import type { PgvectorHnswOptions } from '@kotowari/adapter-postgres';
 
 const DEFAULT_EMBEDDING_DIMENSIONS = 8;
 
